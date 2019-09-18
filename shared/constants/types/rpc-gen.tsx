@@ -2541,6 +2541,7 @@ export type KBFSRootHash = Bytes
 export type KBFSStatus = {readonly version: String; readonly installedVersion: String; readonly running: Boolean; readonly pid: String; readonly log: String; readonly mount: String}
 export type KBFSTeamSettings = {readonly tlfID: TLFID}
 export type KID = String
+export type KVEntry = {readonly teamName: String; readonly namespace: String; readonly entryKey: String; readonly entryValue: String; readonly revision: Revision}
 export type KbClientStatus = {readonly version: String}
 export type KbServiceStatus = {readonly version: String; readonly running: Boolean; readonly pid: String; readonly log: String; readonly ekLog: String}
 export type KeyBundle = {readonly version: Int; readonly bundle: Bytes}
@@ -2668,6 +2669,7 @@ export type ResetPrev = {readonly eldestKID?: KID | null; readonly lastSeqno: Se
 export type ResetState = {readonly endTime: Time; readonly active: Boolean}
 export type ResetSummary = {readonly ctime: UnixTime; readonly merkleRoot: ResetMerkleRoot; readonly resetSeqno: Seqno; readonly eldestSeqno: Seqno; readonly type: ResetType}
 export type ResolveIdentifyImplicitTeamRes = {readonly displayName: String; readonly teamID: TeamID; readonly writers?: Array<UserVersion> | null; readonly trackBreaks: {[key: string]: IdentifyTrackBreaks}; readonly folderID: TLFID}
+export type Revision = Int
 export type RevokeWarning = {readonly endangeredTLFs?: Array<TLF> | null}
 export type RevokedKey = {readonly key: PublicKey; readonly time: KeybaseTime; readonly by: KID}
 export type RevokedProof = {readonly proof: RemoteProof; readonly diff: TrackDiff; readonly snoozed: Boolean}
@@ -3439,6 +3441,8 @@ export const userUploadUserAvatarRpcPromise = (params: MessageTypes['keybase.1.u
 // 'keybase.1.Kex2Provisionee2.hello2'
 // 'keybase.1.Kex2Provisionee2.didCounterSign2'
 // 'keybase.1.Kex2Provisioner.kexStart'
+// 'keybase.1.kvstore.getKVEntry'
+// 'keybase.1.kvstore.putKVEntry'
 // 'keybase.1.log.registerLogger'
 // 'keybase.1.logUi.log'
 // 'keybase.1.login.loginProvisionedDevice'

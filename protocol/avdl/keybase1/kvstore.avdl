@@ -1,0 +1,19 @@
+@namespace("keybase.1")
+
+protocol kvstore {
+  import idl "common.avdl";
+
+  @typedef("int")
+  record Revision {}
+
+  record KVEntry {
+    string teamName;
+    string namespace;
+    string entryKey;
+    string entryValue;
+    Revision revision;
+  }
+
+  KVEntry getKVEntry(int sessionID, string teamName, string namespace, string entryKey);
+  Revision putKVEntry(int sessionID, string teamName, string namespace, string entryKey, string entryValue);
+}

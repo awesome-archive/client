@@ -151,6 +151,8 @@ func (d *Service) RegisterProtocols(srv *rpc.Server, xp rpc.Transporter, connID 
 		keybase1.InstallProtocol(NewInstallHandler(xp, g)),
 		keybase1.KbfsProtocol(NewKBFSHandler(xp, g, d.ChatG(), d)),
 		keybase1.KbfsMountProtocol(NewKBFSMountHandler(xp, g)),
+		CancelingProtocol(g, keybase1.KvstoreProtocol(NewKVStoreHandler(xp, connID, cg, d)),
+			libkb.RPCCancelerReasonLogout),
 		keybase1.LogProtocol(NewLogHandler(xp, logReg, g)),
 		keybase1.LoginProtocol(NewLoginHandler(xp, g)),
 		keybase1.NotifyCtlProtocol(NewNotifyCtlHandler(xp, connID, g)),
