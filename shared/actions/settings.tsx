@@ -1,5 +1,4 @@
 import logger from '../logger'
-import * as I from 'immutable'
 import * as ChatTypes from '../constants/types/rpc-chat-gen'
 import * as Saga from '../util/saga'
 import * as Types from '../constants/types/settings'
@@ -10,11 +9,11 @@ import * as RouteTreeGen from './route-tree-gen'
 import * as RPCTypes from '../constants/types/rpc-gen'
 import * as SettingsGen from './settings-gen'
 import * as WaitingGen from './waiting-gen'
-import {mapValues, trim} from 'lodash-es'
-import {delay} from 'redux-saga'
-import {isAndroidNewerThanN, pprofDir, version} from '../constants/platform'
+import trim from 'lodash/trim'
+import {isAndroidNewerThanN, isTestDevice, pprofDir, version} from '../constants/platform'
 import {writeLogLinesToFile} from '../util/forward-logs'
 import {TypedState} from '../util/container'
+import openURL from '../util/open-url'
 
 const onUpdatePGPSettings = async () => {
   try {
@@ -65,8 +64,8 @@ const toggleNotifications = async (state: TypedState) => {
     throw new Error('No notifications loaded yet')
   }
 
-  let JSONPayload: Array<{key: string; value: string}> = []
-  let chatGlobalArg = {}
+  const JSONPayload: Array<{key: string; value: string}> = []
+  const chatGlobalArg = {}
   current.groups.forEach((group, groupName) => {
     if (groupName === Constants.securityGroup) {
       // Special case this since it will go to chat settings endpoint
@@ -112,7 +111,7 @@ const toggleNotifications = async (state: TypedState) => {
   return SettingsGen.createNotificationsSaved()
 }
 
-const reclaimInvite = async (_: TypedState, action: SettingsGen.InvitesReclaimPayload) => {
+const reclaimInvite = async (action: SettingsGen.InvitesReclaimPayload) => {
   try {
     await RPCTypes.apiserverPostRpcPromise(
       {
@@ -121,13 +120,10 @@ const reclaimInvite = async (_: TypedState, action: SettingsGen.InvitesReclaimPa
       },
       Constants.settingsWaitingKey
     )
-    return [SettingsGen.createInvitesReclaimed(), SettingsGen.createInvitesRefresh()]
+    return [SettingsGen.createInvitesRefresh()]
   } catch (e) {
     logger.warn('Error reclaiming an invite:', e)
-    return [
-      SettingsGen.createInvitesReclaimedError({errorText: e.desc + e.name}),
-      SettingsGen.createInvitesRefresh(),
-    ]
+    return [SettingsGen.createInvitesRefresh()]
   }
 }
 
@@ -150,7 +146,7 @@ const refreshInvites = async () => {
       uid: string
       username: string
     }>
-  } = JSON.parse((json && json.body) || '')
+  } = JSON.parse((json && json.body) ?? '')
 
   const acceptedInvites: Array<Types.Invitation> = []
   const pendingInvites: Array<Types.Invitation> = []
@@ -183,14 +179,13 @@ const refreshInvites = async () => {
   })
   return SettingsGen.createInvitesRefreshed({
     invites: {
-      acceptedInvites: I.List(acceptedInvites),
-      error: null,
-      pendingInvites: I.List(pendingInvites),
+      acceptedInvites: acceptedInvites,
+      pendingInvites: pendingInvites,
     },
   })
 }
 
-const sendInvite = async (_: TypedState, action: SettingsGen.InvitesSendPayload) => {
+const sendInvite = async (action: SettingsGen.InvitesSendPayload) => {
   try {
     const {email, message} = action.payload
     const args = [{key: 'email', value: trim(email)}]
@@ -218,15 +213,15 @@ const sendInvite = async (_: TypedState, action: SettingsGen.InvitesSendPayload)
     }
   } catch (e) {
     logger.warn('Error sending an invite:', e)
-    return [SettingsGen.createInvitesSentError({error: e}), SettingsGen.createInvitesRefresh()]
+    return [SettingsGen.createInvitesSent({error: e}), SettingsGen.createInvitesRefresh()]
   }
 }
 
 function* refreshNotifications() {
   // If the rpc is fast don't clear it out first
   const delayThenEmptyTask = yield Saga._fork(function*(): Iterable<any> {
-    yield Saga.callUntyped(delay, 500)
-    yield Saga.put(SettingsGen.createNotificationsRefreshed({notifications: I.Map()}))
+    yield Saga.delay(500)
+    yield Saga.put(SettingsGen.createNotificationsRefreshed({notifications: new Map()}))
   })
 
   let body = ''
@@ -317,14 +312,25 @@ function* refreshNotifications() {
     } || [])
 
   const groups = results.notifications
-  const notifications: {[key: string]: Types.NotificationsGroupState} = mapValues(groups, group => ({
-    settings: group.settings.map(settingsToPayload),
-    unsubscribedFromAll: group.unsub,
-  })) as any // TODO fix
 
   yield Saga.put(
     SettingsGen.createNotificationsRefreshed({
-      notifications: I.Map(notifications),
+      notifications: new Map([
+        [
+          'email',
+          {
+            settings: groups.email.settings.map(settingsToPayload),
+            unsubscribedFromAll: groups.email.unsub,
+          },
+        ],
+        [
+          'security',
+          {
+            settings: groups.security.settings.map(settingsToPayload),
+            unsubscribedFromAll: groups.security.unsub,
+          },
+        ],
+      ]),
     })
   )
 }
@@ -335,14 +341,9 @@ const dbNuke = async () => {
 
 const deleteAccountForever = async (state: TypedState) => {
   const username = state.config.username
-  const allowDeleteAccount = state.settings.allowDeleteAccount
 
   if (!username) {
     throw new Error('Unable to delete account: no username set')
-  }
-
-  if (!allowDeleteAccount) {
-    throw new Error('Account deletion failsafe was not disengaged. This is a bug!')
   }
 
   await RPCTypes.loginAccountDeleteRpcPromise(undefined, Constants.settingsWaitingKey)
@@ -359,21 +360,16 @@ const loadSettings = async (
   }
   try {
     const settings = await RPCTypes.userLoadMySettingsRpcPromise(undefined, Constants.loadSettingsWaitingKey)
-    const emailMap: I.Map<string, Types.EmailRow> = I.Map(
-      (settings.emails || []).map(row => [row.email, Constants.makeEmailRow(row)])
+    const emailMap = new Map(
+      (settings.emails ?? []).map(row => [row.email, {...Constants.makeEmailRow(), ...row}])
     )
-    const phoneMap: I.Map<string, Types.PhoneRow> = I.Map(
-      (settings.phoneNumbers || []).reduce(
-        (map, row) => {
-          if (map[row.phoneNumber] && !map[row.phoneNumber].superseded) {
-            return map
-          }
-          map[row.phoneNumber] = Constants.toPhoneRow(row)
-          return map
-        },
-        {} as {[key: string]: Types.PhoneRow}
-      )
-    )
+    const phoneMap = (settings.phoneNumbers ?? []).reduce<Map<string, Types.PhoneRow>>((map, row) => {
+      if (map[row.phoneNumber] && !map[row.phoneNumber].superseded) {
+        return map
+      }
+      map.set(row.phoneNumber, Constants.toPhoneRow(row))
+      return map
+    }, new Map())
     return SettingsGen.createLoadedSettings({
       emails: emailMap,
       phones: phoneMap,
@@ -387,7 +383,7 @@ const loadSettings = async (
 const visFromBoolean = (searchable: boolean): ChatTypes.Keybase1.IdentityVisibility =>
   searchable ? ChatTypes.Keybase1.IdentityVisibility.public : ChatTypes.Keybase1.IdentityVisibility.private
 
-const editEmail = async (_: TypedState, action: SettingsGen.EditEmailPayload, logger: Saga.SagaLogger) => {
+const editEmail = async (action: SettingsGen.EditEmailPayload, logger: Saga.SagaLogger) => {
   // TODO: consider allowing more than one action here
   // TODO: handle errors
   if (action.payload.delete) {
@@ -414,7 +410,7 @@ const editEmail = async (_: TypedState, action: SettingsGen.EditEmailPayload, lo
   logger.warn('Empty editEmail action')
   return false
 }
-const editPhone = async (_: TypedState, action: SettingsGen.EditPhonePayload, logger: Saga.SagaLogger) => {
+const editPhone = async (action: SettingsGen.EditPhonePayload, logger: Saga.SagaLogger) => {
   // TODO: handle errors
   let acted = false
   if (action.payload.delete) {
@@ -431,6 +427,19 @@ const editPhone = async (_: TypedState, action: SettingsGen.EditPhonePayload, lo
   if (!acted) {
     logger.warn('Empty editPhone action')
   }
+}
+
+const loadDefaultPhoneNumberCountry = async (state: TypedState) => {
+  // noop if we've already loaded it
+  if (state.settings.phoneNumbers.defaultCountry) {
+    return
+  }
+  const country = await RPCTypes.accountGuessCurrentLocationRpcPromise({
+    defaultCountry: 'US',
+  })
+  return SettingsGen.createUpdateDefaultPhoneNumberCountry({
+    country,
+  })
 }
 
 const getRememberPassword = async () => {
@@ -460,11 +469,11 @@ function* processorProfile(_: TypedState, action: SettingsGen.ProcessorProfilePa
   yield Saga.put(WaitingGen.createDecrementWaiting({key: Constants.processorProfileInProgressKey}))
 }
 
-const rememberPassword = async (_: TypedState, action: SettingsGen.OnChangeRememberPasswordPayload) => {
+const rememberPassword = async (action: SettingsGen.OnChangeRememberPasswordPayload) => {
   await RPCTypes.configSetRememberPassphraseRpcPromise({remember: action.payload.remember})
 }
 
-const checkPassword = async (_: TypedState, action: SettingsGen.CheckPasswordPayload) => {
+const checkPassword = async (action: SettingsGen.CheckPasswordPayload) => {
   const res = await RPCTypes.accountPassphraseCheckRpcPromise(
     {passphrase: action.payload.password.stringValue()},
     Constants.checkPasswordWaitingKey
@@ -483,7 +492,7 @@ const loadLockdownMode = async (state: TypedState) => {
     )
     return SettingsGen.createLoadedLockdownMode({status: result.status})
   } catch (_) {
-    return SettingsGen.createLoadedLockdownMode({status: null})
+    return SettingsGen.createLoadedLockdownMode({})
   }
 }
 
@@ -497,19 +506,11 @@ const loadProxyData = async () => {
   }
 }
 
-const saveProxyData = async (_: TypedState, proxyDataPayload: SettingsGen.SaveProxyDataPayload) => {
+const saveProxyData = async (proxyDataPayload: SettingsGen.SaveProxyDataPayload) => {
   try {
     await RPCTypes.configSetProxyDataRpcPromise(proxyDataPayload.payload)
   } catch (err) {
     logger.warn('Error in saving proxy data', err)
-  }
-}
-
-const toggleRuntimeStats = async () => {
-  try {
-    await RPCTypes.configToggleRuntimeStatsRpcPromise()
-  } catch (err) {
-    logger.warn('error toggling runtime stats', err)
   }
 }
 
@@ -530,6 +531,10 @@ const setLockdownMode = async (state: TypedState, action: SettingsGen.OnChangeLo
 }
 
 const sendFeedback = async (state: TypedState, action: SettingsGen.SendFeedbackPayload) => {
+  // We don't want test devices (pre-launch reports) to send us log sends.
+  if (isTestDevice) {
+    return
+  }
   const {feedback, sendLogs, sendMaxBytes} = action.payload
   try {
     if (sendLogs) {
@@ -556,6 +561,63 @@ const sendFeedback = async (state: TypedState, action: SettingsGen.SendFeedbackP
   }
 }
 
+const contactSettingsRefresh = async (state: TypedState) => {
+  if (!state.config.loggedIn) {
+    return false
+  }
+  try {
+    const settings = await RPCTypes.accountUserGetContactSettingsRpcPromise(
+      undefined,
+      Constants.contactSettingsLoadWaitingKey
+    )
+    return SettingsGen.createContactSettingsRefreshed({
+      settings,
+    })
+  } catch (_) {
+    return SettingsGen.createContactSettingsError({
+      error: 'Unable to load contact settings, please try again.',
+    })
+  }
+}
+
+const contactSettingsSaved = async (state: TypedState, action: SettingsGen.ContactSettingsSavedPayload) => {
+  if (!state.config.loggedIn) {
+    return false
+  }
+
+  // Convert the selected teams object into the RPC format.
+  const {enabled, indirectFollowees, teamsEnabled, teamsList} = action.payload
+  const teams = Object.entries(teamsList).map(([teamID, enabled]) => ({
+    enabled,
+    teamID,
+  }))
+  const allowFolloweeDegrees = indirectFollowees ? 2 : 1
+  const settings = enabled
+    ? {
+        allowFolloweeDegrees,
+        allowGoodTeams: teamsEnabled,
+        enabled: true,
+        teams,
+      }
+    : {
+        allowFolloweeDegrees,
+        allowGoodTeams: teamsEnabled,
+        enabled: false,
+        teams,
+      }
+  try {
+    await RPCTypes.accountUserSetContactSettingsRpcPromise(
+      {settings},
+      Constants.contactSettingsSaveWaitingKey
+    )
+    return SettingsGen.createContactSettingsRefresh()
+  } catch (_) {
+    return SettingsGen.createContactSettingsError({
+      error: 'Unable to save contact settings, please try again.',
+    })
+  }
+}
+
 const unfurlSettingsRefresh = async (state: TypedState) => {
   if (!state.config.loggedIn) {
     return false
@@ -564,7 +626,7 @@ const unfurlSettingsRefresh = async (state: TypedState) => {
     const result = await ChatTypes.localGetUnfurlSettingsRpcPromise(undefined, Constants.chatUnfurlWaitingKey)
     return SettingsGen.createUnfurlSettingsRefreshed({
       mode: result.mode,
-      whitelist: I.List(result.whitelist || []),
+      whitelist: result.whitelist ?? [],
     })
   } catch (_) {
     return SettingsGen.createUnfurlSettingsError({
@@ -580,7 +642,7 @@ const unfurlSettingsSaved = async (state: TypedState, action: SettingsGen.Unfurl
 
   try {
     await ChatTypes.localSaveUnfurlSettingsRpcPromise(
-      {mode: action.payload.mode, whitelist: action.payload.whitelist.toArray()},
+      {mode: action.payload.mode, whitelist: action.payload.whitelist},
       Constants.chatUnfurlWaitingKey
     )
     return SettingsGen.createUnfurlSettingsRefresh()
@@ -599,7 +661,8 @@ const loadHasRandomPW = async (state: TypedState) => {
     return false
   }
   try {
-    const randomPW = await RPCTypes.userLoadHasRandomPwRpcPromise({forceRepoll: false, noShortTimeout: false})
+    const passphraseState = await RPCTypes.userLoadPassphraseStateRpcPromise()
+    const randomPW = passphraseState === RPCTypes.PassphraseState.random
     return SettingsGen.createLoadedHasRandomPw({randomPW})
   } catch (e) {
     logger.warn('Error loading hasRandomPW:', e.message)
@@ -608,18 +671,17 @@ const loadHasRandomPW = async (state: TypedState) => {
 }
 
 // Mark that we are not randomPW anymore if we got a password change.
-const passwordChanged = () => SettingsGen.createLoadedHasRandomPw({randomPW: false})
+const passwordChanged = async (action: EngineGen.Keybase1NotifyUsersPasswordChangedPayload) => {
+  const randomPW = action.payload.params.state === RPCTypes.PassphraseState.random
+  return SettingsGen.createLoadedHasRandomPw({randomPW})
+}
 
-const stop = async (_: TypedState, action: SettingsGen.StopPayload) => {
+const stop = async (action: SettingsGen.StopPayload) => {
   await RPCTypes.ctlStopRpcPromise({exitCode: action.payload.exitCode})
   return false as const
 }
 
-const addPhoneNumber = async (
-  _: TypedState,
-  action: SettingsGen.AddPhoneNumberPayload,
-  logger: Saga.SagaLogger
-) => {
+const addPhoneNumber = async (action: SettingsGen.AddPhoneNumberPayload, logger: Saga.SagaLogger) => {
   logger.info('adding phone number')
   const {phoneNumber, searchable} = action.payload
   const visibility = searchable ? RPCTypes.IdentityVisibility.public : RPCTypes.IdentityVisibility.private
@@ -638,7 +700,6 @@ const addPhoneNumber = async (
 }
 
 const resendVerificationForPhoneNumber = async (
-  _: TypedState,
   action: SettingsGen.ResendVerificationForPhoneNumberPayload,
   logger: Saga.SagaLogger
 ) => {
@@ -657,11 +718,7 @@ const resendVerificationForPhoneNumber = async (
   }
 }
 
-const verifyPhoneNumber = async (
-  _: TypedState,
-  action: SettingsGen.VerifyPhoneNumberPayload,
-  logger: Saga.SagaLogger
-) => {
+const verifyPhoneNumber = async (action: SettingsGen.VerifyPhoneNumberPayload, logger: Saga.SagaLogger) => {
   logger.info('verifying phone number')
   const {code, phoneNumber} = action.payload
   try {
@@ -680,10 +737,13 @@ const verifyPhoneNumber = async (
 
 const loadContactImportEnabled = async (
   state: TypedState,
-  action: SettingsGen.LoadContactImportEnabledPayload | ConfigGen.BootstrapStatusLoadedPayload,
+  action: SettingsGen.LoadContactImportEnabledPayload | ConfigGen.LoadOnStartPayload,
   logger: Saga.SagaLogger
 ) => {
-  if (action.type === ConfigGen.bootstrapStatusLoaded && !action.payload.loggedIn) {
+  if (!state.config.loggedIn) {
+    return
+  }
+  if (action.type === ConfigGen.loadOnStart && action.payload.phase !== 'startupOrReloginButNotInARush') {
     return
   }
   if (!state.config.username) {
@@ -746,10 +806,23 @@ const addEmail = async (state: TypedState, action: SettingsGen.AddEmailPayload, 
   }
 }
 
+const emailAddressVerified = (
+  action: EngineGen.Keybase1NotifyEmailAddressEmailAddressVerifiedPayload,
+  logger: Saga.SagaLogger
+) => {
+  logger.info('email verified')
+  return SettingsGen.createEmailVerified({email: action.payload.params.emailAddress})
+}
+
+const loginBrowserViaWebAuthToken = async () => {
+  const link = await RPCTypes.configGenerateWebAuthTokenRpcPromise()
+  openURL(link)
+}
+
 function* settingsSaga() {
-  yield* Saga.chainAction2(SettingsGen.invitesReclaim, reclaimInvite)
+  yield* Saga.chainAction(SettingsGen.invitesReclaim, reclaimInvite)
   yield* Saga.chainAction2(SettingsGen.invitesRefresh, refreshInvites)
-  yield* Saga.chainAction2(SettingsGen.invitesSend, sendInvite)
+  yield* Saga.chainAction(SettingsGen.invitesSend, sendInvite)
   yield* Saga.chainGenerator<SettingsGen.NotificationsRefreshPayload>(
     SettingsGen.notificationsRefresh,
     refreshNotifications
@@ -766,51 +839,47 @@ function* settingsSaga() {
     processorProfile
   )
   yield* Saga.chainAction2(SettingsGen.loadRememberPassword, getRememberPassword)
-  yield* Saga.chainAction2(SettingsGen.onChangeRememberPassword, rememberPassword)
+  yield* Saga.chainAction(SettingsGen.onChangeRememberPassword, rememberPassword)
   yield* Saga.chainAction2(SettingsGen.loadLockdownMode, loadLockdownMode)
   yield* Saga.chainAction2(SettingsGen.onChangeLockdownMode, setLockdownMode)
   yield* Saga.chainAction2(SettingsGen.sendFeedback, sendFeedback)
+  yield* Saga.chainAction2(SettingsGen.contactSettingsRefresh, contactSettingsRefresh)
+  yield* Saga.chainAction2(SettingsGen.contactSettingsRefresh, contactSettingsRefresh)
+  yield* Saga.chainAction2(SettingsGen.contactSettingsSaved, contactSettingsSaved)
   yield* Saga.chainAction2(SettingsGen.unfurlSettingsRefresh, unfurlSettingsRefresh)
   yield* Saga.chainAction2(SettingsGen.unfurlSettingsSaved, unfurlSettingsSaved)
   yield* Saga.chainAction2(SettingsGen.loadHasRandomPw, loadHasRandomPW)
-  yield* Saga.chainAction2(EngineGen.keybase1NotifyUsersPasswordChanged, passwordChanged)
+  yield* Saga.chainAction(EngineGen.keybase1NotifyUsersPasswordChanged, passwordChanged)
 
-  yield* Saga.chainAction2(SettingsGen.stop, stop)
+  yield* Saga.chainAction(SettingsGen.stop, stop)
 
-  yield* Saga.chainAction2(SettingsGen.checkPassword, checkPassword)
+  yield* Saga.chainAction(SettingsGen.checkPassword, checkPassword)
 
   yield* Saga.chainAction2(SettingsGen.loadProxyData, loadProxyData)
-  yield* Saga.chainAction2(SettingsGen.saveProxyData, saveProxyData)
-
-  // Runtime Stats
-  yield* Saga.chainAction2(SettingsGen.toggleRuntimeStats, toggleRuntimeStats)
+  yield* Saga.chainAction(SettingsGen.saveProxyData, saveProxyData)
 
   // Phone numbers
-  yield* Saga.chainAction2(SettingsGen.editPhone, editPhone, 'editPhone')
-  yield* Saga.chainAction2(SettingsGen.addPhoneNumber, addPhoneNumber, 'addPhoneNumber')
-  yield* Saga.chainAction2(SettingsGen.verifyPhoneNumber, verifyPhoneNumber, 'verifyPhoneNumber')
-  yield* Saga.chainAction2(
-    SettingsGen.resendVerificationForPhoneNumber,
-    resendVerificationForPhoneNumber,
-    'resendVerificationForPhoneNumber'
-  )
+  yield* Saga.chainAction2(SettingsGen.loadDefaultPhoneNumberCountry, loadDefaultPhoneNumberCountry)
+  yield* Saga.chainAction(SettingsGen.editPhone, editPhone)
+  yield* Saga.chainAction(SettingsGen.addPhoneNumber, addPhoneNumber)
+  yield* Saga.chainAction(SettingsGen.verifyPhoneNumber, verifyPhoneNumber)
+  yield* Saga.chainAction(SettingsGen.resendVerificationForPhoneNumber, resendVerificationForPhoneNumber)
 
   // Contacts
   yield* Saga.chainAction2(
-    [SettingsGen.loadContactImportEnabled, ConfigGen.bootstrapStatusLoaded],
-    loadContactImportEnabled,
-    'loadContactImportEnabled'
+    [SettingsGen.loadContactImportEnabled, ConfigGen.loadOnStart],
+    loadContactImportEnabled
   )
-  yield* Saga.chainAction2(
-    SettingsGen.editContactImportEnabled,
-    editContactImportEnabled,
-    'editContactImportEnabled'
-  )
+  yield* Saga.chainAction2(SettingsGen.editContactImportEnabled, editContactImportEnabled)
+  yield* Saga.chainAction2(SettingsGen.editContactImportEnabled, editContactImportEnabled)
 
   // Emails
-  yield* Saga.chainAction2(SettingsGen.editEmail, editEmail, 'editEmail')
-  yield* Saga.chainAction2(SettingsGen.addEmail, addEmail, 'addEmail')
+  yield* Saga.chainAction(SettingsGen.editEmail, editEmail)
+  yield* Saga.chainAction2(SettingsGen.addEmail, addEmail)
   yield* Saga.chainAction2(SettingsGen.onSubmitNewEmail, onSubmitNewEmail)
+  yield* Saga.chainAction(EngineGen.keybase1NotifyEmailAddressEmailAddressVerified, emailAddressVerified)
+
+  yield* Saga.chainAction2(SettingsGen.loginBrowserViaWebAuthToken, loginBrowserViaWebAuthToken)
 }
 
 export default settingsSaga

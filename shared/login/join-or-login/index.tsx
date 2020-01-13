@@ -3,35 +3,33 @@ import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import {InfoIcon} from '../../signup/common'
 
-type Props = Kb.PropsWithTimer<{
+type Props = {
   bannerMessage: string | null
   checkIsOnline: () => void
   onLogin: () => void
   onSignup: () => void
   isOnline: boolean | null
   showProxySettings: () => void
-}>
+}
 
 const Intro = (props: Props) => {
   const [showing, setShowing] = React.useState(true)
   Kb.useInterval(props.checkIsOnline, showing ? 5000 : undefined)
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} alignItems="center">
+    <Kb.Box2
+      direction="vertical"
+      fullWidth={true}
+      fullHeight={true}
+      alignItems="center"
+      style={styles.container}
+    >
       {Styles.isMobile && (
         <Kb.NavigationEvents onDidFocus={() => setShowing(true)} onWillBlur={() => setShowing(false)} />
       )}
       <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.header}>
         <InfoIcon />
       </Kb.Box2>
-
-      {!!props.bannerMessage && (
-        <Kb.Box2 direction="vertical" fullWidth={true} style={styles.banner}>
-          <Kb.Text center={true} type="BodySmallSemibold" style={styles.bannerMessage}>
-            {props.bannerMessage}
-          </Kb.Text>
-        </Kb.Box2>
-      )}
-
+      {!!props.bannerMessage && <Kb.Banner color="blue">{props.bannerMessage}</Kb.Banner>}
       <Kb.Box2
         direction="vertical"
         fullWidth={true}
@@ -87,6 +85,9 @@ const styles = Styles.styleSheetCreate(
           ...Styles.padding(0, Styles.globalMargins.small, Styles.globalMargins.tiny),
         },
       }),
+      container: {
+        backgroundColor: Styles.globalColors.white,
+      },
       header: Styles.platformStyles({
         common: {
           justifyContent: 'flex-end',

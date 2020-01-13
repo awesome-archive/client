@@ -127,6 +127,10 @@
         {
           "type": "SigID",
           "name": "sigID"
+        },
+        {
+          "type": "boolean",
+          "name": "hidden"
         }
       ]
     },
@@ -380,6 +384,10 @@
         },
         {
           "type": "string",
+          "name": "bioDecorated"
+        },
+        {
+          "type": "string",
           "name": "website"
         },
         {
@@ -407,7 +415,15 @@
         },
         {
           "type": "boolean",
+          "name": "stellarHidden"
+        },
+        {
+          "type": "boolean",
           "name": "blocked"
+        },
+        {
+          "type": "boolean",
+          "name": "hidFromFollowers"
         }
       ]
     },

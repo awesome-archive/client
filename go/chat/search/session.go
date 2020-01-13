@@ -84,7 +84,7 @@ func (s *searchSession) searchConv(ctx context.Context, convID chat1.Conversatio
 	var allMsgIDs mapset.Set
 	for token := range s.tokens {
 		matchedIDs := mapset.NewThreadUnsafeSet()
-		idMap, err := s.indexer.store.GetHits(ctx, s.uid, convID, token)
+		idMap, err := s.indexer.store.GetHits(ctx, convID, token)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +149,7 @@ func (s *searchSession) getMsgsAndIDSet(ctx context.Context, convID chat1.Conver
 	}
 	res := []chat1.MessageUnboxed{}
 	for _, msg := range msgs {
-		if msg.IsValid() && msg.IsVisible() {
+		if msg.IsValidFull() && msg.IsVisible() {
 			res = append(res, msg)
 		}
 	}
@@ -193,7 +193,7 @@ func (s *searchSession) searchHitsFromMsgIDs(ctx context.Context, conv types.Rem
 	return &chat1.ChatSearchInboxHit{
 		ConvID:   convID,
 		TeamType: conv.GetTeamType(),
-		ConvName: conv.GetName(),
+		ConvName: utils.GetRemoteConvDisplayName(conv),
 		Hits:     hits,
 		Time:     hits[0].HitMessage.Valid().Ctime,
 	}, nil
@@ -241,7 +241,7 @@ func (s *searchSession) searchHitBatch(ctx context.Context, convID chat1.Convers
 }
 
 func (s *searchSession) convFullyIndexed(ctx context.Context, conv chat1.Conversation) (bool, error) {
-	md, err := s.indexer.store.GetMetadata(ctx, s.uid, conv.GetConvID())
+	md, err := s.indexer.store.GetMetadata(ctx, conv.GetConvID())
 	if err != nil {
 		return false, err
 	}
@@ -249,7 +249,10 @@ func (s *searchSession) convFullyIndexed(ctx context.Context, conv chat1.Convers
 }
 
 func (s *searchSession) updateInboxIndex(ctx context.Context, conv chat1.Conversation) {
-	md, err := s.indexer.store.GetMetadata(ctx, s.uid, conv.GetConvID())
+	if err := s.indexer.store.Flush(); err != nil {
+		s.indexer.Debug(ctx, "updateInboxIndex: failed to flush: %s", err)
+	}
+	md, err := s.indexer.store.GetMetadata(ctx, conv.GetConvID())
 	if err != nil {
 		s.indexer.Debug(ctx, "updateInboxIndex: unable to GetMetadata %v", err)
 		return
@@ -263,7 +266,7 @@ func (s *searchSession) percentIndexed() int {
 
 func (s *searchSession) reindexConvWithUIUpdate(ctx context.Context, rconv types.RemoteConversation) error {
 	conv := rconv.Conv
-	if _, err := s.indexer.reindexConv(ctx, rconv, s.uid, 0, s.inboxIndexStatus); err != nil {
+	if _, err := s.indexer.reindexConv(ctx, rconv, 0, s.inboxIndexStatus); err != nil {
 		return err
 	}
 	s.updateInboxIndex(ctx, conv)
@@ -291,7 +294,7 @@ func (s *searchSession) searchConvWithUIUpdate(ctx context.Context, convID chat1
 	}
 	if len(msgIDs) != hits.Size() {
 		s.indexer.Debug(ctx, "Search: hit mismatch, found %d msgIDs in index, %d hits in conv: %v, %v",
-			len(msgIDs), hits.Size(), conv.GetName(), conv.GetConvID())
+			len(msgIDs), hits.Size(), utils.GetRemoteConvDisplayName(conv), conv.ConvIDStr)
 	}
 	if hits == nil {
 		return nil
@@ -365,7 +368,8 @@ func (s *searchSession) preSearch(ctx context.Context) (err error) {
 		switch s.opts.ReindexMode {
 		case chat1.ReIndexingMode_PRESEARCH_SYNC:
 			if err := s.reindexConvWithUIUpdate(ctx, conv); err != nil {
-				s.indexer.Debug(ctx, "Search: Unable to reindexConv: %v, %v, %v", conv.GetName(), conv.GetConvID(), err)
+				s.indexer.Debug(ctx, "Search: Unable to reindexConv: %v, %v, %v",
+					utils.GetRemoteConvDisplayName(conv), conv.GetConvID(), err)
 				s.inboxIndexStatus.rmConv(conv.Conv)
 				continue
 			}
@@ -424,7 +428,7 @@ func (s *searchSession) postSearch(ctx context.Context) (err error) {
 		}
 		if err := s.reindexConvWithUIUpdate(ctx, conv); err != nil {
 			s.indexer.Debug(ctx, "Search: postSearch: error reindexing: conv: %v convID: %v err: %v",
-				conv.GetName(), conv.GetConvID(), err)
+				utils.GetRemoteConvDisplayName(conv), conv.ConvIDStr, err)
 			s.inboxIndexStatus.rmConv(conv.Conv)
 			continue
 		}
@@ -450,11 +454,11 @@ func (s *searchSession) initRun(ctx context.Context) (shouldRun bool, err error)
 		return false, err
 	}
 
-	s.convMap, err = s.indexer.allConvs(ctx, s.uid, s.opts.ConvID)
+	s.convMap, err = s.indexer.allConvs(ctx, s.opts.ConvID)
 	if err != nil {
 		return false, err
 	}
-	s.convList = s.indexer.convsByMTime(ctx, s.uid, s.convMap)
+	s.convList = s.indexer.convsPrioritySorted(ctx, s.convMap)
 	if len(s.convList) == 0 {
 		return false, nil
 	}

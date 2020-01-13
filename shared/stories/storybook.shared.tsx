@@ -66,6 +66,7 @@ const createPropProvider = (...maps: SelectorMap[]) => {
         // @ts-ignore
         createStore(state => state, merged)
       }
+      // @ts-ignore
       merged={merged}
     >
       <GatewayProvider>
@@ -79,17 +80,18 @@ const createPropProvider = (...maps: SelectorMap[]) => {
 }
 
 // Plumb dispatches through storybook actions panel
-const actionLog = () => next => a => {
+const actionLog = () => (next: any) => (a: any) => {
   action('ReduxDispatch')(a)
   return next(a)
 }
 
 // Includes common old-style propProvider temporarily
-export const MockStore = ({store, children}): any => (
+export const MockStore = ({store, children}: any): any => (
   // @ts-ignore
   <Provider
     key={`storyprovider:${uniqueProviderKey++}`}
     store={createStore(state => state, {...store, ...PP.Common()}, applyMiddleware(actionLog))}
+    // @ts-ignore
     merged={store}
   >
     <GatewayProvider>
@@ -100,9 +102,9 @@ export const MockStore = ({store, children}): any => (
     </GatewayProvider>
   </Provider>
 )
-export const createNavigator = params => ({
+export const createNavigator = (params: any) => ({
   navigation: {
-    getParam: key => params[key],
+    getParam: (key: any) => params[key],
   },
 })
 

@@ -661,6 +661,13 @@
     },
     {
       "type": "record",
+      "name": "BotInfoHashVers",
+      "fields": [],
+      "typedef": "uint64",
+      "lint": "ignore"
+    },
+    {
+      "type": "record",
       "name": "CommandConvVers",
       "fields": [],
       "typedef": "uint64",
@@ -730,6 +737,10 @@
           "name": "uid"
         },
         {
+          "type": "keybase1.TeamRole",
+          "name": "untrustedTeamRole"
+        },
+        {
           "type": "ConversationID",
           "name": "convID"
         },
@@ -747,6 +758,14 @@
       "type": "record",
       "name": "BotInfo",
       "fields": [
+        {
+          "type": "BotInfoHashVers",
+          "name": "serverHashVers"
+        },
+        {
+          "type": "BotInfoHashVers",
+          "name": "clientHashVers"
+        },
         {
           "type": {
             "type": "array",
@@ -860,7 +879,8 @@
           ]
         }
       ],
-      "response": "GetInboxRemoteRes"
+      "response": "GetInboxRemoteRes",
+      "timeout_msec": 300000
     },
     "getThreadRemote": {
       "request": [
@@ -1514,6 +1534,10 @@
         {
           "name": "infoHash",
           "type": "BotInfoHash"
+        },
+        {
+          "name": "clientHashVers",
+          "type": "BotInfoHashVers"
         }
       ],
       "response": "GetBotInfoRes"

@@ -1,5 +1,6 @@
 import React from 'react'
 import * as Types from '../../constants/types/fs'
+import * as Constants from '../../constants/fs'
 import * as Sb from '../../stories/storybook'
 import DestinationPicker from './destination-picker'
 import Browser from '.'
@@ -11,6 +12,7 @@ import {commonProvider} from '../common/index.stories'
 import {topBarProvider} from '../top-bar/index.stories'
 import {footerProvider} from '../footer/index.stories'
 import {bannerProvider} from '../banner/index.stories'
+import {produce} from 'immer'
 
 const _provider = {
   ...rowsProvider,
@@ -27,16 +29,30 @@ const _provider = {
 }
 
 const storeCommon = Sb.createStoreWithCommon()
-const storeShowingSfmi = {
-  ...storeCommon,
-  fs: storeCommon.fs.update('sfmi', sfmi => sfmi.set('showingBanner', true)),
-}
+const storeShowingSfmi = produce(storeCommon, draftStoreCommon => {
+  draftStoreCommon.fs.sfmi.showingBanner = true
+})
+const storeOthersReset = produce(storeCommon, draftStore => {
+  // @ts-ignore
+  draftStore.fs.tlfs.private.set(
+    'others,reset',
+    Constants.makeTlf({
+      name: 'others,reset',
+      resetParticipants: ['foo'],
+    })
+  )
+})
 
 const provider = Sb.createPropProviderWithCommon(_provider)
 // @ts-ignore
 const providerShowingSfmi = Sb.createPropProviderWithCommon({
   ..._provider,
   ...storeShowingSfmi,
+})
+// @ts-ignore
+const providerOthersReset = Sb.createPropProviderWithCommon({
+  ..._provider,
+  ...storeOthersReset,
 })
 
 export default () => {
@@ -52,7 +68,8 @@ export default () => {
         <Browser
           path={Types.stringToPath('/keybase/private/foo')}
           resetBannerType={Types.ResetBannerNoOthersType.None}
-          offline={false}
+          offlineUnsynced={false}
+          writable={true}
         />
       </Kb.Box2>
     ))
@@ -61,7 +78,8 @@ export default () => {
         <Browser
           path={Types.stringToPath('/keybase/public/foo')}
           resetBannerType={Types.ResetBannerNoOthersType.None}
-          offline={false}
+          offlineUnsynced={false}
+          writable={true}
         />
       </Kb.Box2>
     ))
@@ -70,16 +88,20 @@ export default () => {
         <Browser
           path={Types.stringToPath('/keybase/private/me,reset')}
           resetBannerType={Types.ResetBannerNoOthersType.Self}
-          offline={false}
+          offlineUnsynced={false}
+          writable={true}
         />
       </Kb.Box2>
     ))
+  Sb.storiesOf('Files/Browser', module)
+    .addDecorator(providerOthersReset)
     .add('others reset', () => (
       <Kb.Box2 direction="horizontal" fullWidth={true} fullHeight={true}>
         <Browser
           path={Types.stringToPath('/keybase/private/others,reset')}
           resetBannerType={1}
-          offline={false}
+          offlineUnsynced={false}
+          writable={true}
         />
       </Kb.Box2>
     ))
@@ -88,7 +110,8 @@ export default () => {
         <Browser
           path={Types.stringToPath('/keybase/private/others,reset')}
           resetBannerType={Types.ResetBannerNoOthersType.None}
-          offline={true}
+          offlineUnsynced={true}
+          writable={true}
         />
       </Kb.Box2>
     ))

@@ -1,5 +1,4 @@
 import * as React from 'react'
-import * as I from 'immutable'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
 import * as Types from '../../../constants/types/wallets'
@@ -13,11 +12,10 @@ export type SettingsProps = {
   accountID: Types.AccountID
   name: string
   user: string
-  inflationDestination: string
   isDefault: boolean
   currencyWaiting: boolean
   currency: Types.Currency
-  currencies: I.List<Types.Currency>
+  currencies: Array<Types.Currency>
   canSubmitTx: boolean
   externalPartners: Array<Types.PartnerUrl & {showDivider: boolean}>
   mobileOnlyMode: boolean
@@ -29,7 +27,6 @@ export type SettingsProps = {
   onSecretKeySeen?: () => void
   onSetDefault: () => void
   onEditName: () => void
-  onSetupInflation: () => void
   onCurrencyChange: (currency: Types.CurrencyCode) => void
   onMobileOnlyModeChange: (enabled: boolean) => void
   refresh: () => void
@@ -38,12 +35,6 @@ export type SettingsProps = {
   showExternalPartners: boolean
   thisDeviceIsLockedOut: boolean
 }
-
-const HoverText = Styles.isMobile
-  ? Kb.Text
-  : Styles.styled(Kb.Text)(() => ({
-      ':hover': {backgroundColor: Styles.globalColors.yellowLight},
-    }))
 
 const Divider = () => <Kb.Divider style={styles.divider} />
 
@@ -113,12 +104,13 @@ class AccountSettings extends React.Component<SettingsProps> {
               <Kb.Box2 direction="vertical" gap="xtiny" style={styles.section} fullWidth={true}>
                 <Kb.Text type="BodySmallSemibold">Account name</Kb.Text>
                 <Kb.Box2 direction="horizontal" fullWidth={true}>
-                  <HoverText type="BodySemibold">{props.name}</HoverText>
-                  <Kb.Icon
-                    style={Kb.iconCastPlatformStyles(styles.icon)}
-                    type="iconfont-edit"
-                    fontSize={Styles.isMobile ? 22 : 16}
-                  />
+                  <Kb.Text
+                    className="hover_color_blackOrBlack hover_background_color_yellowLight"
+                    type="BodySemibold"
+                  >
+                    {props.name}
+                  </Kb.Text>
+                  <Kb.Icon style={styles.icon} type="iconfont-edit" fontSize={Styles.isMobile ? 22 : 16} />
                 </Kb.Box2>
               </Kb.Box2>
             </Kb.ClickableBox>
@@ -129,7 +121,7 @@ class AccountSettings extends React.Component<SettingsProps> {
             </Kb.Box2>
             <Divider />
             <Kb.Box2 direction="vertical" gap="tiny" style={styles.section} fullWidth={true}>
-              <Kb.Text type="BodySmallSemibold">Secret Key</Kb.Text>
+              <Kb.Text type="BodySmallSemibold">Secret key</Kb.Text>
               {!props.thisDeviceIsLockedOut ? (
                 <>
                   <Kb.Banner color="yellow" inline={true}>
@@ -141,10 +133,11 @@ class AccountSettings extends React.Component<SettingsProps> {
                       containerStyle={styles.copyTextContainer}
                       multiline={true}
                       withReveal={true}
-                      onReveal={() => this.props.onLoadSecretKey && this.props.onLoadSecretKey()}
+                      loadText={() => this.props.onLoadSecretKey && this.props.onLoadSecretKey()}
                       hideOnCopy={true}
                       onCopy={this.clearKey}
-                      text={this.props.secretKey || 'fetching and decrypting secret key...'}
+                      text={this.props.secretKey}
+                      placeholderText="fetching and decrypting secret key..."
                     />
                   </Kb.Box2>
                 </>
@@ -254,6 +247,11 @@ class AccountSettings extends React.Component<SettingsProps> {
                   gapEnd={true}
                 >
                   <Kb.Text type="BodySmallSemibold">External tools and partners</Kb.Text>
+                  <Kb.Text style={styles.externalPartnersText} type="BodySmall">
+                    Note: Partners listed here are not affiliated with Keybase and are listed for convenience
+                    only. If you choose to visit a partner, that partner will see your Keybase username and
+                    Stellar address.
+                  </Kb.Text>
                   {props.externalPartners.map(partner => (
                     <Kb.Box2
                       key={partner.url}
@@ -277,37 +275,6 @@ class AccountSettings extends React.Component<SettingsProps> {
 
             <WalletSettingTrustline accountID={props.accountID} />
 
-            <Kb.Box2 direction="vertical" gap="tiny" style={styles.section} fullWidth={true}>
-              <Kb.Box2 direction="horizontal" style={styles.alignSelfFlexStart} gap="xtiny" fullWidth={true}>
-                <Kb.Text type="BodySmallSemibold">Inflation destination</Kb.Text>
-                {!Styles.isMobile && (
-                  <Kb.WithTooltip
-                    tooltip="Every year, the total Lumens grows by 1% due to inflation, and you can cast a vote for who gets it."
-                    multiline={true}
-                  >
-                    <Kb.Icon type="iconfont-question-mark" sizeType="Small" />
-                  </Kb.WithTooltip>
-                )}
-              </Kb.Box2>
-              {!!props.inflationDestination && (
-                <Kb.Text type="BodySemibold" selectable={true}>
-                  {props.inflationDestination}
-                </Kb.Text>
-              )}
-              {!!props.canSubmitTx && (
-                <Kb.Button
-                  mode="Secondary"
-                  label={props.inflationDestination ? 'Change' : 'Set up'}
-                  onClick={props.onSetupInflation}
-                  style={styles.setupInflation}
-                />
-              )}
-              {!props.canSubmitTx && (
-                <Kb.Text type="BodySmall">
-                  Your account needs more funds to set an inflation destination.
-                </Kb.Text>
-              )}
-            </Kb.Box2>
             <Kb.Box2
               direction="vertical"
               noShrink={true}
@@ -316,7 +283,6 @@ class AccountSettings extends React.Component<SettingsProps> {
               fullWidth={true}
               style={styles.removeContainer}
             >
-              <Kb.Divider />
               <Kb.Box2
                 direction="vertical"
                 fullWidth={true}
@@ -363,8 +329,12 @@ const styles = Styles.styleSheetCreate(
         marginBottom: Styles.globalMargins.tiny,
         marginTop: Styles.globalMargins.tiny,
       },
+      externalPartnersText: {
+        marginBottom: Styles.globalMargins.tiny,
+      },
       header: {
         ...(!Styles.isMobile ? {minHeight: 48} : {}),
+        backgroundColor: Styles.globalColors.white,
         borderBottomColor: Styles.globalColors.black_10,
         borderBottomWidth: 1,
         borderStyle: 'solid',
@@ -462,9 +432,6 @@ const styles = Styles.styleSheetCreate(
         backgroundColor: Styles.globalColors.white,
         flexShrink: 0,
         paddingTop: Styles.isMobile ? Styles.globalMargins.small : 0,
-      },
-      setupInflation: {
-        alignSelf: 'flex-start',
       },
       yesShrink: {flexShrink: 1},
     } as const)

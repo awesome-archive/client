@@ -129,6 +129,23 @@
     },
     {
       "type": "record",
+      "name": "MsgBotInfo",
+      "fields": [
+        {
+          "type": "string",
+          "name": "botUID",
+          "jsonkey": "bot_uid"
+        },
+        {
+          "type": "string",
+          "name": "botUsername",
+          "jsonkey": "bot_username",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "type": "record",
       "name": "MsgFlipContent",
       "fields": [
         {
@@ -408,10 +425,10 @@
         {
           "type": [
             null,
-            "string"
+            "MsgBotInfo"
           ],
-          "name": "botUID",
-          "jsonkey": "bot_uid"
+          "name": "botInfo",
+          "jsonkey": "bot_info"
         }
       ]
     },
@@ -496,6 +513,11 @@
           "type": "ChatChannel",
           "name": "channel",
           "jsonkey": "channel"
+        },
+        {
+          "type": "boolean",
+          "name": "isDefaultConv",
+          "jsonkey": "is_default_conv"
         },
         {
           "type": "boolean",
@@ -586,14 +608,6 @@
           "name": "identifyFailures",
           "jsonkey": "identify_failures",
           "optional": true
-        },
-        {
-          "type": [
-            null,
-            "Pagination"
-          ],
-          "name": "pagination",
-          "jsonkey": "pagination"
         },
         {
           "type": {
@@ -819,6 +833,30 @@
     },
     {
       "type": "record",
+      "name": "ConvNotification",
+      "fields": [
+        {
+          "type": "string",
+          "name": "type"
+        },
+        {
+          "type": [
+            null,
+            "ConvSummary"
+          ],
+          "name": "conv"
+        },
+        {
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "error"
+        }
+      ]
+    },
+    {
+      "type": "record",
       "name": "AdvertiseCommandAPIParam",
       "fields": [
         {
@@ -872,6 +910,45 @@
             "items": "RateLimitRes"
           },
           "name": "rateLimits"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "DeviceInfo",
+      "fields": [
+        {
+          "type": "string",
+          "name": "deviceID",
+          "jsonkey": "id"
+        },
+        {
+          "type": "string",
+          "name": "deviceDescription",
+          "jsonkey": "description"
+        },
+        {
+          "type": "string",
+          "name": "deviceType",
+          "jsonkey": "type"
+        },
+        {
+          "type": "int64",
+          "name": "deviceCtime",
+          "jsonkey": "ctime"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "GetDeviceInfoRes",
+      "fields": [
+        {
+          "type": {
+            "type": "array",
+            "items": "DeviceInfo"
+          },
+          "name": "devices"
         }
       ]
     }

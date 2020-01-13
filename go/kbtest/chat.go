@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/keybase/client/go/badges"
 	"github.com/keybase/client/go/chat/pager"
 
 	"github.com/keybase/client/go/chat/globals"
@@ -41,6 +42,9 @@ func (c ChatTestContext) Context() *globals.Context {
 }
 
 func (c ChatTestContext) Cleanup() {
+	if c.ChatG.PushHandler != nil {
+		<-c.ChatG.PushHandler.Stop(context.TODO())
+	}
 	if c.ChatG.MessageDeliverer != nil {
 		<-c.ChatG.MessageDeliverer.Stop(context.TODO())
 	}
@@ -64,6 +68,9 @@ func (c ChatTestContext) Cleanup() {
 	}
 	if c.ChatG.BotCommandManager != nil {
 		<-c.ChatG.BotCommandManager.Stop(context.TODO())
+	}
+	if c.ChatG.UIInboxLoader != nil {
+		<-c.ChatG.UIInboxLoader.Stop(context.TODO())
 	}
 	c.TestContext.Cleanup()
 }
@@ -102,6 +109,7 @@ func NewChatMockWorld(t *testing.T, name string, numUsers int) (world *ChatMockW
 			TestContext: kbTc,
 			ChatG:       &globals.ChatContext{},
 		}
+		tc.ChatG.Badger = badges.NewBadger(kbTc.G)
 		tc.G.SetClock(world.Fc)
 		u, err := CreateAndSignupFakeUser("chat", tc.G)
 		if err != nil {
@@ -231,9 +239,13 @@ func (m *TlfMock) AllCryptKeys(ctx context.Context, tlfName string, public bool)
 	}
 	return res, nil
 }
-func (m *TlfMock) LookupName(ctx context.Context, tlfID chat1.TLFID, public bool) (res types.NameInfo, err error) {
-	fakeNameInfo := types.NameInfo{}
-	return fakeNameInfo, nil
+func (m *TlfMock) LookupName(ctx context.Context, tlfID chat1.TLFID, public bool, tlfName string) (res types.NameInfo, err error) {
+	return m.LookupID(ctx, tlfName, public)
+}
+
+func (m *TlfMock) TeamBotSettings(ctx context.Context, tlfName string, tlfID chat1.TLFID,
+	membersType chat1.ConversationMembersType, public bool) (map[keybase1.UserVersion]keybase1.TeamBotSettings, error) {
+	return make(map[keybase1.UserVersion]keybase1.TeamBotSettings), nil
 }
 
 func (m *TlfMock) LookupID(ctx context.Context, tlfName string, public bool) (res types.NameInfo, err error) {
@@ -1010,6 +1022,7 @@ type ChatUI struct {
 	GiphyWindow           chan bool
 	CoinFlipUpdates       chan []chat1.UICoinFlipStatus
 	CommandMarkdown       chan *chat1.UICommandMarkdown
+	InboxLayoutCb         chan chat1.UIInboxLayout
 }
 
 func NewChatUI() *ChatUI {
@@ -1031,6 +1044,7 @@ func NewChatUI() *ChatUI {
 		GiphyWindow:           make(chan bool, 10),
 		CoinFlipUpdates:       make(chan []chat1.UICoinFlipStatus, 100),
 		CommandMarkdown:       make(chan *chat1.UICommandMarkdown, 10),
+		InboxLayoutCb:         make(chan chat1.UIInboxLayout, 200),
 	}
 }
 
@@ -1047,14 +1061,25 @@ func (c *ChatUI) ChatAttachmentDownloadDone(context.Context) error {
 }
 
 func (c *ChatUI) ChatInboxConversation(ctx context.Context, arg chat1.ChatInboxConversationArg) error {
-	var inboxItem chat1.InboxUIItem
-	if err := json.Unmarshal([]byte(arg.Conv), &inboxItem); err != nil {
+	var inboxItems []chat1.InboxUIItem
+	if err := json.Unmarshal([]byte(arg.Convs), &inboxItems); err != nil {
 		return err
 	}
-	c.InboxCb <- NonblockInboxResult{
-		ConvRes: &inboxItem,
-		ConvID:  inboxItem.GetConvID(),
+	for _, inboxItem := range inboxItems {
+		c.InboxCb <- NonblockInboxResult{
+			ConvRes: &inboxItem,
+			ConvID:  inboxItem.GetConvID(),
+		}
 	}
+	return nil
+}
+
+func (c *ChatUI) ChatInboxLayout(ctx context.Context, layout string) error {
+	var uilayout chat1.UIInboxLayout
+	if err := json.Unmarshal([]byte(layout), &uilayout); err != nil {
+		return err
+	}
+	c.InboxLayoutCb <- uilayout
 	return nil
 }
 
@@ -1399,6 +1424,18 @@ func (m *MockChatHelper) GetMessage(ctx context.Context, uid gregor1.UID, convID
 
 func (m *MockChatHelper) UserReacjis(ctx context.Context, uid gregor1.UID) keybase1.UserReacjis {
 	return keybase1.UserReacjis{}
+}
+
+func (m *MockChatHelper) JourneycardTimeTravel(ctx context.Context, uid gregor1.UID, duration time.Duration) error {
+	return fmt.Errorf("JourneycardTimeTravel not implemented on mock")
+}
+
+func (m *MockChatHelper) JourneycardResetAllConvs(ctx context.Context, uid gregor1.UID) error {
+	return fmt.Errorf("JourneycardResetAllConvs not implemented on mock")
+}
+
+func (m *MockChatHelper) JourneycardDebugState(ctx context.Context, uid gregor1.UID, teamID keybase1.TeamID) (string, error) {
+	return "", fmt.Errorf("JourneycardDebugState not implemented on mock")
 }
 
 func (m *MockChatHelper) NewConversation(ctx context.Context, uid gregor1.UID, tlfName string,

@@ -3,6 +3,7 @@ import PeopleItem from '../item'
 import * as Types from '../../constants/types/people'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
+import {FollowButton} from '../../settings/contacts-joined/buttons'
 
 const connectedUsernamesProps = {
   colorFollowing: true,
@@ -17,7 +18,7 @@ const connectedUsernamesProps = {
 
 export type NewFollow = Types.FollowedNotification
 
-export type Props = Types._FollowedNotificationItem & {
+export type Props = Types.FollowedNotificationItem & {
   onClickUser: (username: string) => void
 }
 
@@ -41,11 +42,20 @@ const FollowNotification = (props: Props) => {
     />
   )
   const desc = props.newFollows[0].contactDescription
-  const optionalExplanation = desc ? ` (${desc})` : ''
+
+  const onClickBox = props.type === 'follow' ? () => props.onClickUser(username) : undefined
   return (
-    <Kb.ClickableBox onClick={() => props.onClickUser(username)}>
+    <Kb.ClickableBox onClick={onClickBox}>
       <PeopleItem
         badged={props.badged}
+        buttons={
+          props.type == 'contact'
+            ? [
+                <FollowButton username={username} small={true} key="follow" />,
+                <Kb.WaveButton username={username} small={true} key="wave" />,
+              ]
+            : undefined
+        }
         icon={
           <Kb.Avatar
             username={username}
@@ -62,8 +72,7 @@ const FollowNotification = (props: Props) => {
           <Kb.Text type="Body">{usernameComponent} followed you.</Kb.Text>
         ) : (
           <Kb.Text type="Body">
-            Your contact {usernameComponent}
-            {optionalExplanation} joined Keybase.
+            Your contact {desc} joined Keybase as {usernameComponent}.
           </Kb.Text>
         )}
       </PeopleItem>
@@ -71,7 +80,7 @@ const FollowNotification = (props: Props) => {
   )
 }
 
-export const MultiFollowNotification = (props: Props) => {
+export const MultiFollowNotification = React.memo((props: Props) => {
   if (props.newFollows.length <= 1) {
     throw new Error('Multi follow notification must have more than one user supplied')
   }
@@ -117,7 +126,7 @@ export const MultiFollowNotification = (props: Props) => {
       </Kb.ScrollView>
     </PeopleItem>
   )
-}
+})
 
 const styles = Styles.styleSheetCreate(
   () =>

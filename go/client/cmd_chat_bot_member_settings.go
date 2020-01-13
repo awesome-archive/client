@@ -34,7 +34,7 @@ func newCmdChatBotMemberSettings(cl *libcmdline.CommandLine, g *libkb.GlobalCont
 	})
 	return cli.Command{
 		Name:         "bot-member-settings",
-		Usage:        "View or modify a restricted bot's isolation settings",
+		Usage:        "View or modify a restricted bot's isolation settings.",
 		ArgumentHelp: "[conversation]",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(NewCmdChatBotMemberSettingsRunner(g), "bot-member-settings", c)
@@ -59,10 +59,8 @@ func (c *CmdChatBotMemberSettings) Run() (err error) {
 	var botSettings keybase1.TeamBotSettings
 	if c.botSettings == nil {
 		botSettings, err = resolver.ChatClient.GetBotMemberSettings(context.TODO(), chat1.GetBotMemberSettingsArg{
-			TlfName:     conversationInfo.TlfName,
-			Username:    c.username,
-			MembersType: conversationInfo.MembersType,
-			TlfPublic:   conversationInfo.Visibility == keybase1.TLFVisibility_PUBLIC,
+			ConvID:   conversationInfo.Id,
+			Username: c.username,
 		})
 		if err != nil {
 			return err
@@ -70,16 +68,14 @@ func (c *CmdChatBotMemberSettings) Run() (err error) {
 	} else {
 		botSettings = *c.botSettings
 		if err = resolver.ChatClient.SetBotMemberSettings(context.TODO(), chat1.SetBotMemberSettingsArg{
-			TlfName:     conversationInfo.TlfName,
+			ConvID:      conversationInfo.Id,
 			Username:    c.username,
 			BotSettings: botSettings,
-			MembersType: conversationInfo.MembersType,
-			TlfPublic:   conversationInfo.Visibility == keybase1.TLFVisibility_PUBLIC,
 		}); err != nil {
 			return err
 		}
 	}
-	if err := renderBotSettings(c.G(), c.username, botSettings); err != nil {
+	if err := renderBotSettings(c.G(), c.username, &conversationInfo.Id, botSettings); err != nil {
 		return err
 	}
 

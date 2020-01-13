@@ -32,16 +32,19 @@
       "location": "string"
     },
     "revokeFinish": {
-      "canError": {"error": "string"}
+      "error?": "string"
     },
     "finishRevoking": {},
     "finishedWithKeyGen": {
       "shouldStoreKeyOnServer": "boolean"
     },
     "generatePgp": {},
+    "hideStellar": {
+      "hidden": "boolean"
+    },
     "onClickAvatar": {
       "username": "string",
-      "openWebsite?": "boolean | null"
+      "openWebsite?": "boolean"
     },
     "showUserProfile": {"username": "string"},
     "submitZcashAddress": {},
@@ -54,11 +57,11 @@
       "guiID": "string"
     },
     "finishBlockUser": {
-      "canError": {"error": "string"}
+      "error?": "string"
     },
     "updateErrorText": {
       "errorText": "string",
-      "errorCode": "number | null"
+      "errorCode?": "number"
     },
     "updatePgpInfo": {
       "_description": "Update any fields",
@@ -76,7 +79,7 @@
       "status": "RPCTypes.ProofStatus"
     },
     "updateProofText": {"proof": "string"},
-    "updateSigID": {"sigID": "RPCTypes.SigID | null"},
+    "updateSigID": {"sigID?": "RPCTypes.SigID"},
     "updateUsername": {"username": "string"}
   }
 }

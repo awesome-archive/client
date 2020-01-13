@@ -8,8 +8,10 @@ import Input from './input'
 import TeamBox from './team-box'
 import GoButton from './go-button'
 import {ServiceTabBar} from './service-tab-bar'
-import UserResult from './user-result'
+import UserResult from './search-result/user-result'
+import PeopleResult from './search-result/people-result'
 import PhoneSearch from './phone-search'
+import {ContactRestricted} from './contact-restricted'
 import * as Constants from '../constants/team-building'
 
 const provider = Sb.createPropProviderWithCommon(
@@ -34,8 +36,69 @@ const generateTeamSofar = (count: number) => {
   })
 }
 
+const defaultUserResult = {
+  displayLabel: '',
+  followingState: 'Following' as const,
+  highlight: false,
+  inTeam: false,
+  isPreExistingTeamMember: false,
+  namespace: 'people',
+  prettyName: 'Max Krohn',
+  resultForService: 'keybase',
+  services: {
+    facebook: 'maxtaco',
+    github: 'maxtaco',
+    hackernews: 'maxtaco',
+    keybase: 'maxtaco',
+    reddit: 'maxtaco',
+    twitter: 'maxtaco',
+  },
+  username: 'max',
+}
+
+const makeUserResults = results =>
+  results.map((result, index) => (
+    <UserResult
+      key={index}
+      username={result.username}
+      prettyName={result.prettyName}
+      displayLabel={result.displayLabel}
+      resultForService={result.resultForService}
+      services={result.services}
+      followingState={result.followingState}
+      namespace="people"
+      highlight={result.highlight}
+      isYou={result.isYou}
+      inTeam={result.inTeam}
+      isPreExistingTeamMember={result.isPreExistingTeamMember}
+      onAdd={Sb.action('onAdd')}
+      onRemove={Sb.action('onRemove')}
+    />
+  ))
+
+const makePeopleResults = results =>
+  results.map((result, index) => (
+    <PeopleResult
+      key={index}
+      username={result.username}
+      prettyName={result.prettyName}
+      displayLabel={result.displayLabel}
+      resultForService={result.resultForService}
+      namespace="people"
+      services={result.services}
+      followingState={result.followingState}
+      highlight={result.highlight}
+      inTeam={result.inTeam}
+      isPreExistingTeamMember={result.isPreExistingTeamMember}
+      isYou={result.isYou}
+      onAdd={Sb.action('onAdd')}
+      onRemove={Sb.action('onRemove')}
+    />
+  ))
+
 const commonProps = {
   focusInputCounter: 0,
+  onClose: Sb.action('onClose'),
   showRecs: false,
   showResults: false,
   showServiceResultCount: false,
@@ -113,56 +176,62 @@ const load = () => {
         search={Sb.action('search')}
         searchResults={[
           {
+            contact: false,
             displayLabel: 'Chris Coyne',
             followingState: 'Following' as const,
             inTeam: true,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Coyne',
             services: {
-              facebook: 'chriscoyne on Facebook',
-              github: 'malgorithms on GitHub',
-              hackernews: 'malgorithms on HackerNews',
+              facebook: 'chriscoyne',
+              github: 'malgorithms',
+              hackernews: 'malgorithms',
               keybase: 'chris',
-              reddit: 'malgorithms on Reddit',
-              twitter: 'malgorithms on Twitter',
+              reddit: 'malgorithms',
+              twitter: 'malgorithms',
             },
             userId: 'chris',
             username: 'chris',
           },
           {
+            contact: false,
             displayLabel: 'Chris Mikacle',
             followingState: 'NotFollowing' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Mikacle',
             services: {
-              github: 'chrismikacle on GitHub',
-              hackernews: 'chrismikacle on HackerNews',
+              github: 'chrismikacle',
+              hackernews: 'chrismikacle',
               keybase: 'chrismikacle',
-              reddit: 'chrismikacle on Reddit',
-              twitter: 'chrismikacle on Twitter',
+              reddit: 'chrismikacle',
+              twitter: 'chrismikacle',
             },
             userId: 'chrismikacle',
             username: 'chrismikacle',
           },
           {
+            contact: false,
             displayLabel: 'Chris Nojima',
             followingState: 'Following' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Nojima',
             services: {
-              github: 'cnojima on GitHub',
-              hackernews: 'cnojima on HackerNews',
+              github: 'cnojima',
+              hackernews: 'cnojima',
               keybase: 'chrisnojima',
-              reddit: 'cnojima on Reddit',
-              twitter: 'cnojima on Twitter',
+              reddit: 'cnojima',
+              twitter: 'cnojima',
             },
             userId: 'chrisnojima',
             username: 'chrisnojima',
           },
         ]}
-        teamBuildingSearchResults={{}}
+        teamBuildingSearchResults={new Map()}
       />
     ))
     .add('Team Building - No search string', () => (
@@ -207,56 +276,62 @@ const load = () => {
         search={Sb.action('search')}
         searchResults={[
           {
+            contact: false,
             displayLabel: 'Chris Coyne',
             followingState: 'Following' as const,
             inTeam: true,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Coyne',
             services: {
-              facebook: 'chriscoyne on Facebook',
-              github: 'malgorithms on GitHub',
-              hackernews: 'malgorithms on HackerNews',
+              facebook: 'chriscoyne',
+              github: 'malgorithms',
+              hackernews: 'malgorithms',
               keybase: 'chris',
-              reddit: 'malgorithms on Reddit',
-              twitter: 'malgorithms on Twitter',
+              reddit: 'malgorithms',
+              twitter: 'malgorithms',
             },
             userId: 'chris',
             username: 'chris',
           },
           {
+            contact: false,
             displayLabel: 'Chris Mikacle',
             followingState: 'NotFollowing' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Mikacle',
             services: {
-              github: 'chrismikacle on GitHub',
-              hackernews: 'chrismikacle on HackerNews',
+              github: 'chrismikacle',
+              hackernews: 'chrismikacle',
               keybase: 'chrismikacle',
-              reddit: 'chrismikacle on Reddit',
-              twitter: 'chrismikacle on Twitter',
+              reddit: 'chrismikacle',
+              twitter: 'chrismikacle',
             },
             userId: 'chrismikacle',
             username: 'chrismikacle',
           },
           {
+            contact: false,
             displayLabel: 'Chris Nojima',
             followingState: 'Following' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Nojima',
             services: {
-              github: 'cnojima on GitHub',
-              hackernews: 'cnojima on HackerNews',
+              github: 'cnojima',
+              hackernews: 'cnojima',
               keybase: 'chrisnojima',
-              reddit: 'cnojima on Reddit',
-              twitter: 'cnojima on Twitter',
+              reddit: 'cnojima',
+              twitter: 'cnojima',
             },
             userId: 'chrisnojima',
             username: 'chrisnojima',
           },
         ]}
-        teamBuildingSearchResults={{}}
+        teamBuildingSearchResults={new Map()}
       />
     ))
     .add('Team Building - Show role picker', () => (
@@ -297,7 +372,7 @@ const load = () => {
         highlightedIndex={1}
         search={Sb.action('search')}
         searchResults={[]}
-        teamBuildingSearchResults={{}}
+        teamBuildingSearchResults={new Map()}
       />
     ))
     .add('Team Building - No search string or results', () => (
@@ -319,7 +394,7 @@ const load = () => {
         teamSoFar={[]}
         search={Sb.action('search')}
         searchResults={[]}
-        teamBuildingSearchResults={{}}
+        teamBuildingSearchResults={new Map()}
         serviceResultCount={{}}
         onAdd={Sb.action('onAdd')}
         highlightedIndex={1}
@@ -348,56 +423,62 @@ const load = () => {
         search={Sb.action('search')}
         searchResults={[
           {
+            contact: false,
             displayLabel: 'Chris Coyne',
             followingState: 'Following' as const,
             inTeam: true,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Coyne',
             services: {
-              facebook: 'chriscoyne on Facebook',
-              github: 'malgorithms on GitHub',
-              hackernews: 'malgorithms on HackerNews',
+              facebook: 'chriscoyne',
+              github: 'malgorithms',
+              hackernews: 'malgorithms',
               keybase: 'chris',
-              reddit: 'malgorithms on Reddit',
-              twitter: 'malgorithms on Twitter',
+              reddit: 'malgorithms',
+              twitter: 'malgorithms',
             },
             userId: 'chris',
             username: 'chris',
           },
           {
+            contact: false,
             displayLabel: 'Chris Mikacle',
             followingState: 'NotFollowing' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Mikacle',
             services: {
-              github: 'chrismikacle on GitHub',
-              hackernews: 'chrismikacle on HackerNews',
+              github: 'chrismikacle',
+              hackernews: 'chrismikacle',
               keybase: 'chrismikacle',
-              reddit: 'chrismikacle on Reddit',
-              twitter: 'chrismikacle on Twitter',
+              reddit: 'chrismikacle',
+              twitter: 'chrismikacle',
             },
             userId: 'chrismikacle',
             username: 'chrismikacle',
           },
           {
+            contact: false,
             displayLabel: 'Chris Nojima',
             followingState: 'Following' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Nojima',
             services: {
-              github: 'cnojima on GitHub',
-              hackernews: 'cnojima on HackerNews',
+              github: 'cnojima',
+              hackernews: 'cnojima',
               keybase: 'chrisnojima',
-              reddit: 'cnojima on Reddit',
-              twitter: 'cnojima on Twitter',
+              reddit: 'cnojima',
+              twitter: 'cnojima',
             },
             userId: 'chrisnojima',
             username: 'chrisnojima',
           },
         ]}
-        teamBuildingSearchResults={{}}
+        teamBuildingSearchResults={new Map()}
       />
     ))
     .add('Team Building - One line of users + 1', () => (
@@ -423,56 +504,62 @@ const load = () => {
         search={Sb.action('search')}
         searchResults={[
           {
+            contact: false,
             displayLabel: 'Chris Coyne',
             followingState: 'Following' as const,
             inTeam: true,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Coyne',
             services: {
-              facebook: 'chriscoyne on Facebook',
-              github: 'malgorithms on GitHub',
-              hackernews: 'malgorithms on HackerNews',
+              facebook: 'chriscoyne',
+              github: 'malgorithms',
+              hackernews: 'malgorithms',
               keybase: 'chris',
-              reddit: 'malgorithms on Reddit',
-              twitter: 'malgorithms on Twitter',
+              reddit: 'malgorithms',
+              twitter: 'malgorithms',
             },
             userId: 'chris',
             username: 'chris',
           },
           {
+            contact: false,
             displayLabel: 'Chris Mikacle',
             followingState: 'NotFollowing' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Mikacle',
             services: {
-              github: 'chrismikacle on GitHub',
-              hackernews: 'chrismikacle on HackerNews',
+              github: 'chrismikacle',
+              hackernews: 'chrismikacle',
               keybase: 'chrismikacle',
-              reddit: 'chrismikacle on Reddit',
-              twitter: 'chrismikacle on Twitter',
+              reddit: 'chrismikacle',
+              twitter: 'chrismikacle',
             },
             userId: 'chrismikacle',
             username: 'chrismikacle',
           },
           {
+            contact: false,
             displayLabel: 'Chris Nojima',
             followingState: 'Following' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Nojima',
             services: {
-              github: 'cnojima on GitHub',
-              hackernews: 'cnojima on HackerNews',
+              github: 'cnojima',
+              hackernews: 'cnojima',
               keybase: 'chrisnojima',
-              reddit: 'cnojima on Reddit',
-              twitter: 'cnojima on Twitter',
+              reddit: 'cnojima',
+              twitter: 'cnojima',
             },
             userId: 'chrisnojima',
             username: 'chrisnojima',
           },
         ]}
-        teamBuildingSearchResults={{}}
+        teamBuildingSearchResults={new Map()}
       />
     ))
     .add('Team Building - Lotsa users', () => (
@@ -498,56 +585,62 @@ const load = () => {
         search={Sb.action('search')}
         searchResults={[
           {
+            contact: false,
             displayLabel: 'Chris Coyne',
             followingState: 'Following' as const,
             inTeam: true,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Coyne',
             services: {
-              facebook: 'chriscoyne on Facebook',
-              github: 'malgorithms on GitHub',
-              hackernews: 'malgorithms on HackerNews',
+              facebook: 'chriscoyne',
+              github: 'malgorithms',
+              hackernews: 'malgorithms',
               keybase: 'chris',
-              reddit: 'malgorithms on Reddit',
-              twitter: 'malgorithms on Twitter',
+              reddit: 'malgorithms',
+              twitter: 'malgorithms',
             },
             userId: 'chris',
             username: 'chris',
           },
           {
+            contact: false,
             displayLabel: 'Chris Mikacle',
             followingState: 'NotFollowing' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Mikacle',
             services: {
-              github: 'chrismikacle on GitHub',
-              hackernews: 'chrismikacle on HackerNews',
+              github: 'chrismikacle',
+              hackernews: 'chrismikacle',
               keybase: 'chrismikacle',
-              reddit: 'chrismikacle on Reddit',
-              twitter: 'chrismikacle on Twitter',
+              reddit: 'chrismikacle',
+              twitter: 'chrismikacle',
             },
             userId: 'chrismikacle',
             username: 'chrismikacle',
           },
           {
+            contact: false,
             displayLabel: 'Chris Nojima',
             followingState: 'Following' as const,
             inTeam: false,
             isPreExistingTeamMember: false,
+            isYou: false,
             prettyName: 'Chris Nojima',
             services: {
-              github: 'cnojima on GitHub',
-              hackernews: 'cnojima on HackerNews',
+              github: 'cnojima',
+              hackernews: 'cnojima',
               keybase: 'chrisnojima',
-              reddit: 'cnojima on Reddit',
-              twitter: 'cnojima on Twitter',
+              reddit: 'cnojima',
+              twitter: 'cnojima',
             },
             userId: 'chrisnojima',
             username: 'chrisnojima',
           },
         ]}
-        teamBuildingSearchResults={{}}
+        teamBuildingSearchResults={new Map()}
       />
     ))
 
@@ -661,108 +754,765 @@ const load = () => {
 
   Sb.storiesOf('Team-Building/User Result', module)
     .addDecorator(provider)
-    .add('Chris', () => (
-      <UserResult
-        username="chris"
-        prettyName="Chris Coyne"
-        displayLabel="Chris Coyne"
-        highlight={false}
-        resultForService="keybase"
-        services={{
-          facebook: 'chriscoyne on Facebook',
-          github: 'malgorithms on GitHub',
-          hackernews: 'malgorithms on HackerNews',
-          reddit: 'malgorithms on Reddit',
-          twitter: 'malgorithms on Twitter',
-        }}
-        inTeam={false}
-        isPreExistingTeamMember={false}
-        followingState={'Following' as const}
-        onAdd={Sb.action('onAdd')}
-        onRemove={Sb.action('onRemove')}
-      />
-    ))
-    .add('Chris (already in team)', () => (
-      <UserResult
-        username="chris"
-        prettyName="Chris Coyne"
-        displayLabel="Chris Coyne"
-        highlight={false}
-        resultForService="keybase"
-        services={{
-          facebook: 'chriscoyne on Facebook',
-          github: 'malgorithms on GitHub',
-          hackernews: 'malgorithms on HackerNews',
-          reddit: 'malgorithms on Reddit',
-          twitter: 'malgorithms on Twitter',
-        }}
-        inTeam={true}
-        isPreExistingTeamMember={false}
-        followingState={'Following' as const}
-        onAdd={Sb.action('onAdd')}
-        onRemove={Sb.action('onRemove')}
-      />
-    ))
-    .add('marcopolo (github) - keybase user. following', () => (
-      <UserResult
-        resultForService="github"
-        username="marcopolo"
-        prettyName=""
-        displayLabel=""
-        highlight={false}
-        services={{github: 'marcopolo', keybase: 'marcopolo'}}
-        inTeam={true}
-        isPreExistingTeamMember={false}
-        followingState={'Following' as const}
-        onAdd={Sb.action('onAdd')}
-        onRemove={Sb.action('onRemove')}
-      />
-    ))
-    .add('marcopolo2 (github) - no keybase user', () => (
-      <UserResult
-        resultForService="github"
-        username="marcopolo"
-        prettyName=""
-        displayLabel=""
-        highlight={false}
-        services={{github: 'marcopolo'}}
-        inTeam={true}
-        followingState={'NoState' as const}
-        onAdd={Sb.action('onAdd')}
-        onRemove={Sb.action('onRemove')}
-        isPreExistingTeamMember={false}
-      />
-    ))
-    .add('Chris Highlighted (already in team)', () => (
-      <UserResult
-        isPreExistingTeamMember={false}
-        username="chris"
-        prettyName="Chris Coyne"
-        displayLabel="Chris Coyne"
-        services={{
-          facebook: 'chriscoyne on Facebook',
-          github: 'malgorithms on GitHub',
-          hackernews: 'malgorithms on HackerNews',
-          reddit: 'malgorithms on Reddit',
-          twitter: 'malgorithms on Twitter',
-        }}
-        inTeam={true}
-        followingState={'Following' as const}
-        onAdd={Sb.action('onAdd')}
-        onRemove={Sb.action('onRemove')}
-        highlight={true}
-        resultForService="keybase"
-      />
-    ))
+    .add('Keybase/Contact Tab - Keybase User', () =>
+      makeUserResults([
+        {
+          ...defaultUserResult,
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+          prettyName: '',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          prettyName: '',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+        },
+        {
+          ...defaultUserResult,
+          isPreExistingTeamMember: true,
+        },
+      ])
+    )
+    .add('Keybase/Contact Tab - Contacts', () =>
+      makeUserResults([
+        {
+          ...defaultUserResult,
+          displayLabel: '+1 (888) 555-5555 (work)',
+          followingState: 'NotFollowing' as const,
+          prettyName: 'Max Krohn',
+          resultForService: 'keybase',
+          services: {keybase: ''},
+          username: '+18885125555',
+        },
+        {
+          ...defaultUserResult,
+          displayLabel: '+1 (888) 555-5555 (work)',
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: 'Max Krohn',
+          resultForService: 'keybase',
+          services: {keybase: ''},
+          username: '+18885125555',
+        },
+        {
+          ...defaultUserResult,
+          displayLabel: 'maxwellkrohn@keybase',
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: 'Max Krohn',
+          resultForService: 'keybase',
+          services: {keybase: ''},
+          username: 'maxwellkrohn@keybase.io',
+        },
+        {
+          ...defaultUserResult,
+          displayLabel: 'maxwellkrohn@keybase',
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: 'Max Krohn',
+          resultForService: 'keybase',
+          services: {keybase: ''},
+          username: 'maxwellkrohn@keybase.io',
+        },
+      ])
+    )
+    .add('Service Tab - Also Keybse User', () =>
+      makeUserResults([
+        {
+          ...defaultUserResult,
+          resultForService: 'twitter',
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+          resultForService: 'twitter',
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+          resultForService: 'reddit',
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+          resultForService: 'facebook',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          resultForService: 'reddit',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'facebook',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'github',
+        },
+      ])
+    )
+    .add('Service Tab - Not Keybase User - Full Name', () =>
+      makeUserResults([
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'reddit',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'reddit',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'reddit',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+      ])
+    )
+    .add('Service Tab - Not Keybase User - No Name', () =>
+      makeUserResults([
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'reddit',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+      ])
+    )
+
+  Sb.storiesOf('Team-Building/People Result', module)
+    .addDecorator(provider)
+    .add('Keybase/Contact Tab - Keybase User', () =>
+      makePeopleResults([
+        {
+          ...defaultUserResult,
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+          prettyName: '',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          prettyName: '',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+        },
+        {
+          ...defaultUserResult,
+          isPreExistingTeamMember: true,
+        },
+      ])
+    )
+    .add('Keybase/Contact Tab - Contacts', () =>
+      makePeopleResults([
+        {
+          ...defaultUserResult,
+          displayLabel: '+1 (888) 555-5555 (work)',
+          followingState: 'NotFollowing' as const,
+          prettyName: 'Max Krohn',
+          resultForService: 'keybase',
+          services: {keybase: ''},
+          username: '+18885125555',
+        },
+        {
+          ...defaultUserResult,
+          displayLabel: '+1 (888) 555-5555 (work)',
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: 'Max Krohn',
+          resultForService: 'keybase',
+          services: {keybase: ''},
+          username: '+18885125555',
+        },
+        {
+          ...defaultUserResult,
+          displayLabel: 'maxwellkrohn@keybase',
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: 'Max Krohn',
+          resultForService: 'keybase',
+          services: {keybase: ''},
+          username: 'maxwellkrohn@keybase.io',
+        },
+        {
+          ...defaultUserResult,
+          displayLabel: 'maxwellkrohn@keybase',
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: 'Max Krohn',
+          resultForService: 'keybase',
+          services: {keybase: ''},
+          username: 'maxwellkrohn@keybase.io',
+        },
+      ])
+    )
+    .add('Service Tab - Also Keybse User', () =>
+      makePeopleResults([
+        {
+          ...defaultUserResult,
+          resultForService: 'twitter',
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+          resultForService: 'twitter',
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+          resultForService: 'reddit',
+        },
+        {
+          ...defaultUserResult,
+          inTeam: true,
+          resultForService: 'facebook',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          resultForService: 'reddit',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'facebook',
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'github',
+        },
+      ])
+    )
+    .add('Service Tab - Not Keybase User - Full Name', () =>
+      makePeopleResults([
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'reddit',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'reddit',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'reddit',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+      ])
+    )
+    .add('Service Tab - Not Keybase User - No Name', () =>
+      makePeopleResults([
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'twitter',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'github',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'facebook',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'reddit',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: true,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+        {
+          ...defaultUserResult,
+          followingState: 'NotFollowing' as const,
+          inTeam: false,
+          isPreExistingTeamMember: true,
+          prettyName: '',
+          resultForService: 'hackernews',
+          services: {...defaultUserResult.services, keybase: ''},
+        },
+      ])
+    )
 
   Sb.storiesOf('Team-Building/Phone Search', module).add('Empty Phone Search', () => (
     <PhoneSearch
       continueLabel="Continue"
       namespace="chat2"
       search={Sb.action('search')}
-      teamBuildingSearchResults={{}}
+      teamBuildingSearchResults={new Map()}
     />
   ))
+
+  Sb.storiesOf('Team-Building/Contact restriction', module)
+    .add('New private folder failed', () => <ContactRestricted source="newFolder" usernames={['cjb']} />)
+    .add('Team add some failed', () => (
+      <ContactRestricted source="teamAddSomeFailed" usernames={['cjb', 'max']} />
+    ))
+    .add('Team add all (multiple) failed', () => (
+      <ContactRestricted source="teamAddAllFailed" usernames={['cjb', 'max']} />
+    ))
+    .add('Team add all (single) failed', () => (
+      <ContactRestricted source="teamAddAllFailed" usernames={['cjb']} />
+    ))
+    .add('Wallets request failed', () => (
+      <ContactRestricted source="walletsRequest" usernames={['cjb', 'max']} />
+    ))
 
   emailSearch()
 }

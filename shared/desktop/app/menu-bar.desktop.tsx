@@ -1,15 +1,20 @@
 // Entrypoint for the menubar node part
-import menubar from 'menubar'
+import * as ConfigGen from '../../actions/config-gen'
+import * as Chat2Gen from '../../actions/chat2-gen'
 import * as SafeElectron from '../../util/safe-electron.desktop'
+import logger from '../../logger'
 import {isDarwin, isWindows, isLinux} from '../../constants/platform'
+import {mainWindowDispatch} from '../remote/util.desktop'
+import {menubar} from 'menubar'
 import {resolveImage, resolveRootAsURL} from './resolve-root.desktop'
 import {showDevTools, skipSecondaryDevtools} from '../../local-debug.desktop'
-import logger from '../../logger'
 
-const htmlFile = resolveRootAsURL('dist', `menubar${__DEV__ ? '.dev' : ''}.html?param=`)
+const htmlFile = resolveRootAsURL('dist', `menubar${__DEV__ ? '.dev' : ''}.html?param=menubar`)
 
-let icon = ''
-let selectedIcon = ''
+let icon = isWindows
+  ? 'icon-windows-keybase-menubar-regular-black-16@2x.png'
+  : 'icon-keybase-menubar-regular-white-22@2x.png'
+let selectedIcon = icon
 
 type Bounds = {
   x: number
@@ -20,8 +25,17 @@ type Bounds = {
 
 export default (menubarWindowIDCallback: (id: number) => void) => {
   const mb = menubar({
-    hasShadow: true,
-    height: 480,
+    browserWindow: {
+      hasShadow: true,
+      height: 640,
+      resizable: false,
+      transparent: true,
+      webPreferences: {
+        nodeIntegration: true,
+        nodeIntegrationInWorker: false,
+      },
+      width: 360,
+    },
     icon: resolveImage(
       'menubarIcon',
       isWindows
@@ -30,21 +44,19 @@ export default (menubarWindowIDCallback: (id: number) => void) => {
     ),
     index: htmlFile,
     preloadWindow: true,
-    resizable: false,
     // Without this flag set, menubar will hide the dock icon when the app
     // ready event fires. We manage the dock icon ourselves, so this flag
     // prevents menubar from changing the state.
     showDockIcon: true,
-    transparent: true,
-    webPreferences: {
-      nodeIntegration: true,
-      nodeIntegrationInWorker: false,
-    },
-    width: 360,
   })
 
   const updateIcon = (selected: boolean) => {
-    mb.tray.setImage(resolveImage('menubarIcon', selected ? selectedIcon : icon))
+    const i = selected ? selectedIcon : icon
+    try {
+      i && mb.tray.setImage(resolveImage('menubarIcon', i))
+    } catch (err) {
+      console.error('menu icon err: ' + err)
+    }
   }
 
   type Action = {
@@ -65,33 +77,42 @@ export default (menubarWindowIDCallback: (id: number) => void) => {
           updateIcon(false)
           const dock = SafeElectron.getApp().dock
           if (dock && dock.isVisible()) {
-            SafeElectron.getApp().setBadgeCount(action.payload.desktopAppBadgeCount)
+            SafeElectron.getApp().badgeCount = action.payload.desktopAppBadgeCount
           }
           break
         }
       }
     })
 
-    menubarWindowIDCallback(mb.window.id)
+    // ask for an update in case we missed one
+    mainWindowDispatch(
+      ConfigGen.createRemoteWindowWantsProps({
+        component: 'menubar',
+        param: '',
+      })
+    )
+
+    mb.window && menubarWindowIDCallback(mb.window.id)
 
     if (showDevTools && !skipSecondaryDevtools) {
-      mb.window.webContents.openDevTools({mode: 'detach'})
+      mb.window && mb.window.webContents.openDevTools({mode: 'detach'})
     }
 
     // Hack: open widget when left/right/double clicked
     mb.tray.on('right-click', (e: Electron.Event, bounds: Bounds) => {
       e.preventDefault()
-      setImmediate(() => mb.tray.emit('click', {...e}, {...bounds}))
+      setTimeout(() => mb.tray.emit('click', {...e}, {...bounds}), 0)
     })
     mb.tray.on('double-click', (e: Electron.Event) => e.preventDefault())
 
     // prevent the menubar's window from dying when we quit
     // We remove any existing listeners to close because menubar has one that deletes the reference to mb.window
-    mb.window.removeAllListeners('close')
-    mb.window.on('close', (event: Electron.Event) => {
-      event.preventDefault()
-      mb.hideWindow()
-    })
+    mb.window && mb.window.removeAllListeners('close')
+    mb.window &&
+      mb.window.on('close', event => {
+        event.preventDefault()
+        mb.hideWindow()
+      })
 
     if (isLinux) {
       mb.tray.setToolTip('Show Keybase')
@@ -135,6 +156,11 @@ export default (menubarWindowIDCallback: (id: number) => void) => {
     }
 
     mb.on('show', () => {
+      mainWindowDispatch(
+        Chat2Gen.createInboxRefresh({
+          reason: 'widgetRefresh',
+        })
+      )
       adjustForWindows()
       isDarwin && updateIcon(true)
     })

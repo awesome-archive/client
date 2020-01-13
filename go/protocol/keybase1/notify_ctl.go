@@ -1,4 +1,4 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.2 (https://github.com/keybase/node-avdl-compiler)
+// Auto-generated to Go types and interfaces using avdl-compiler v1.4.6 (https://github.com/keybase/node-avdl-compiler)
 //   Input file: avdl/keybase1/notify_ctl.avdl
 
 package keybase1
@@ -6,6 +6,7 @@ package keybase1
 import (
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	context "golang.org/x/net/context"
+	"time"
 )
 
 type NotificationChannels struct {
@@ -36,6 +37,7 @@ type NotificationChannels struct {
 	Wallet           bool `codec:"wallet" json:"wallet"`
 	Audit            bool `codec:"audit" json:"audit"`
 	Runtimestats     bool `codec:"runtimestats" json:"runtimestats"`
+	FeaturedBots     bool `codec:"featuredBots" json:"featuredBots"`
 }
 
 func (o NotificationChannels) DeepCopy() NotificationChannels {
@@ -67,6 +69,7 @@ func (o NotificationChannels) DeepCopy() NotificationChannels {
 		Wallet:           o.Wallet,
 		Audit:            o.Audit,
 		Runtimestats:     o.Runtimestats,
+		FeaturedBots:     o.FeaturedBots,
 	}
 }
 
@@ -107,6 +110,6 @@ type NotifyCtlClient struct {
 
 func (c NotifyCtlClient) SetNotifications(ctx context.Context, channels NotificationChannels) (err error) {
 	__arg := SetNotificationsArg{Channels: channels}
-	err = c.Cli.Call(ctx, "keybase.1.notifyCtl.setNotifications", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.notifyCtl.setNotifications", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }

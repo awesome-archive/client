@@ -2,13 +2,11 @@ import * as React from 'react'
 import * as Container from '../../util/container'
 import * as Kb from '../../common-adapters'
 import * as Platform from '../../constants/platform'
-import * as WalletsConstants from '../../constants/wallets'
 import * as Styles from '../../styles'
 import * as Window from '../../util/window-management'
 import {BrowserWindow} from '../../util/safe-electron.desktop'
-import AirdropBanner from '../../wallets/airdrop/banner/container'
 import SyncingFolders from './syncing-folders'
-import flags from '../../util/feature-flags'
+import {IconWithPopup as WhatsNewIconWithPopup} from '../../whats-new/icon/container'
 import * as ReactIs from 'react-is'
 
 // A mobile-like header for desktop
@@ -16,7 +14,6 @@ import * as ReactIs from 'react-is'
 // Fix this as we figure out what this needs to be
 type Props = {
   allowBack: boolean
-  airdropWillShowBanner: boolean
   loggedIn: boolean
   onPop: () => void
   options: any
@@ -140,20 +137,17 @@ class Header extends React.PureComponent<Props> {
       showDivider = false
     }
 
-    // Normally this component is responsible for rendering the system buttons,
-    // but if we're showing a banner then that banner component needs to do it.
     const windowDecorationsAreNeeded = !Platform.isMac && !this.props.useNativeFrame
-    const windowDecorationsDrawnByBanner =
-      windowDecorationsAreNeeded && flags.airdrop && this.props.loggedIn && this.props.airdropWillShowBanner
 
     // We normally have the back arrow at the top of the screen. It doesn't overlap with the system
     // icons (minimize etc) because the left nav bar pushes it to the right -- unless you're logged
     // out, in which case there's no nav bar and they overlap. So, if we're on Mac, and logged out,
     // push the back arrow down below the system icons.
-    const backArrowStyle = {
-      ...(this.props.allowBack ? styles.icon : styles.disabledIcon),
-      ...(!this.props.loggedIn && Platform.isDarwin ? {position: 'relative', top: 30} : {}),
-    }
+    const iconContainerStyle = Styles.collapseStyles([
+      styles.iconContainer,
+      !this.props.allowBack && styles.iconContainerInactive,
+      !this.props.loggedIn && Platform.isDarwin && styles.iconContainerDarwin,
+    ])
     const iconColor =
       opt.headerBackIconColor ||
       (this.props.allowBack
@@ -161,6 +155,8 @@ class Header extends React.PureComponent<Props> {
         : this.props.loggedIn
         ? Styles.globalColors.black_10
         : Styles.globalColors.transparent)
+
+    const whatsNewAttachToRef = React.createRef<Kb.Box2>()
 
     return (
       <Kb.Box2 noShrink={true} direction="vertical" fullWidth={true}>
@@ -175,38 +171,49 @@ class Header extends React.PureComponent<Props> {
             opt.headerStyle,
           ])}
         >
-          {flags.airdrop && this.props.loggedIn && (
-            <AirdropBanner showSystemButtons={windowDecorationsDrawnByBanner} />
-          )}
           <Kb.Box2
             key="topBar"
             direction="horizontal"
             fullWidth={true}
             style={styles.headerBack}
             alignItems="center"
+            ref={whatsNewAttachToRef}
           >
             {/* TODO have headerLeft be the back button */}
             {opt.headerLeft !== null && (
-              <Kb.Icon
-                type="iconfont-arrow-left"
-                style={backArrowStyle}
-                color={iconColor}
+              <Kb.Box
+                className={Styles.classNames('hover_container', {
+                  hover_background_color_black_10: this.props.allowBack,
+                })}
                 onClick={this.props.allowBack ? this.props.onPop : null}
-              />
+                style={iconContainerStyle}
+              >
+                <Kb.Icon
+                  type="iconfont-arrow-left"
+                  color={iconColor}
+                  className={Styles.classNames({hover_contained_color_blackOrBlack: this.props.allowBack})}
+                  boxStyle={styles.icon}
+                />
+              </Kb.Box>
             )}
             <Kb.Box2 direction="horizontal" style={styles.topRightContainer}>
-              {flags.kbfsOfflineMode && (
-                <SyncingFolders
-                  negative={
-                    this.props.style &&
-                    this.props.style.backgroundColor &&
-                    this.props.style.backgroundColor !== Styles.globalColors.transparent &&
-                    this.props.style.backgroundColor !== Styles.globalColors.white
-                  }
+              <SyncingFolders
+                negative={
+                  this.props.style &&
+                  this.props.style.backgroundColor &&
+                  this.props.style.backgroundColor !== Styles.globalColors.transparent &&
+                  this.props.style.backgroundColor !== Styles.globalColors.white
+                }
+              />
+              {this.props.loggedIn && (
+                <WhatsNewIconWithPopup
+                  color={opt.whatsNewIconColor}
+                  badgeColor={opt.whatsNewIconColor}
+                  attachToRef={whatsNewAttachToRef}
                 />
               )}
               {!title && rightActions}
-              {windowDecorationsAreNeeded && !windowDecorationsDrawnByBanner && <SystemButtons />}
+              {windowDecorationsAreNeeded && <SystemButtons />}
             </Kb.Box2>
           </Kb.Box2>
           <Kb.Box2
@@ -253,13 +260,6 @@ const styles = Styles.styleSheetCreate(
       bottom: {height: 40 - 1, maxHeight: 40 - 1}, // for border
       bottomExpandable: {minHeight: 40 - 1},
       bottomTitle: {flexGrow: 1, height: '100%', maxHeight: '100%', overflow: 'hidden'},
-      disabledIcon: Styles.platformStyles({
-        isElectron: {
-          cursor: 'default',
-          marginRight: 6,
-          padding: Styles.globalMargins.xtiny,
-        },
-      }),
       flexOne: {
         flex: 1,
       },
@@ -284,9 +284,36 @@ const styles = Styles.styleSheetCreate(
       }),
       icon: Styles.platformStyles({
         isElectron: {
+          display: 'inline-block',
+          height: 14,
+          width: 14,
+        },
+      }),
+      iconContainer: Styles.platformStyles({
+        common: {
+          // Needed to position blue badge
+          position: 'relative',
+        },
+        isElectron: {
+          ...Styles.desktopStyles.clickable,
           ...Styles.desktopStyles.windowDraggingClickable,
+          ...Styles.globalStyles.flexBoxColumn,
+          alignItems: 'center',
+          borderRadius: Styles.borderRadius,
+          marginLeft: 4,
           marginRight: 6,
           padding: Styles.globalMargins.xtiny,
+        },
+      }),
+      iconContainerDarwin: Styles.platformStyles({
+        isElectron: {
+          position: 'relative',
+          top: 30,
+        },
+      }),
+      iconContainerInactive: Styles.platformStyles({
+        isElectron: {
+          cursor: 'default',
         },
       }),
       plainContainer: {
@@ -301,13 +328,12 @@ const styles = Styles.styleSheetCreate(
 )
 
 const mapStateToProps = (state: Container.TypedState) => ({
-  airdropWillShowBanner: WalletsConstants.getShowAirdropBanner(state),
   useNativeFrame: state.config.useNativeFrame,
 })
 
 const mapDispatchToProps = () => ({})
 
-export default Container.connect(mapStateToProps, mapDispatchToProps, (s, d, o) => ({
+export default Container.connect(mapStateToProps, mapDispatchToProps, (s, d, o: any) => ({
   ...s,
   ...d,
   ...o,

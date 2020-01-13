@@ -121,6 +121,10 @@ func (tc *TestContext) Cleanup() {
 	tc.G.Log.Debug("cleanup complete")
 }
 
+func (tc *TestContext) Logout() error {
+	return NewMetaContextForTest(*tc).LogoutKillSecrets()
+}
+
 func (tc TestContext) MoveGpgKeyringTo(dst TestContext) error {
 
 	mv := func(f string) (err error) {
@@ -351,6 +355,7 @@ func SetupTest(tb TestingTB, name string, depth int) (tc TestContext) {
 	}
 
 	AddEnvironmentFeatureForTest(tc, EnvironmentFeatureAllowHighSkips)
+	AddEnvironmentFeatureForTest(tc, FeatureJourneycardPreview)
 
 	return tc
 }
@@ -473,9 +478,11 @@ type TestLoginUI struct {
 	Username                 string
 	RevokeBackup             bool
 	CalledGetEmailOrUsername int
-	ResetAccount             bool
+	ResetAccount             keybase1.ResetPromptResponse
 	PassphraseRecovery       bool
 }
+
+var _ LoginUI = (*TestLoginUI)(nil)
 
 func (t *TestLoginUI) GetEmailOrUsername(_ context.Context, _ int) (string, error) {
 	t.CalledGetEmailOrUsername++
@@ -494,7 +501,7 @@ func (t *TestLoginUI) DisplayPrimaryPaperKey(_ context.Context, arg keybase1.Dis
 	return nil
 }
 
-func (t *TestLoginUI) PromptResetAccount(_ context.Context, arg keybase1.PromptResetAccountArg) (bool, error) {
+func (t *TestLoginUI) PromptResetAccount(_ context.Context, arg keybase1.PromptResetAccountArg) (keybase1.ResetPromptResponse, error) {
 	return t.ResetAccount, nil
 }
 
@@ -508,6 +515,14 @@ func (t *TestLoginUI) ExplainDeviceRecovery(_ context.Context, arg keybase1.Expl
 
 func (t *TestLoginUI) PromptPassphraseRecovery(_ context.Context, arg keybase1.PromptPassphraseRecoveryArg) (bool, error) {
 	return t.PassphraseRecovery, nil
+}
+
+func (t *TestLoginUI) ChooseDeviceToRecoverWith(_ context.Context, arg keybase1.ChooseDeviceToRecoverWithArg) (keybase1.DeviceID, error) {
+	return "", nil
+}
+
+func (t *TestLoginUI) DisplayResetMessage(_ context.Context, arg keybase1.DisplayResetMessageArg) error {
+	return nil
 }
 
 type TestLoginCancelUI struct {
@@ -558,6 +573,10 @@ func NewTestUIDMapper(ul UPAKLoader) TestUIDMapper {
 	return TestUIDMapper{
 		ul: ul,
 	}
+}
+
+func (t TestUIDMapper) ClearUIDFullName(_ context.Context, _ UIDMapperContext, _ keybase1.UID) error {
+	return nil
 }
 
 func (t TestUIDMapper) ClearUIDAtEldestSeqno(_ context.Context, _ UIDMapperContext, _ keybase1.UID, _ keybase1.Seqno) error {
@@ -638,6 +657,16 @@ func ModifyFeatureForTest(m MetaContext, feature Feature, on bool, cacheSec int)
 
 func AddEnvironmentFeatureForTest(tc TestContext, feature Feature) {
 	tc.Tp.EnvironmentFeatureFlags = append(tc.Tp.EnvironmentFeatureFlags, feature)
+}
+
+func RemoveEnvironmentFeatureForTest(tp *TestParameters, feature Feature) {
+	var flags FeatureFlags
+	for _, flag := range tp.EnvironmentFeatureFlags {
+		if flag != feature {
+			flags = append(flags, flag)
+		}
+	}
+	tp.EnvironmentFeatureFlags = flags
 }
 
 // newSecretStoreLockedForTests is a simple function to create

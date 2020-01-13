@@ -153,7 +153,10 @@ func Init(homeDir, mobileSharedHome, logFile, runModeStr string,
 
 	// Reduce OS threads on mobile so we don't have too much contention with JS thread
 	oldProcs := runtime.GOMAXPROCS(0)
-	newProcs := oldProcs / 2
+	newProcs := oldProcs - 2
+	if newProcs <= 0 {
+		newProcs = 1
+	}
 	runtime.GOMAXPROCS(newProcs)
 	fmt.Printf("Go: setting GOMAXPROCS to: %d previous: %d\n", newProcs, oldProcs)
 
@@ -174,6 +177,7 @@ func Init(homeDir, mobileSharedHome, logFile, runModeStr string,
 
 	// 10k uid -> FullName cache entries allowed
 	kbCtx.SetUIDMapper(uidmap.NewUIDMap(10000))
+	kbCtx.SetServiceSummaryMapper(uidmap.NewServiceSummaryMap(1000))
 	usage := libkb.Usage{
 		Config:    true,
 		API:       true,
@@ -194,7 +198,7 @@ func Init(homeDir, mobileSharedHome, logFile, runModeStr string,
 		LocalRPCDebug:                  "",
 		VDebugSetting:                  "mobile", // use empty string for same logging as desktop default
 		SecurityAccessGroupOverride:    accessGroupOverride,
-		ChatInboxSourceLocalizeThreads: 5,
+		ChatInboxSourceLocalizeThreads: 2,
 		LinkCacheSize:                  1000,
 	}
 	err = kbCtx.Configure(config, usage)
@@ -203,7 +207,7 @@ func Init(homeDir, mobileSharedHome, logFile, runModeStr string,
 	}
 
 	kbSvc = service.NewService(kbCtx, false)
-	err = kbSvc.StartLoopbackServer()
+	err = kbSvc.StartLoopbackServer(libkb.LoginAttemptOffline)
 	if err != nil {
 		return err
 	}
@@ -363,6 +367,9 @@ func Reset() error {
 	if conn != nil {
 		conn.Close()
 	}
+	if kbCtx == nil || kbCtx.LoopbackListener == nil {
+		return nil
+	}
 
 	var err error
 	conn, err = kbCtx.LoopbackListener.Dial()
@@ -474,14 +481,14 @@ func BackgroundSync() {
 }
 
 // pushPendingMessageFailure sends at most one notification that a message
-// failed to send. We don't notify the user about background failures like
-// unfurling.
+// failed to send. We only notify the user about visible messages that have
+// failed.
 func pushPendingMessageFailure(obrs []chat1.OutboxRecord, pusher PushNotifier) {
 	for _, obr := range obrs {
-		if !obr.IsUnfurl() {
+		if topicType := obr.Msg.ClientHeader.Conv.TopicType; obr.Msg.IsBadgableType() && topicType == chat1.TopicType_CHAT {
 			kbCtx.Log.Debug("pushPendingMessageFailure: pushing convID: %s", obr.ConvID)
 			pusher.LocalNotification("failedpending",
-				"Heads up! One or more pending messages failed to send. Tap here to retry them.",
+				"Heads up! Your message hasn't sent yet, tap here to retry.",
 				-1, "default", obr.ConvID.String(), "chat.failedpending")
 			return
 		}

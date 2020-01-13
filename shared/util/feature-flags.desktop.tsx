@@ -11,33 +11,34 @@ const featureOn = (key: keyof FeatureFlags) => features.includes(key)
 
 const ff: FeatureFlags = {
   admin: false,
-  airdrop: true,
+  audioAttachments: false,
+  botUI: false,
   chatIndexProfilingEnabled: false,
-  conflictResolution: false,
-  darkMode: false,
+  connectThrashCheck: false,
+  cryptoTab: false,
   dbCleanEnabled: false,
-  fastAccountSwitch: false,
+  fastAccountSwitch: true,
   foldersInProfileTab: false,
-  kbfsOfflineMode: false,
   lagRadar: false,
   moveOrCopy: false,
   newTeamBuildingForChatAllowMakeTeam: false,
   outOfDateBanner: false,
-  plansEnabled: false,
   proofProviders: true,
-  resetPipeline: false,
   stellarExternalPartners: true,
-  wonderland: false,
+  userBlocking: true,
 }
 
 const inAdmin: {[K in keyof FeatureFlags]?: boolean} = {
+  audioAttachments: false,
+  botUI: true,
   chatIndexProfilingEnabled: true,
+  connectThrashCheck: true,
+  cryptoTab: true,
   dbCleanEnabled: true,
-  fastAccountSwitch: true,
-  kbfsOfflineMode: true,
   moveOrCopy: true,
   outOfDateBanner: true,
   proofProviders: true,
+  userBlocking: false,
 }
 
 // load overrides

@@ -6,23 +6,21 @@ if (!__STORYBOOK__) {
 
 const ff: FeatureFlags = {
   admin: false,
-  airdrop: true,
+  audioAttachments: true,
+  botUI: false,
   chatIndexProfilingEnabled: false,
-  conflictResolution: false,
-  darkMode: false,
+  connectThrashCheck: true,
+  cryptoTab: false,
   dbCleanEnabled: false,
   fastAccountSwitch: true,
   foldersInProfileTab: true,
-  kbfsOfflineMode: true,
   lagRadar: false,
   moveOrCopy: true,
   newTeamBuildingForChatAllowMakeTeam: false,
   outOfDateBanner: true,
-  plansEnabled: false,
   proofProviders: true,
-  resetPipeline: true,
   stellarExternalPartners: false,
-  wonderland: true,
+  userBlocking: true,
 }
 
 console.warn('feature flag mock in effect')

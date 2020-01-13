@@ -385,17 +385,21 @@ func (fbo *folderBlockOps) getBlockHelperLocked(ctx context.Context,
 	}
 
 	if block, lifetime, err := fbo.config.BlockCache().GetWithLifetime(ptr); err == nil {
-		// If the block was cached in the past, we need to handle it as if it's
-		// an on-demand request so that its downstream prefetches are triggered
-		// correctly according to the new on-demand fetch priority.
-		action := fbo.config.Mode().DefaultBlockRequestAction()
-		if fbo.config.IsSyncedTlf(fbo.id()) {
-			action = action.AddSync()
+		if lifetime != data.PermanentEntry {
+			// If the block was cached in the past, and is not a permanent
+			// block (i.e., currently being written by the user), we need
+			// to handle it as if it's an on-demand request so that its
+			// downstream prefetches are triggered correctly according to
+			// the new on-demand fetch priority.
+			action := fbo.config.Mode().DefaultBlockRequestAction()
+			if fbo.config.IsSyncedTlf(fbo.id()) {
+				action = action.AddSync()
+			}
+			prefetchStatus := fbo.config.PrefetchStatus(ctx, fbo.id(), ptr)
+			fbo.config.BlockOps().Prefetcher().ProcessBlockForPrefetch(ctx, ptr,
+				block, kmd, defaultOnDemandRequestPriority-1, lifetime,
+				prefetchStatus, action)
 		}
-		prefetchStatus := fbo.config.PrefetchStatus(ctx, fbo.id(), ptr)
-		fbo.config.BlockOps().Prefetcher().ProcessBlockForPrefetch(ctx, ptr,
-			block, kmd, defaultOnDemandRequestPriority-1, lifetime,
-			prefetchStatus, action)
 		return block, nil
 	}
 
@@ -1192,7 +1196,9 @@ func (fbo *folderBlockOps) removeDirEntryInCacheLocked(
 	parentUndo, err := fbo.updateParentDirEntryLocked(
 		ctx, lState, dir, kmd, true, true)
 	if err != nil {
-		unlinkUndoFn()
+		if unlinkUndoFn != nil {
+			unlinkUndoFn()
+		}
 		_, _ = dd.AddEntry(ctx, oldName, oldDe)
 		return nil, err
 	}
@@ -1200,9 +1206,15 @@ func (fbo *folderBlockOps) removeDirEntryInCacheLocked(
 	undoDirtyFn := fbo.makeDirDirtyLocked(lState, dir.TailPointer(), unrefs)
 	return func() {
 		_, _ = dd.AddEntry(ctx, oldName, oldDe)
-		undoDirtyFn()
-		parentUndo()
-		unlinkUndoFn()
+		if undoDirtyFn != nil {
+			undoDirtyFn()
+		}
+		if parentUndo != nil {
+			parentUndo()
+		}
+		if unlinkUndoFn != nil {
+			unlinkUndoFn()
+		}
 	}, nil
 }
 
@@ -3450,11 +3462,11 @@ func (fbo *folderBlockOps) UpdatePointers(
 }
 
 func (fbo *folderBlockOps) unlinkDuringFastForwardLocked(ctx context.Context,
-	lState *kbfssync.LockState, kmd KeyMetadataWithRootDirEntry, ref data.BlockRef) {
+	lState *kbfssync.LockState, kmd KeyMetadataWithRootDirEntry, ref data.BlockRef) (undoFn func()) {
 	fbo.blockLock.AssertLocked(lState)
 	oldNode := fbo.nodeCache.Get(ref)
 	if oldNode == nil {
-		return
+		return nil
 	}
 	oldPath := fbo.nodeCache.PathFromNode(oldNode)
 	fbo.vlog.CLogf(
@@ -3465,7 +3477,7 @@ func (fbo *folderBlockOps) unlinkDuringFastForwardLocked(ctx context.Context,
 		fbo.log.CDebugf(ctx, "Couldn't find old dir entry for %s/%v: %+v",
 			oldPath, ref, err)
 	}
-	fbo.nodeCache.Unlink(ref, oldPath, de)
+	return fbo.nodeCache.Unlink(ref, oldPath, de)
 }
 
 type nodeChildrenMap map[string]map[data.PathNode]bool
@@ -3496,18 +3508,20 @@ func (nodeChildrenMap) addFileChange(
 
 func (fbo *folderBlockOps) fastForwardDirAndChildrenLocked(ctx context.Context,
 	lState *kbfssync.LockState, currDir data.Path, children nodeChildrenMap,
-	kmd KeyMetadataWithRootDirEntry) (
-	changes []NodeChange, affectedNodeIDs []NodeID, err error) {
+	kmd KeyMetadataWithRootDirEntry,
+	updates map[data.BlockPointer]data.BlockPointer) (
+	changes []NodeChange, affectedNodeIDs []NodeID, undoFns []func(),
+	err error) {
 	fbo.blockLock.AssertLocked(lState)
 
 	chargedTo, err := fbo.getChargedToLocked(ctx, lState, kmd)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, undoFns, err
 	}
 	dd := fbo.newDirDataLocked(lState, currDir, chargedTo, kmd)
 	entries, err := dd.GetEntries(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, undoFns, err
 	}
 
 	prefix := currDir.String()
@@ -3516,8 +3530,11 @@ func (fbo *folderBlockOps) fastForwardDirAndChildrenLocked(ctx context.Context,
 	for child := range children[prefix] {
 		entry, ok := entries[child.Name]
 		if !ok {
-			fbo.unlinkDuringFastForwardLocked(
+			undoFn := fbo.unlinkDuringFastForwardLocked(
 				ctx, lState, kmd, child.BlockPointer.Ref())
+			if undoFn != nil {
+				undoFns = append(undoFns, undoFn)
+			}
 			continue
 		}
 
@@ -3526,6 +3543,7 @@ func (fbo *folderBlockOps) fastForwardDirAndChildrenLocked(ctx context.Context,
 			child.BlockPointer, entry.BlockPointer)
 		fbo.updatePointer(kmd, child.BlockPointer,
 			entry.BlockPointer, true)
+		updates[child.BlockPointer] = entry.BlockPointer
 		node := fbo.nodeCache.Get(entry.BlockPointer.Ref())
 		if node == nil {
 			fbo.vlog.CLogf(
@@ -3538,11 +3556,12 @@ func (fbo *folderBlockOps) fastForwardDirAndChildrenLocked(ctx context.Context,
 			changes, affectedNodeIDs = children.addDirChange(
 				node, newPath, changes, affectedNodeIDs)
 
-			childChanges, childAffectedNodeIDs, err :=
+			childChanges, childAffectedNodeIDs, childUndoFns, err :=
 				fbo.fastForwardDirAndChildrenLocked(
-					ctx, lState, newPath, children, kmd)
+					ctx, lState, newPath, children, kmd, updates)
+			undoFns = append(undoFns, childUndoFns...)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, undoFns, err
 			}
 			changes = append(changes, childChanges...)
 			affectedNodeIDs = append(affectedNodeIDs, childAffectedNodeIDs...)
@@ -3553,7 +3572,7 @@ func (fbo *folderBlockOps) fastForwardDirAndChildrenLocked(ctx context.Context,
 		}
 	}
 	delete(children, prefix)
-	return changes, affectedNodeIDs, nil
+	return changes, affectedNodeIDs, undoFns, nil
 }
 
 func (fbo *folderBlockOps) makeChildrenTreeFromNodesLocked(
@@ -3624,6 +3643,24 @@ func (fbo *folderBlockOps) FastForwardAllNodes(ctx context.Context,
 		rootPath.Path[0].BlockPointer, md.data.Dir.BlockPointer)
 	fbo.updatePointer(md, rootPath.Path[0].BlockPointer,
 		md.data.Dir.BlockPointer, false)
+
+	// Keep track of all the pointer updates done, and unwind them if
+	// there's any error.
+	updates := make(map[data.BlockPointer]data.BlockPointer)
+	updates[rootPath.Path[0].BlockPointer] = md.data.Dir.BlockPointer
+	var undoFns []func()
+	defer func() {
+		if err == nil {
+			return
+		}
+		for oldID, newID := range updates {
+			fbo.updatePointer(md, newID, oldID, false)
+		}
+		for _, f := range undoFns {
+			f()
+		}
+	}()
+
 	rootPath.Path[0].BlockPointer = md.data.Dir.BlockPointer
 	rootNode := fbo.nodeCache.Get(md.data.Dir.BlockPointer.Ref())
 	if rootNode != nil {
@@ -3635,9 +3672,9 @@ func (fbo *folderBlockOps) FastForwardAllNodes(ctx context.Context,
 		affectedNodeIDs = append(affectedNodeIDs, rootNode.GetID())
 	}
 
-	childChanges, childAffectedNodeIDs, err :=
+	childChanges, childAffectedNodeIDs, undoFns, err :=
 		fbo.fastForwardDirAndChildrenLocked(
-			ctx, lState, rootPath, children, md)
+			ctx, lState, rootPath, children, md, updates)
 	if err != nil {
 		return nil, nil, err
 	}

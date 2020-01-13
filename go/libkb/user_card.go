@@ -21,7 +21,12 @@ type card struct {
 	TheyFollowYou        bool                        `json:"they_follow_you"`
 	TeamShowcase         []keybase1.UserTeamShowcase `json:"team_showcase"`
 	RegisteredForAirdrop bool                        `json:"airdrop_registered"`
+	StellarHidden        bool                        `json:"stellar_hidden"`
 	Blocked              bool                        `json:"blocked"`
+	UserBlocks           struct {
+		Chat   bool `json:"chat"`
+		Follow bool `json:"follow"`
+	} `json:"user_blocks"`
 }
 
 func (c *card) GetAppStatus() *AppStatus {
@@ -70,7 +75,9 @@ func UserCard(m MetaContext, uid keybase1.UID, useSession bool) (ret *keybase1.U
 		TheyFollowYou:        card.TheyFollowYou,
 		TeamShowcase:         card.TeamShowcase,
 		RegisteredForAirdrop: card.RegisteredForAirdrop,
-		Blocked:              card.Blocked,
+		StellarHidden:        card.StellarHidden,
+		Blocked:              card.UserBlocks.Chat,
+		HidFromFollowers:     card.UserBlocks.Follow,
 	}
 
 	if err := m.G().CardCache().Set(ret, useSession); err != nil {

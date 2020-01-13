@@ -27,7 +27,7 @@ const minWriterRoleProps = {
   minWriterRole: 'reader',
 }
 
-const retentionPickerPropSelector = props => ({
+const retentionPickerPropSelector = (props: any) => ({
   _loadTeamOperations: Sb.unexpected('_loadTeamOperations'),
   _loadTeamPolicy: Sb.action('_loadTeamPolicy'),
   _onShowDropdown: Sb.action('onShowDropdownRetentionPicker'),
@@ -137,25 +137,64 @@ const makeLinks = (): any => {
 
 const commonProps = {
   canDeleteHistory: true,
+  canManageBots: true,
   canSetMinWriterRole: false,
   docs: {
     docs: makeDocs(),
     onLoadMore: Sb.action('onLoadMore'),
     status: 'success',
   } as any,
+  featuredBots: [
+    {
+      botAlias: 'Reminder Bot',
+      botUsername: 'reminderbot',
+      description: 'Never forget again',
+      extendedDescription:
+        'Sequi facilis odit vitae odit enim. Voluptatem vel asperiores odit ut. Est voluptatem nesciunt in quia ab molestiae sequi. Saepe quibusdam sed officiis quam quo nihil sequi et. Dicta ea velit hic eos. Porro dicta voluptatem qui laudantium. Doloribus amet error illo et. Cupiditate ipsam eaque labore occaecati ut ex saepe. Adipisci quo suscipit porro perferendis nam. In eius quaerat numquam quia exercitationem deserunt minima.',
+      isPromoted: true,
+      ownerUser: 'jessk',
+      rank: 5,
+    },
+  ],
   ignored: false,
+  installedBots: [
+    {
+      botAlias: 'ECS Deploy Bot',
+      botUsername: 'ecsdeploybot',
+      description: '',
+      extendedDescription: '',
+      isPromoted: true,
+      ownerTeam: 'keybase',
+      rank: 4,
+    },
+    {
+      botAlias: 'Google Meet',
+      botUsername: 'meetbot',
+      description: 'Use Google Meet to discuss over video',
+      extendedDescription: '',
+      isPromoted: true,
+      ownerTeam: 'keybase',
+      rank: 3,
+    },
+  ],
   links: {
     links: makeLinks(),
     onLoadMore: Sb.action('onLoadMore'),
     status: 'success',
   },
+  loadedAllBots: false,
+  loadingBots: false,
   media: {
     onLoadMore: Sb.action('onLoadMore'),
     status: 'success',
     thumbs: makeThumbs(),
   },
   onBack: Sb.unexpected('onBack'),
+  onBotAdd: Sb.action('onBotAdd'),
+  onBotSelect: Sb.action('onBotSelect'),
   onHideConv: Sb.action(`onHideConv`),
+  onLoadMoreBots: Sb.action(`onLoadMoreBots`),
+  onSearchFeaturedBots: (username: string) => Sb.action(`onSearchFeaturedBots(${username})`),
   onShowProfile: (username: string) => Sb.action(`onShowProfile(${username})`),
   onUnhideConv: Sb.action(`onUnhideConv`),
   participants: [
@@ -178,6 +217,7 @@ const commonProps = {
       username: 'max',
     },
   ],
+
   selectedConversationIDKey: Constants.noConversationIDKey,
   spinnerForHide: false,
 } as const
@@ -200,6 +240,7 @@ const conversationProps = {
   onShowNewTeamDialog: Sb.action('onShowNewTeamDialog'),
   selectedAttachmentView: RPCChatTypes.GalleryItemTyp.media,
   selectedTab: 'attachments',
+  showAuditingBanner: false,
   smallTeam: false,
   teamname: undefined,
 } as const
@@ -216,6 +257,7 @@ const teamCommonProps = {
   onShowNewTeamDialog: Sb.unexpected('onShowNewTeamDialog'),
   selectedAttachmentView: RPCChatTypes.GalleryItemTyp.media,
   selectedTab: 'settings',
+  showAuditingBanner: false,
   teamname: 'someteam',
 } as const
 
@@ -264,6 +306,7 @@ const bigTeamLotsaUsersCommonProps = {
   participants: new Array(100).fill(0).map(
     (_, i) =>
       ({
+        botAlias: '',
         fullname: `Agent ${i}`,
         isAdmin: false,
         isOwner: false,
@@ -338,6 +381,9 @@ const load = () => {
         selectedAttachmentView={RPCChatTypes.GalleryItemTyp.link}
         selectedTab="attachments"
       />
+    ))
+    .add('Small team (audit bar)', () => (
+      <InfoPanel {...smallTeamProps} selectedTab="members" showAuditingBanner={true} />
     ))
     .add('Big team lotsa users', () => <InfoPanel {...bigTeamLotsaUsersCommonProps} selectedTab="members" />)
     .add('Big team preview', () => <InfoPanel {...bigTeamPreviewProps} selectedTab="members" />)

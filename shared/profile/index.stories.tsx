@@ -6,9 +6,8 @@ import postProof from './post-proof/index.stories'
 import proveEnter from './prove-enter-username/index.stories'
 import proveWebsite from './prove-website-choice/index.stories'
 import revoke from './revoke/index.stories'
-import block from './block/index.stories'
-import search from './search/index.stories'
 import profile from './profile.stories'
+import teamInfo from './user/teams/teaminfo.stories'
 
 const load = () => {
   ;[
@@ -21,8 +20,7 @@ const load = () => {
     proveEnter,
     proveWebsite,
     revoke,
-    block,
-    search,
+    teamInfo,
   ].forEach(load => load())
 }
 

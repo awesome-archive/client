@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/keybase/client/go/chat/types"
 	"github.com/keybase/client/go/ephemeral"
@@ -207,9 +208,9 @@ func (e PublicTeamEphemeralKeyError) Error() string {
 
 type NotAuthenticatedForThisDeviceError struct{ inner ephemeral.EphemeralKeyError }
 
-func NewNotAuthenticatedForThisDeviceError(mctx libkb.MetaContext, tlfID chat1.TLFID,
+func NewNotAuthenticatedForThisDeviceError(mctx libkb.MetaContext, memberCtime *keybase1.Time,
 	contentCtime gregor1.Time) NotAuthenticatedForThisDeviceError {
-	inner := ephemeral.NewNotAuthenticatedForThisDeviceError(mctx, tlfID, contentCtime)
+	inner := ephemeral.NewNotAuthenticatedForThisDeviceError(mctx, memberCtime, contentCtime)
 	return NotAuthenticatedForThisDeviceError{inner: inner}
 }
 
@@ -434,15 +435,17 @@ func (e OfflineError) Error() string {
 type OfflineClient struct {
 }
 
-func (e OfflineClient) Call(ctx context.Context, method string, arg interface{}, res interface{}) error {
+func (e OfflineClient) Call(ctx context.Context, method string, arg interface{},
+	res interface{}, timeout time.Duration) error {
 	return OfflineError{}
 }
 
-func (e OfflineClient) CallCompressed(ctx context.Context, method string, arg interface{}, res interface{}, ctype rpc.CompressionType) error {
+func (e OfflineClient) CallCompressed(ctx context.Context, method string, arg interface{},
+	res interface{}, ctype rpc.CompressionType, timeout time.Duration) error {
 	return OfflineError{}
 }
 
-func (e OfflineClient) Notify(ctx context.Context, method string, arg interface{}) error {
+func (e OfflineClient) Notify(ctx context.Context, method string, arg interface{}, timeout time.Duration) error {
 	return OfflineError{}
 }
 

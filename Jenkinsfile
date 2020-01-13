@@ -182,7 +182,7 @@ helpers.rootLinuxNode(env, {
               sh "git add -A"
               // Generate protocols
               dir ('protocol') {
-                sh "npm i"
+                sh "yarn --frozen-lockfile"
                 sh "make clean"
                 sh "make"
               }
@@ -236,6 +236,8 @@ helpers.rootLinuxNode(env, {
                   ]) {
                     dir("shared") {
                       stage("JS Tests") {
+                        sh "git config --global user.name 'Keybase Jenkins'"
+                        sh "git config --global user.email 'jenkins@keyba.se'"
                         sh "./jenkins_test.sh js ${env.COMMIT_HASH} ${env.CHANGE_TARGET}"
                       }
                     }
@@ -323,50 +325,53 @@ helpers.rootLinuxNode(env, {
             }
           },
           test_macos: {
-            def mountDir='/Volumes/untitled/client'
-            helpers.nodeWithCleanup('macstadium', {}, {
-                sh "rm -rf ${mountDir} || echo 'Something went wrong with cleanup.'"
-              }) {
-              def BASEDIR="${pwd()}/${env.BUILD_NUMBER}"
-              def GOPATH="${BASEDIR}/go"
-              dir(mountDir) {
-                // Ensure that the mountDir exists
-                sh "touch test.txt"
-              }
-              withEnv([
-                "GOPATH=${GOPATH}",
-                "NODE_PATH=${env.HOME}/.node/lib/node_modules:${env.NODE_PATH}",
-                "PATH=${env.PATH}:${GOPATH}/bin:${env.HOME}/.node/bin",
-                "KEYBASE_SERVER_URI=http://${kbwebNodePrivateIP}:3000",
-                "KEYBASE_PUSH_SERVER_URI=fmprpc://${kbwebNodePrivateIP}:9911",
-                "TMPDIR=${mountDir}",
-              ]) {
-              ws("$GOPATH/src/github.com/keybase/client") {
-                println "Checkout OS X"
-                retry(3) {
-                  checkout scm
+            // TODO: remove once macos runners are back up
+            if (false) {
+              def mountDir='/Volumes/untitled/client'
+              helpers.nodeWithCleanup('macstadium', {}, {
+                  sh "rm -rf ${mountDir} || echo 'Something went wrong with cleanup.'"
+                }) {
+                def BASEDIR="${pwd()}/${env.BUILD_NUMBER}"
+                def GOPATH="${BASEDIR}/go"
+                dir(mountDir) {
+                  // Ensure that the mountDir exists
+                  sh "touch test.txt"
                 }
-
-                parallel (
-                  //test_react_native: {
-                  //  println "Test React Native"
-                  //  dir("react-native") {
-                  //    sh "npm i"
-                  //    lock("iossimulator_${env.NODE_NAME}") {
-                  //      sh "npm run test-ios"
-                  //    }
-                  //  }
-                  //},
-                  test_macos_go: {
-                    if (hasGoChanges) {
-                      dir("go/keybase") {
-                        sh "go build -ldflags \"-s -w\" --tags=production"
-                      }
-                      testGo("test_macos_go_", getPackagesToTest(dependencyFiles))
-                    }
+                withEnv([
+                  "GOPATH=${GOPATH}",
+                  "NODE_PATH=${env.HOME}/.node/lib/node_modules:${env.NODE_PATH}",
+                  "PATH=${env.PATH}:${GOPATH}/bin:${env.HOME}/.node/bin",
+                  "KEYBASE_SERVER_URI=http://${kbwebNodePrivateIP}:3000",
+                  "KEYBASE_PUSH_SERVER_URI=fmprpc://${kbwebNodePrivateIP}:9911",
+                  "TMPDIR=${mountDir}",
+                ]) {
+                ws("$GOPATH/src/github.com/keybase/client") {
+                  println "Checkout OS X"
+                  retry(3) {
+                    checkout scm
                   }
-                )
-              }}
+
+                  parallel (
+                    //test_react_native: {
+                    //  println "Test React Native"
+                    //  dir("react-native") {
+                    //    sh "npm i"
+                    //    lock("iossimulator_${env.NODE_NAME}") {
+                    //      sh "npm run test-ios"
+                    //    }
+                    //  }
+                    //},
+                    test_macos_go: {
+                      if (hasGoChanges) {
+                        dir("go/keybase") {
+                          sh "go build -ldflags \"-s -w\" --tags=production"
+                        }
+                        testGo("test_macos_go_", getPackagesToTest(dependencyFiles))
+                      }
+                    }
+                  )
+                }}
+              }
             }
           },
         )
@@ -482,6 +487,7 @@ def testGo(prefix, packagesToTest) {
     println "Installing golangci-lint"
     dir("..") {
       retry(5) {
+        // This works with go1.12.12 but not go1.13.1 with an error containing "invalid pseudo-version"
         sh 'GO111MODULE=on go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.16.0'
       }
     }
@@ -512,7 +518,7 @@ def testGo(prefix, packagesToTest) {
       println("Running golangci-lint for dead code")
       timeout(activity: true, time: 360, unit: 'SECONDS') {
         def diffFileList = getDiffFileList()
-        def diffPackageList = sh(returnStdout: true, script: "bash -c \"set -o pipefail; echo '${diffFileList}' | { grep '^go\\/' || true; } | { grep -v 'go/revision' || true; } | sed 's/^go\\///' | sed 's/^\\(.*\\)\\/[^\\/]*\$/\\1/' | sort | uniq\"").trim().split()
+        def diffPackageList = sh(returnStdout: true, script: "bash -c \"set -o pipefail; echo '${diffFileList}' | { grep '^go\\/' || true; } | { grep -v 'go/revision' || true; } | { grep -v 'go/vendor' || true; } | { grep -v 'go/Makefile' || true; } | sed 's/^go\\///' | sed 's/^\\(.*\\)\\/[^\\/]*\$/\\1/' | sort | uniq\"").trim().split()
         diffPackageList.each { pkg ->
           dir(pkg) {
             // Ignore the exit code 5, which indicates that there were
@@ -524,8 +530,10 @@ def testGo(prefix, packagesToTest) {
       }
     }
 
-    if (isUnix()) {
-      // Windows `gofmt` pukes on CRLF, so only run on *nix.
+    if (prefix == "test_linux_go_") {
+      // Windows `gofmt` pukes on CRLF.
+      // Macos pukes on mockgen because ¯\_(ツ)_/¯.
+      // So, only run on Linux.
       println "Running mockgen"
       retry(5) {
         sh 'go get -u github.com/golang/mock/mockgen'
@@ -638,6 +646,10 @@ def testGo(prefix, packagesToTest) {
           flags: '-race',
           timeout: '30s',
         ],
+        'github.com/keybase/client/go/kbfs/ldbutils': [
+          flags: '-race',
+          timeout: '10m',
+        ],
         'github.com/keybase/client/go/kbfs/libcontext': [
           flags: '-race',
           timeout: '10m',
@@ -667,6 +679,10 @@ def testGo(prefix, packagesToTest) {
           timeout: '30s',
         ],
         'github.com/keybase/client/go/kbfs/libpages/config': [
+          flags: '-race',
+          timeout: '30s',
+        ],
+        'github.com/keybase/client/go/kbfs/search': [
           flags: '-race',
           timeout: '30s',
         ],

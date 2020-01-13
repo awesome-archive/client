@@ -18,7 +18,7 @@ export type ConfiguredAccount = {
   username: string
 }
 // 'notavailable' is the desktop default
-export type ConnectionType = NetInfo.ConnectionType | 'notavailable'
+export type ConnectionType = NetInfo.NetInfoStateType | 'notavailable'
 
 export type WindowState = {
   dockHidden: boolean
@@ -79,5 +79,7 @@ export type State = {
   uid: string
   userActive: boolean
   username: string
+  userSwitching: boolean
   useNativeFrame: boolean
+  whatsNewLastSeenVersion: string
 }

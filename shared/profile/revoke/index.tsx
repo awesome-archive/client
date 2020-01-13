@@ -2,7 +2,7 @@ import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import * as Constants from '../../constants/profile'
-import {capitalize} from 'lodash-es'
+import capitalize from 'lodash/capitalize'
 import {subtitle as platformSubtitle} from '../../util/platforms'
 import {SiteIcon} from '../generic/shared'
 import {PlatformsExpandedType} from '../../constants/types/more'
@@ -78,7 +78,7 @@ const styles = Styles.styleSheetCreate(
         justifyContent: 'center',
         margin: Styles.isMobile ? Styles.globalMargins.tiny : Styles.globalMargins.large,
         maxWidth: 512,
-        ...(Styles.isMobile ? {} : {textAlign: 'center'}),
+        textAlign: Styles.isMobile ? undefined : 'center',
       },
       descriptionText: {marginTop: Styles.globalMargins.medium},
       errorBanner: {

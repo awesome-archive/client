@@ -10,15 +10,15 @@ const oneMinuteInMs = 60 * 1000
 const oneHourInMs = oneMinuteInMs * 60
 const oneDayInMs = oneHourInMs * 24
 
-export type _Props = {
+export type Props = {
   exploded: boolean
   explodesAt: number
+  isParentHighlighted: boolean
   messageKey: string
   onClick?: () => void
   pending: boolean
   style?: Styles.StylesCrossPlatform
 }
-type Props = Kb.PropsWithTimer<_Props>
 
 interface State {
   readonly mode: 'none' | 'countdown' | 'boom' | 'hidden'
@@ -28,15 +28,16 @@ class ExplodingMeta extends React.Component<Props, State> {
   state = {mode: 'none'} as State
   tickerID?: TickerID
   sharedTimerID?: SharedTimerID
+  forceUpdateID?: NodeJS.Timer
   sharedTimerKey: string = ''
 
   componentDidMount() {
-    this._hideOrStart()
+    this.hideOrStart()
   }
 
   componentDidUpdate(prevProps: Props, _: State) {
     if (!this.props.pending && prevProps.pending) {
-      this._hideOrStart()
+      this.hideOrStart()
     }
 
     if (this.props.exploded && !prevProps.exploded) {
@@ -50,7 +51,7 @@ class ExplodingMeta extends React.Component<Props, State> {
     }
   }
 
-  _hideOrStart = () => {
+  private hideOrStart = () => {
     if (
       this.state.mode === 'none' &&
       !this.props.pending &&
@@ -65,9 +66,10 @@ class ExplodingMeta extends React.Component<Props, State> {
   componentWillUnmount() {
     this.tickerID && removeTicker(this.tickerID)
     this.sharedTimerID && SharedTimer.removeObserver(this.sharedTimerKey, this.sharedTimerID)
+    this.forceUpdateID && clearTimeout(this.forceUpdateID)
   }
 
-  _updateLoop = () => {
+  private updateLoop = () => {
     if (this.props.pending) {
       return
     }
@@ -84,8 +86,8 @@ class ExplodingMeta extends React.Component<Props, State> {
       this.tickerID = addTicker(this._secondLoop)
       return
     }
-    this.props.setTimeout(() => {
-      this.forceUpdate(this._updateLoop)
+    this.forceUpdateID = setTimeout(() => {
+      this.forceUpdate(this.updateLoop)
     }, interval)
   }
 
@@ -102,8 +104,7 @@ class ExplodingMeta extends React.Component<Props, State> {
   }
 
   _setHidden = () => this.state.mode !== 'hidden' && this.setState({mode: 'hidden'})
-  _setCountdown = () =>
-    this.state.mode !== 'countdown' && this.setState({mode: 'countdown'}, this._updateLoop)
+  _setCountdown = () => this.state.mode !== 'countdown' && this.setState({mode: 'countdown'}, this.updateLoop)
 
   render() {
     const backgroundColor =
@@ -121,26 +122,52 @@ class ExplodingMeta extends React.Component<Props, State> {
                 </Kb.Box2>
               ) : (
                 <Kb.Box2
+                  className="explodingTimeContainer"
                   direction="horizontal"
                   style={Styles.collapseStyles([
                     styles.countdownContainer,
                     {
                       backgroundColor,
                     },
+                    this.props.isParentHighlighted && styles.countdownContainerHighlighted,
                   ])}
                 >
-                  <Kb.Text type="Body" style={styles.countdown}>
+                  <Kb.Text
+                    className="explodingTimeText"
+                    type="Body"
+                    style={Styles.collapseStyles([
+                      styles.countdown,
+                      this.props.isParentHighlighted && styles.countdownHighlighted,
+                    ])}
+                  >
                     {formatDurationShort(this.props.explodesAt - Date.now())}
                   </Kb.Text>
                 </Kb.Box2>
               )}
-              <Kb.Icon type="iconfont-timer" fontSize={stopWatchIconSize} color={Styles.globalColors.black} />
+              <Kb.Icon
+                className="explodingTimeIcon"
+                type="iconfont-timer"
+                fontSize={stopWatchIconSize}
+                color={
+                  this.props.isParentHighlighted
+                    ? Styles.globalColors.blackOrBlack
+                    : Styles.globalColors.black
+                }
+              />
             </Kb.Box2>
           )
         }
         break
       case 'boom':
-        children = <Kb.Icon type="iconfont-boom" color={Styles.globalColors.black} />
+        children = (
+          <Kb.Icon
+            className="explodingTimeIcon"
+            type="iconfont-boom"
+            color={
+              this.props.isParentHighlighted ? Styles.globalColors.blackOrBlack : Styles.globalColors.black
+            }
+          />
+        )
     }
 
     if (this.props.pending) {
@@ -160,13 +187,12 @@ class ExplodingMeta extends React.Component<Props, State> {
 }
 
 export const getLoopInterval = (diff: number) => {
-  let deltaMS
-  let nearestUnit
+  let nearestUnit: number = 0
 
   // If diff is less than half a unit away,
   // we need to return the remainder so we
   // update when the unit changes
-  const shouldReturnRemainder = (diff, nearestUnit) => diff - nearestUnit <= nearestUnit / 2
+  const shouldReturnRemainder = (diff: number, nearestUnit: number) => diff - nearestUnit <= nearestUnit / 2
 
   if (diff > oneDayInMs) {
     nearestUnit = oneDayInMs
@@ -194,7 +220,7 @@ export const getLoopInterval = (diff: number) => {
     // less than a minute, check every half second
     return 500
   }
-  deltaMS = diff - Math.floor(diff / nearestUnit) * nearestUnit
+  const deltaMS = diff - Math.floor(diff / nearestUnit) * nearestUnit
   const halfNearestUnit = nearestUnit / 2
   if (deltaMS > halfNearestUnit) {
     return deltaMS - halfNearestUnit
@@ -235,6 +261,12 @@ const styles = Styles.styleSheetCreate(
           width: 30,
         },
       }),
+      countdownContainerHighlighted: {
+        backgroundColor: Styles.globalColors.blackOrBlack,
+      },
+      countdownHighlighted: {
+        color: Styles.globalColors.whiteOrWhite,
+      },
       progressContainer: Styles.platformStyles({
         common: {
           alignItems: 'center',
@@ -249,4 +281,4 @@ const styles = Styles.styleSheetCreate(
     } as const)
 )
 
-export default Kb.HOCTimers(ExplodingMeta)
+export default ExplodingMeta

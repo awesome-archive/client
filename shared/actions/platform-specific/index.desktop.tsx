@@ -9,7 +9,7 @@ import path from 'path'
 import {NotifyPopup} from '../../native/notifications'
 import {execFile} from 'child_process'
 import {getEngine} from '../../engine'
-import {isWindows, socketPath, defaultUseNativeFrame} from '../../constants/platform.desktop'
+import {isLinux, isWindows, socketPath, defaultUseNativeFrame} from '../../constants/platform.desktop'
 import {kbfsNotification} from '../../util/kbfs-notifications'
 import {quit} from '../../desktop/app/ctl.desktop'
 import {writeLogLinesToFile} from '../../util/forward-logs'
@@ -17,10 +17,7 @@ import InputMonitor from './input-monitor.desktop'
 import {skipAppFocusActions} from '../../local-debug.desktop'
 import * as Container from '../../util/container'
 
-export function showShareActionSheetFromURL() {
-  throw new Error('Show Share Action - unsupported on this platform')
-}
-export function showShareActionSheetFromFile() {
+export function showShareActionSheet() {
   throw new Error('Show Share Action - unsupported on this platform')
 }
 export function saveAttachmentDialog() {
@@ -40,26 +37,6 @@ export function displayNewMessageNotification() {
 
 export function clearAllNotifications() {
   throw new Error('Clear all notifications not available on this platform')
-}
-
-export const getContentTypeFromURL = (
-  url: string,
-  cb: (arg0: {error?: any; statusCode?: number; contentType?: string; disposition?: string}) => void
-) => {
-  const req = SafeElectron.getRemote().net.request({method: 'HEAD', url})
-  req.on('response', response => {
-    let contentType = ''
-    let disposition = ''
-    if (response.statusCode === 200) {
-      const contentTypeHeader = response.headers['content-type']
-      contentType = Array.isArray(contentTypeHeader) && contentTypeHeader.length ? contentTypeHeader[0] : ''
-      const dispositionHeader = response.headers['content-disposition']
-      disposition = Array.isArray(dispositionHeader) && dispositionHeader.length ? dispositionHeader[0] : ''
-    }
-    cb({contentType, disposition, statusCode: response.statusCode})
-  })
-  req.on('error', error => cb({error}))
-  req.end()
 }
 
 function* handleWindowFocusEvents() {
@@ -97,7 +74,13 @@ function* initializeInputMonitor(): Iterable<any> {
     if (skipAppFocusActions) {
       console.log('Skipping app focus actions!')
     } else {
-      yield Saga.put(ConfigGen.createChangedActive({userActive: type === 'active'}))
+      const userActive = type === 'active'
+      yield Saga.put(ConfigGen.createChangedActive({userActive}))
+      // let node thread save file
+      SafeElectron.getApp().emit('KBkeybase', '', {
+        payload: {changedAtMs: Date.now(), isUserActive: userActive},
+        type: 'activeChanged',
+      })
     }
   }
 }
@@ -197,7 +180,7 @@ const onPgpgKeySecret = () =>
     console.warn('Error in sending pgpPgpStorageDismissRpc:', err)
   })
 
-const onShutdown = (_: Container.TypedState, action: EngineGen.Keybase1NotifyServiceShutdownPayload) => {
+const onShutdown = (action: EngineGen.Keybase1NotifyServiceShutdownPayload) => {
   const {code} = action.payload.params
   if (isWindows && code !== RPCTypes.ExitCode.restart) {
     console.log('Quitting due to service shutdown with code: ', code)
@@ -219,10 +202,7 @@ const onConnected = () => {
   }).catch(_ => {})
 }
 
-const onOutOfDate = (
-  _: Container.TypedState,
-  action: EngineGen.Keybase1NotifySessionClientOutOfDatePayload
-) => {
+const onOutOfDate = (action: EngineGen.Keybase1NotifySessionClientOutOfDatePayload) => {
   const {upgradeTo, upgradeURI, upgradeMsg} = action.payload.params
   const body = upgradeMsg || `Please update to ${upgradeTo} by going to ${upgradeURI}`
   NotifyPopup('Client out of date!', {body}, 60 * 60)
@@ -231,10 +211,7 @@ const onOutOfDate = (
   return ConfigGen.createUpdateInfo({critical: true, isOutOfDate: true, message: upgradeMsg})
 }
 
-const prepareLogSend = async (
-  _: Container.TypedState,
-  action: EngineGen.Keybase1LogsendPrepareLogsendPayload
-) => {
+const prepareLogSend = async (action: EngineGen.Keybase1LogsendPrepareLogsendPayload) => {
   const response = action.payload.response
   try {
     await dumpLogs()
@@ -243,7 +220,7 @@ const prepareLogSend = async (
   }
 }
 
-const copyToClipboard = (_: Container.TypedState, action: ConfigGen.CopyToClipboardPayload) => {
+const copyToClipboard = (action: ConfigGen.CopyToClipboardPayload) => {
   SafeElectron.getClipboard().writeText(action.payload.text)
 }
 
@@ -328,11 +305,11 @@ const saveUseNativeFrame = async (state: Container.TypedState) => {
 
 function* initializeUseNativeFrame() {
   try {
-    const val: Saga.RPCPromiseType<
-      typeof RPCTypes.configGuiGetValueRpcPromise
-    > = yield RPCTypes.configGuiGetValueRpcPromise({
-      path: nativeFrameKey,
-    })
+    const val: Saga.RPCPromiseType<typeof RPCTypes.configGuiGetValueRpcPromise> = yield RPCTypes.configGuiGetValueRpcPromise(
+      {
+        path: nativeFrameKey,
+      }
+    )
     const useNativeFrame = val.b === undefined || val.b === null ? defaultUseNativeFrame : val.b
     yield Saga.put(ConfigGen.createSetUseNativeFrame({useNativeFrame}))
   } catch (_) {}
@@ -353,11 +330,11 @@ const saveWindowState = async (state: Container.TypedState) => {
 const notifySoundKey = 'notifySound'
 function* initializeNotifySound() {
   try {
-    const val: Saga.RPCPromiseType<
-      typeof RPCTypes.configGuiGetValueRpcPromise
-    > = yield RPCTypes.configGuiGetValueRpcPromise({
-      path: notifySoundKey,
-    })
+    const val: Saga.RPCPromiseType<typeof RPCTypes.configGuiGetValueRpcPromise> = yield RPCTypes.configGuiGetValueRpcPromise(
+      {
+        path: notifySoundKey,
+      }
+    )
     const notifySound: boolean | undefined = val.b || undefined
     const state: Container.TypedState = yield Saga.selectState()
     if (notifySound !== undefined && notifySound !== state.config.notifySound) {
@@ -380,11 +357,11 @@ const setNotifySound = async (state: Container.TypedState) => {
 const openAtLoginKey = 'openAtLogin'
 function* initializeOpenAtLogin() {
   try {
-    const val: Saga.RPCPromiseType<
-      typeof RPCTypes.configGuiGetValueRpcPromise
-    > = yield RPCTypes.configGuiGetValueRpcPromise({
-      path: openAtLoginKey,
-    })
+    const val: Saga.RPCPromiseType<typeof RPCTypes.configGuiGetValueRpcPromise> = yield RPCTypes.configGuiGetValueRpcPromise(
+      {
+        path: openAtLoginKey,
+      }
+    )
 
     const openAtLogin: boolean | undefined = val.b || undefined
     const state: Container.TypedState = yield Saga.selectState()
@@ -404,13 +381,29 @@ const setOpenAtLogin = async (state: Container.TypedState) => {
     },
   })
 
-  if (!__DEV__ && SafeElectron.getApp().getLoginItemSettings().openAtLogin !== openAtLogin) {
-    logger.info(`Login item settings changed! now ${openAtLogin}`)
-    SafeElectron.getApp().setLoginItemSettings({openAtLogin})
+  if (__DEV__) return
+  if (isLinux) {
+    const enabled =
+      (await RPCTypes.ctlGetNixOnLoginStartupRpcPromise()) === RPCTypes.OnLoginStartupStatus.enabled
+    if (enabled !== openAtLogin) await setNixOnLoginStartup(openAtLogin)
+  } else {
+    if (SafeElectron.getApp().getLoginItemSettings().openAtLogin !== openAtLogin) {
+      logger.info(`Login item settings changed! now ${openAtLogin}`)
+      SafeElectron.getApp().setLoginItemSettings({openAtLogin})
+    }
   }
 }
 
+const setNixOnLoginStartup = async (enabled: boolean) => {
+  RPCTypes.ctlSetNixOnLoginStartupRpcPromise({enabled}).catch(err => {
+    logger.warn(`Error in sending ctlSetNixOnLoginStartup: ${err.message}`)
+  })
+}
+
 export const requestLocationPermission = () => Promise.resolve()
+export const requestAudioPermission = () => Promise.resolve()
+export const clearWatchPosition = () => {}
+export const watchPositionForMap = () => Promise.resolve(0)
 
 export function* platformConfigSaga() {
   yield* Saga.chainAction2(ConfigGen.setOpenAtLogin, setOpenAtLogin)
@@ -418,14 +411,14 @@ export function* platformConfigSaga() {
   yield* Saga.chainAction2(ConfigGen.showMain, showMainWindow)
   yield* Saga.chainAction2(ConfigGen.dumpLogs, dumpLogs)
   getEngine().registerCustomResponse('keybase.1.logsend.prepareLogsend')
-  yield* Saga.chainAction2(EngineGen.keybase1LogsendPrepareLogsend, prepareLogSend)
+  yield* Saga.chainAction(EngineGen.keybase1LogsendPrepareLogsend, prepareLogSend)
   yield* Saga.chainAction2(EngineGen.connected, onConnected)
   yield* Saga.chainAction2(EngineGen.keybase1NotifyAppExit, onExit)
   yield* Saga.chainAction2(EngineGen.keybase1NotifyFSFSActivity, onFSActivity)
   yield* Saga.chainAction2(EngineGen.keybase1NotifyPGPPgpKeyInSecretStoreFile, onPgpgKeySecret)
-  yield* Saga.chainAction2(EngineGen.keybase1NotifyServiceShutdown, onShutdown)
-  yield* Saga.chainAction2(EngineGen.keybase1NotifySessionClientOutOfDate, onOutOfDate)
-  yield* Saga.chainAction2(ConfigGen.copyToClipboard, copyToClipboard)
+  yield* Saga.chainAction(EngineGen.keybase1NotifyServiceShutdown, onShutdown)
+  yield* Saga.chainAction(EngineGen.keybase1NotifySessionClientOutOfDate, onOutOfDate)
+  yield* Saga.chainAction(ConfigGen.copyToClipboard, copyToClipboard)
   yield* Saga.chainAction2(ConfigGen.updateNow, updateNow)
   yield* Saga.chainAction2(ConfigGen.checkForUpdate, checkForUpdate)
   yield* Saga.chainAction2(ConfigGen.daemonHandshakeWait, sendKBServiceCheck)

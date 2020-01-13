@@ -18,11 +18,17 @@ const props: Props = {
       },
       fullName: 'Livingston Reallyveryquitelongnameheimer',
     },
+    {
+      account: {
+        hasStoredSecret: true,
+        username: 'jakob226',
+      },
+      fullName: '',
+    },
   ],
   fullname: 'Alice Keybaseuser',
   onAddAccount: Sb.action('onAddAccount'),
   onCancel: Sb.action('onCancel'),
-  onCreateAccount: Sb.action('onCreateAccount'),
   onProfileClick: Sb.action('onProfileClick'),
   onSelectAccount: Sb.action('onSelectAccount'),
   rightActions: [
@@ -34,6 +40,7 @@ const props: Props = {
   ],
   title: ' ',
   username: 'alice',
+  waiting: false,
 }
 
 const load = () => {

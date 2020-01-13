@@ -1,7 +1,7 @@
 import * as React from 'react'
 import * as Styles from '../styles'
 import {getStyle as getTextStyle} from './text.desktop'
-import {pick} from 'lodash-es'
+import pick from 'lodash/pick'
 import logger from '../logger'
 import {_StylesDesktop} from '../styles/css'
 import {InternalProps, TextInfo, Selection} from './plain-input'
@@ -38,20 +38,28 @@ class PlainInput extends React.PureComponent<InternalProps> {
     this._autoResize()
   }
 
-  _smartAutoresize = {
-    pivotLength: -1,
-    width: -1,
-  }
-
+  _autoResizeLast = ''
   _autoResize = () => {
     if (!this.props.multiline) {
       // no resizing height on single-line inputs
       return
     }
+
+    // Allow textarea to layout automatically
+    if (this.props.growAndScroll) {
+      return
+    }
+
     const n = this._input
     if (!n) {
       return
     }
+
+    // ignore if value hasn't changed
+    if (n.value === this._autoResizeLast) {
+      return
+    }
+    this._autoResizeLast = n.value
 
     n.style.height = '1px'
     n.style.height = `${n.scrollHeight}px`
@@ -199,6 +207,8 @@ class PlainInput extends React.PureComponent<InternalProps> {
         styles.multiline,
         heightStyles,
         paddingStyles,
+        this.props.resize && styles.resize,
+        this.props.growAndScroll && styles.growAndScroll,
         this.props.style,
       ]),
     }
@@ -277,15 +287,15 @@ class PlainInput extends React.PureComponent<InternalProps> {
   }
 }
 
-// @ts-ignore this type is wrong
-const StyledTextArea = Styles.styled.textarea<'textarea', {placeholderColor: any}>(props => ({
+// @ts-ignore
+const StyledTextArea = Styles.styled.textarea<'textarea'>((props: {placeholderColor: any}) => ({
   '&::-webkit-inner-spin-button': {WebkitAppearance: 'none', margin: 0},
   '&::-webkit-input-placeholder': {color: props.placeholderColor || Styles.globalColors.black_50},
   '&::-webkit-outer-spin-button': {WebkitAppearance: 'none', margin: 0},
 }))
 
-// @ts-ignore this type is wrong
-const StyledInput = Styles.styled.input<'input', {placeholderColor: any}>(props => ({
+// @ts-ignore
+const StyledInput = Styles.styled.input<'input'>((props: {placeholderColor: any}) => ({
   '&::-webkit-inner-spin-button': {WebkitAppearance: 'none', margin: 0},
   '&::-webkit-input-placeholder': {color: props.placeholderColor || Styles.globalColors.black_50},
   '&::-webkit-outer-spin-button': {WebkitAppearance: 'none', margin: 0},
@@ -299,6 +309,12 @@ const styles = Styles.styleSheetCreate(() => ({
     // https://stackoverflow.com/questions/42421361/input-button-elements-not-shrinking-in-a-flex-container
     width: 0,
   },
+  growAndScroll: Styles.platformStyles({
+    isElectron: {
+      maxHeight: '100%',
+      overflowY: 'scroll',
+    },
+  }),
   multiline: Styles.platformStyles({
     isElectron: {
       height: 'initial',
@@ -314,6 +330,9 @@ const styles = Styles.styleSheetCreate(() => ({
       lineHeight: 'unset',
       outline: 'none',
     },
+  }),
+  resize: Styles.platformStyles({
+    isElectron: {resize: 'vertical'},
   }),
 }))
 

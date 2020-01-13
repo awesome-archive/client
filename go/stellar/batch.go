@@ -123,7 +123,7 @@ func Batch(mctx libkb.MetaContext, walletState *WalletState, arg stellar1.BatchL
 				if update.Status == stellar1.PaymentStatus_COMPLETED || update.Status == stellar1.PaymentStatus_CLAIMABLE {
 					chatWaitGroup.Add(1)
 					go func(m libkb.MetaContext, recipient string, txID stellar1.TransactionID) {
-						if err := chatSendPaymentMessage(m, recipient, txID); err != nil {
+						if err := chatSendPaymentMessage(m, recipient, txID, true); err != nil {
 							m.Debug("chatSendPaymentMessageTo %s (%s): error: %s", recipient, txID, err)
 						} else {
 							m.Debug("chatSendPaymentMessageTo %s (%s): success", recipient, txID)
@@ -218,7 +218,7 @@ func prepareBatchPaymentDirect(mctx libkb.MetaContext, remoter remote.Remoter, s
 
 	var signResult stellarnet.SignResult
 	if funded {
-		signResult, err = stellarnet.PaymentXLMTransaction(senderSeed, *recipient.AccountID, payment.Amount, "", sp, nil, baseFee)
+		signResult, err = stellarnet.PaymentXLMTransactionWithMemo(senderSeed, *recipient.AccountID, payment.Amount, stellarnet.NewMemoNone(), sp, nil, baseFee)
 	} else {
 		signResult, err = stellarnet.CreateAccountXLMTransaction(senderSeed, *recipient.AccountID, payment.Amount, "", sp, nil, baseFee)
 	}

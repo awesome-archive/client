@@ -53,8 +53,8 @@ func (e *PaperProvisionEngine) RequiredUIs() []libkb.UIKind {
 func (e *PaperProvisionEngine) Run(m libkb.MetaContext) (err error) {
 	defer m.Trace("PaperProvisionEngine#Run", func() error { return err })()
 
-	// clear out any existing session:
-	err = e.G().Logout(m.Ctx())
+	// clear out any existing session
+	err = m.LogoutKeepSecrets()
 	if err != nil {
 		m.Debug("error on logout: %+v", err)
 	}

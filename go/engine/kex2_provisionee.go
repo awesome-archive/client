@@ -318,15 +318,20 @@ func (e *Kex2Provisionee) handleDidCounterSign(m libkb.MetaContext, sig []byte, 
 		return err
 	}
 
-	// Finish the ephemeral key generation -- create a deviceEKStatement and
-	// prepare the boxMetadata for posting if we received a valid userEKBox
-	reboxArg, err := e.ekReboxer.getReboxArg(m, userEKBox, e.device.ID, e.eddsa)
-	if err != nil {
-		return err
-	}
+	if err := retryOnEphemeralRace(m, func(m libkb.MetaContext) error {
+		// Finish the ephemeral key generation -- create a deviceEKStatement and
+		// prepare the boxMetadata for posting if we received a valid userEKBox
+		reboxArg, err := e.ekReboxer.getReboxArg(m, userEKBox, e.device.ID, e.eddsa)
+		if err != nil {
+			return err
+		}
 
-	// post the key sigs to the api server
-	if err = e.postSigs(eddsaArgs, dhArgs, perUserKeyBox, reboxArg); err != nil {
+		// post the key sigs to the api server
+		if err = e.postSigs(eddsaArgs, dhArgs, perUserKeyBox, reboxArg); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -627,7 +632,7 @@ func (e *Kex2Provisionee) saveConfig(m libkb.MetaContext, uv keybase1.UserVersio
 		deviceName = *e.device.Description
 	}
 
-	return m.SwitchUserNewConfigActiveDevice(uv, libkb.NewNormalizedUsername(e.username), e.salt, e.device.ID, e.eddsa, e.dh, deviceName)
+	return m.SwitchUserNewConfigActiveDevice(uv, libkb.NewNormalizedUsername(e.username), e.salt, e.device.ID, e.eddsa, e.dh, deviceName, libkb.KeychainModeOS)
 }
 
 func (e *Kex2Provisionee) SigningKey() (libkb.GenericKey, error) {

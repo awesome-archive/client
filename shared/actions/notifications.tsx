@@ -23,6 +23,7 @@ const setupNotifications = async () => {
         deviceclone: false,
         ephemeral: false,
         favorites: false,
+        featuredBots: false,
         kbfs: true,
         kbfsdesktop: !isMobile,
         kbfslegacy: false,
@@ -49,7 +50,7 @@ const setupNotifications = async () => {
   }
 }
 
-const createBadgeState = (_: Container.TypedState, action: EngineGen.Keybase1NotifyBadgesBadgeStatePayload) =>
+const createBadgeState = (action: EngineGen.Keybase1NotifyBadgesBadgeStatePayload) =>
   NotificationsGen.createReceivedBadgeState({badgeState: action.payload.params.badgeState})
 
 const receivedBadgeState = (
@@ -59,36 +60,28 @@ const receivedBadgeState = (
   const counts = Constants.badgeStateToBadgeCounts(state, action.payload.badgeState)
   return [
     counts && NotificationsGen.createSetBadgeCounts({counts}),
-    Constants.shouldTriggerTlfLoad(action.payload.badgeState) && FsGen.createFavoritesLoad(),
+    !isMobile && Constants.shouldTriggerTlfLoad(action.payload.badgeState) && FsGen.createFavoritesLoad(),
   ]
 }
 
-const receivedRootAuditError = (
-  _: Container.TypedState,
-  action: EngineGen.Keybase1NotifyAuditRootAuditErrorPayload
-) =>
+const receivedRootAuditError = (action: EngineGen.Keybase1NotifyAuditRootAuditErrorPayload) =>
   ConfigGen.createGlobalError({
     globalError: new Error(`Keybase is buggy, please report this: ${action.payload.params.message}`),
   })
 
-const receivedBoxAuditError = (
-  _: Container.TypedState,
-  action: EngineGen.Keybase1NotifyAuditBoxAuditErrorPayload
-) =>
+const receivedBoxAuditError = (action: EngineGen.Keybase1NotifyAuditBoxAuditErrorPayload) =>
   ConfigGen.createGlobalError({
     globalError: new Error(
-      `Keybase had a problem loading a team, please report this with \`keybase log send\`: ${
-        action.payload.params.message
-      }`
+      `Keybase had a problem loading a team, please report this with \`keybase log send\`: ${action.payload.params.message}`
     ),
   })
 
 function* notificationsSaga() {
   yield* Saga.chainAction2(NotificationsGen.receivedBadgeState, receivedBadgeState)
-  yield* Saga.chainAction2(EngineGen.keybase1NotifyAuditRootAuditError, receivedRootAuditError)
-  yield* Saga.chainAction2(EngineGen.keybase1NotifyAuditBoxAuditError, receivedBoxAuditError)
+  yield* Saga.chainAction(EngineGen.keybase1NotifyAuditRootAuditError, receivedRootAuditError)
+  yield* Saga.chainAction(EngineGen.keybase1NotifyAuditBoxAuditError, receivedBoxAuditError)
   yield* Saga.chainAction2(EngineGen.connected, setupNotifications)
-  yield* Saga.chainAction2(EngineGen.keybase1NotifyBadgesBadgeState, createBadgeState)
+  yield* Saga.chainAction(EngineGen.keybase1NotifyBadgesBadgeState, createBadgeState)
 }
 
 export default notificationsSaga

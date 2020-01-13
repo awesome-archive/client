@@ -6,13 +6,18 @@ package service
 import (
 	"fmt"
 	"sort"
+	"time"
+
+	"github.com/keybase/client/go/protocol/gregor1"
+
+	"github.com/keybase/client/go/uidmap"
 
 	"github.com/keybase/client/go/avatars"
 	"github.com/keybase/client/go/chat"
 	"github.com/keybase/client/go/chat/globals"
+	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/engine"
 	"github.com/keybase/client/go/externals"
-	"github.com/keybase/client/go/kbun"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/offline"
 	"github.com/keybase/client/go/phonenumbers"
@@ -225,7 +230,10 @@ func (h *UserHandler) ProfileEdit(nctx context.Context, arg keybase1.ProfileEdit
 	return engine.RunEngine2(m, eng)
 }
 
-func (h *UserHandler) InterestingPeople(ctx context.Context, maxUsers int) (res []keybase1.InterestingPerson, err error) {
+func (h *UserHandler) InterestingPeople(ctx context.Context, args keybase1.InterestingPeopleArg) (res []keybase1.InterestingPerson, err error) {
+	// In case someone comes from "GetInterestingPeople" command in standalone
+	// mode:
+	h.G().StartStandaloneChat()
 
 	// Chat source
 	chatFn := func(uid keybase1.UID) (kuids []keybase1.UID, err error) {
@@ -257,13 +265,33 @@ func (h *UserHandler) InterestingPeople(ctx context.Context, maxUsers int) (res 
 		return res, nil
 	}
 
+	fallbackFn := func(uid keybase1.UID) (uids []keybase1.UID, err error) {
+		uids = []keybase1.UID{
+			libkb.GetUIDByNormalizedUsername(h.G(), "hellobot"),
+		}
+		return uids, nil
+	}
+
 	ip := newInterestingPeople(h.G())
 
 	// Add sources of interesting people
-	ip.AddSource(chatFn, 0.9)
-	ip.AddSource(followerFn, 0.1)
+	ip.AddSource(chatFn, 0.7)
+	ip.AddSource(followerFn, 0.2)
 
-	uids, err := ip.Get(ctx, maxUsers)
+	// We filter out the fallback recommendations when actually building a team
+	if args.Namespace != "teams" {
+		// The most interesting person of all... you
+		you := keybase1.InterestingPerson{
+			Uid:      h.G().GetEnv().GetUID(),
+			Username: h.G().GetEnv().GetUsername().String(),
+		}
+		res = append(res, you)
+
+		// add hellobot as a fallback recommendation if you don't have many others
+		ip.AddSource(fallbackFn, 0.1)
+	}
+
+	uids, err := ip.Get(ctx, args.MaxUsers)
 	if err != nil {
 		h.G().Log.Debug("InterestingPeople: failed to get list: %s", err.Error())
 		return nil, err
@@ -280,6 +308,10 @@ func (h *UserHandler) InterestingPeople(ctx context.Context, maxUsers int) (res 
 		h.G().Log.Debug("InterestingPeople: failed in UIDMapper: %s, but continuing", err.Error())
 	}
 
+	const serviceMapFreshness = 24 * time.Hour
+	serviceMaps := h.G().ServiceMapper.MapUIDsToServiceSummaries(ctx, h.G(), uids,
+		serviceMapFreshness, uidmap.DisallowNetworkBudget)
+
 	for i, uid := range uids {
 		if packages[i].NormalizedUsername.IsNil() {
 			// We asked UIDMapper for cached data only, this username was missing.
@@ -292,6 +324,9 @@ func (h *UserHandler) InterestingPeople(ctx context.Context, maxUsers int) (res 
 		}
 		if fn := packages[i].FullName; fn != nil {
 			ret.Fullname = fn.FullName.String()
+		}
+		if smap, found := serviceMaps[uid]; found {
+			ret.ServiceMap = smap.ServiceMap
 		}
 		res = append(res, ret)
 	}
@@ -483,6 +518,7 @@ func (h *UserHandler) proofSuggestionsHelper(mctx libkb.MetaContext, tracer prof
 	for i := range suggestions {
 		suggestion := &suggestions[i]
 		suggestion.ProfileIcon = externals.MakeIcons(mctx, suggestion.LogoKey, "logo_black", 16)
+		suggestion.ProfileIconWhite = externals.MakeIcons(mctx, suggestion.LogoKey, "logo_white", 16)
 		suggestion.PickerIcon = externals.MakeIcons(mctx, suggestion.LogoKey, "logo_full", 32)
 	}
 
@@ -574,9 +610,9 @@ func (h *UserHandler) FindNextMerkleRootAfterReset(ctx context.Context, arg keyb
 	return libkb.FindNextMerkleRootAfterReset(m, arg)
 }
 
-func (h *UserHandler) LoadHasRandomPw(ctx context.Context, arg keybase1.LoadHasRandomPwArg) (res bool, err error) {
+func (h *UserHandler) LoadPassphraseState(ctx context.Context, sessionID int) (res keybase1.PassphraseState, err error) {
 	m := libkb.NewMetaContext(ctx, h.G())
-	return libkb.LoadHasRandomPw(m, arg)
+	return libkb.LoadPassphraseStateWithForceRepoll(m)
 }
 
 func (h *UserHandler) CanLogout(ctx context.Context, sessionID int) (res keybase1.CanLogoutRes, err error) {
@@ -589,22 +625,84 @@ func (h *UserHandler) UserCard(ctx context.Context, arg keybase1.UserCardArg) (r
 	mctx := libkb.NewMetaContext(ctx, h.G())
 	defer mctx.TraceTimed("UserHandler#UserCard", func() error { return err })()
 
-	uid := mctx.G().UIDMapper.MapHardcodedUsernameToUID(kbun.NewNormalizedUsername(arg.Username))
-	if !uid.Exists() {
-		uid = libkb.UsernameToUIDPreserveCase(arg.Username)
+	uid := libkb.GetUIDByUsername(h.G(), arg.Username)
+	if res, err = libkb.UserCard(mctx, uid, arg.UseSession); err != nil {
+		return res, err
 	}
-	return libkb.UserCard(mctx, uid, arg.UseSession)
+	// decorate body for use in chat
+	if res != nil {
+		res.BioDecorated = utils.PresentDecoratedUserBio(ctx, res.Bio)
+	}
+	return res, nil
 }
+
+func (h *UserHandler) SetUserBlocks(ctx context.Context, arg keybase1.SetUserBlocksArg) (err error) {
+	mctx := libkb.NewMetaContext(ctx, h.G())
+	eng := engine.NewUserBlocksSet(h.G(), arg)
+	uis := libkb.UIs{
+		LogUI:     h.getLogUI(arg.SessionID),
+		SessionID: arg.SessionID,
+	}
+	mctx = mctx.WithUIs(uis)
+	if err := engine.RunEngine2(mctx, eng); err != nil {
+		return err
+	}
+	h.cleanupAfterBlockChange(mctx, eng.UIDs())
+	return nil
+}
+
+const blockButtonsGregorPrefix = "blockButtons."
+
+func (h *UserHandler) DismissBlockButtons(ctx context.Context, tlfID keybase1.TLFID) (err error) {
+	mctx := libkb.NewMetaContext(ctx, h.G())
+	defer mctx.TraceTimed(
+		fmt.Sprintf("UserHandler#DismissBlockButtons(TLF=%s)", tlfID),
+		func() error { return err })()
+
+	return h.service.gregor.DismissCategory(ctx, gregor1.Category(fmt.Sprintf("%s%s", blockButtonsGregorPrefix, tlfID.String())))
+}
+
+func (h *UserHandler) GetUserBlocks(ctx context.Context, arg keybase1.GetUserBlocksArg) (res []keybase1.UserBlock, err error) {
+	mctx := libkb.NewMetaContext(ctx, h.G())
+	eng := engine.NewUserBlocksGet(h.G(), arg)
+	uis := libkb.UIs{
+		LogUI:     h.getLogUI(arg.SessionID),
+		SessionID: arg.SessionID,
+	}
+	mctx = mctx.WithUIs(uis)
+	err = engine.RunEngine2(mctx, eng)
+	if err == nil {
+		res = eng.Blocks()
+	}
+	return res, err
+}
+
+func (h *UserHandler) GetTeamBlocks(ctx context.Context, sessionID int) (res []keybase1.TeamBlock, err error) {
+	mctx := libkb.NewMetaContext(ctx, h.G())
+	eng := engine.NewTeamBlocksGet(h.G())
+	uis := libkb.UIs{
+		LogUI:     h.getLogUI(sessionID),
+		SessionID: sessionID,
+	}
+	mctx = mctx.WithUIs(uis)
+	err = engine.RunEngine2(mctx, eng)
+	if err == nil {
+		res = eng.Blocks()
+	}
+	return res, err
+}
+
+// Legacy RPC and API:
 
 func (h *UserHandler) BlockUser(ctx context.Context, username string) (err error) {
 	mctx := libkb.NewMetaContext(ctx, h.G())
-	defer mctx.TraceTimed("UserHandler#BlockUser", func() error { return err })()
+	defer mctx.TraceTimed(fmt.Sprintf("UserHandler#BlockUser: %s", username), func() error { return err })()
 	return h.setUserBlock(mctx, username, true)
 }
 
 func (h *UserHandler) UnblockUser(ctx context.Context, username string) (err error) {
 	mctx := libkb.NewMetaContext(ctx, h.G())
-	defer mctx.TraceTimed("UserHandler#UnblockUser", func() error { return err })()
+	defer mctx.TraceTimed(fmt.Sprintf("UserHandler#UnblockUser: %s", username), func() error { return err })()
 	return h.setUserBlock(mctx, username, false)
 }
 
@@ -622,6 +720,22 @@ func (h *UserHandler) setUserBlock(mctx libkb.MetaContext, username string, bloc
 		},
 	}
 	_, err = mctx.G().API.Post(mctx, apiArg)
-	_ = mctx.G().CardCache().Delete(uid)
+
+	if err == nil {
+		h.cleanupAfterBlockChange(mctx, []keybase1.UID{uid})
+	}
+
 	return err
+}
+
+func (h *UserHandler) cleanupAfterBlockChange(mctx libkb.MetaContext, uids []keybase1.UID) {
+	mctx.Debug("clearing card cache after block change")
+	for _, uid := range uids {
+		if err := mctx.G().CardCache().Delete(uid); err != nil {
+			mctx.Debug("cleanupAfterBlockChange CardCache delete error for %s: %s", uid, err)
+		}
+	}
+
+	mctx.Debug("refreshing wallet state after block change")
+	mctx.G().GetStellar().Refresh(mctx, "user block change")
 }

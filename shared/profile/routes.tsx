@@ -2,7 +2,6 @@ import {newRoutes as PGPRoutes} from './pgp/routes'
 import Profile from './user/container'
 import ProfileNonUser from './non-user-profile/container'
 import ProfileAddToTeam from './add-to-team/container'
-import ProfileBlockUser from './block/container'
 import ProfileConfirmOrPending from './confirm-or-pending/container'
 import ProfileEdit from './edit-profile/container'
 import ProfileEditAvatar from './edit-avatar/container'
@@ -13,7 +12,6 @@ import ProfileProofsList from './generic/proofs-list/container'
 import ProfileProveEnterUsername from './prove-enter-username/container'
 import ProfileProveWebsiteChoice from './prove-website-choice/container'
 import ProfileRevoke from './revoke/container'
-import ProfileSearch from './search/container'
 import ProfileShowcaseTeamOffer from './showcase-team-offer/container'
 
 export const newRoutes = {
@@ -23,7 +21,6 @@ export const newRoutes = {
 
 export const newModalRoutes = {
   profileAddToTeam: {getScreen: (): typeof ProfileAddToTeam => require('./add-to-team/container').default},
-  profileBlockUser: {getScreen: (): typeof ProfileBlockUser => require('./block/container').default},
   profileConfirmOrPending: {
     getScreen: (): typeof ProfileConfirmOrPending => require('./confirm-or-pending/container').default,
   },
@@ -47,9 +44,8 @@ export const newModalRoutes = {
     getScreen: (): typeof ProfileProveWebsiteChoice => require('./prove-website-choice/container').default,
   },
   profileRevoke: {getScreen: (): typeof ProfileRevoke => require('./revoke/container').default},
-  profileSearch: {getScreen: (): typeof ProfileSearch => require('./search/container').default},
-  // TODO broken connect
   profileShowcaseTeamOffer: {
+    // @ts-ignore HeaderOrPopup typing busted
     getScreen: (): typeof ProfileShowcaseTeamOffer => require('./showcase-team-offer/container').default,
   },
   ...PGPRoutes,

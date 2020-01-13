@@ -21,7 +21,8 @@ protocol teams {
     SALTPACK_3,
     GIT_METADATA_4,
     SEITAN_INVITE_TOKEN_5,
-    STELLAR_RELAY_6
+    STELLAR_RELAY_6,
+    KVSTORE_7
   }
 
   enum TeamStatus {
@@ -34,7 +35,10 @@ protocol teams {
   enum AuditMode {
     STANDARD_0,
     JUST_CREATED_1,
-    SKIP_2
+    SKIP_2,
+    // If we do not want to audit the hidden chain 
+    // (for example, when the client does not have access to it).
+    STANDARD_NO_HIDDEN_3
   }
 
   // PerTeamKeyGeneration describes the generation of the secret.
@@ -319,7 +323,13 @@ protocol teams {
     BLINDED_1,
     // When we make changes to the hidden chain ourselves, then we bump this
     // ratchet.
-    SELF_2
+    SELF_2,
+    // The server can tell us about a new hidden team chain link which was not
+    // yet committed to the blind tree (as that is updated slowly). We trust the
+    // server and accept it for now, but will complain later if this link does
+    // not get added to the blind tree later within a reasonable time (or if the
+    // tree shows a different history). 
+    UNCOMMITTED_3
   }
 
   record HiddenTeamChainRatchetSet{
@@ -335,12 +345,24 @@ protocol teams {
     boolean frozen;
     boolean tombstoned;
 
+    // The last link loaded to, but might have stubbed holes before then (due to FTL)
     Seqno last;
+
+    // From 1 to lastFull are fully populated links, with all stubs (via FTL) filled in.
+    // Might be less than last, or 0, since we didn't introduce this field until
+    // bug Y2K-679 came in.
+    Seqno lastFull;
 
     // Update this field when gregor notifications come in, and there is a bump
     // for last seqno. If this is wrong or buggy, it's a performance problem,
     // not a security problem.
     Seqno latestSeqnoHint;
+
+    Seqno lastCommittedSeqno;
+
+    // Used to ensure that the uncommitted updates given from the server are
+    // committed to the blind tree within a reasonable time.
+    map<Seqno, Time> linkReceiptTimes;
 
     // For each PTK type (right now only 'reader'), say where the last seqno of
     // the type is in the chain.
@@ -477,6 +499,10 @@ protocol teams {
     @mpackkey("mcs") @jsonkey("mcs")
     Seqno maxChainSeqno;
 
+    // The maximum hidden Seqno in the chain at the time of the audit.
+    @mpackkey("mhs") @jsonkey("mhs")
+    Seqno maxHiddenSeqno;
+
     // The maximum merkle Seqno probed in this audit.
     @mpackkey("mmp") @jsonkey("mmp")
     Seqno maxMerkleProbe;
@@ -487,13 +513,16 @@ protocol teams {
     int index;
     @mpackkey("s") @jsonkey("t")
     Seqno teamSeqno;
+    @mpackkey("h") @jsonkey("h")
+    Seqno teamHiddenSeqno;
   }
 
   enum AuditVersion {
     V0_0,
     V1_1,
     V2_2,
-    V3_3
+    V3_3,
+    V4_4
   }
 
   record AuditHistory {
@@ -516,6 +545,8 @@ protocol teams {
     map<Seqno,Probe> postProbes;
     // For each chain tail we audit, write down the corresponding linkID
     map<Seqno,LinkID> tails;
+    // For each hidden chain tail we audit, write down the corresponding linkID
+    map<Seqno,LinkID> hiddenTails;
 
     // If we just created this team, and it's implicit, then we can skip the audit
     // for a while (as dictated by the rootFreshness of the Audit Parameters).
@@ -746,6 +777,8 @@ protocol teams {
 
   // team.member_out_from_reset message body
   record TeamMemberOutFromReset {
+    @jsonkey("team_id")
+    TeamID teamID;
     @jsonkey("team_name")
     string teamName;
     @jsonkey("reset_user")
@@ -763,6 +796,8 @@ protocol teams {
     Seqno latestSeqno;
     @jsonkey("latest_hidden_seqno")
     Seqno latestHiddenSeqno;
+    @jsonkey("latest_offchain_seqno")
+    Seqno latestOffchainSeqno;
     @jsonkey("implicit_team")
     boolean implicitTeam;
     @jsonkey("misc")
@@ -786,6 +821,9 @@ protocol teams {
     UID uid;
     @jsonkey("eldest_seqno")
     Seqno eldestSeqno;
+    // NOTE: This comes from gregor, but should not be used during actual SBS
+    // resolution - always take inviteID and look at the actual invite from the
+    // sigchain.
     TeamRole role;
   }
 
@@ -971,6 +1009,11 @@ protocol teams {
     // Specify this flag if you want to force past the time-based cache,
     // currently set to one hour.
     boolean forceRefresh;
+
+    // Specify this flag to avoid raising an error if the server omits the hidden chain data.
+    // For example, restricted bots can use the FTL to obtain a team name, but cannot see the 
+    // hidden chain for such team.
+    boolean hiddenChainIsOptional;
   }
 
   record FastTeamLoadRes {
@@ -1047,8 +1090,11 @@ protocol teams {
   record TeamAddMemberResult {
     boolean invited;
     union{null, User} user;
-    boolean emailSent;
     boolean chatSending;
+  }
+
+  record TeamAddMembersResult {
+    array<User> notAdded;
   }
 
   record TeamJoinRequest {
@@ -1067,6 +1113,7 @@ protocol teams {
 
   record SubteamListEntry {
     TeamName name;
+    TeamID teamID;
     int memberCount;
   }
 
@@ -1127,6 +1174,10 @@ protocol teams {
 
   // A user can hope for success if and only if they are a member of
   // the team or an admin of any of its ancestors.
+  TeamDetails teamGetByID(int sessionID, TeamID id);
+
+  // A user can hope for success if and only if they are a member of
+  // the team or an admin of any of its ancestors.
   TeamDetails teamGet(int sessionID, string name);
 
   // Get the members of the team
@@ -1156,10 +1207,10 @@ protocol teams {
 
   void teamChangeMembership(int sessionID, string name, TeamChangeReq req);
 
-  TeamAddMemberResult teamAddMember(int sessionID, string name, string email, string username,
+  TeamAddMemberResult teamAddMember(int sessionID, TeamID teamID, string email, string phone, string username,
     TeamRole role, union { null, TeamBotSettings } botSettings, boolean sendChatNotification);
 
-  void teamAddMembers(int sessionID, string name, array<string> assertions, TeamRole role, union { null, TeamBotSettings } botSettings, boolean sendChatNotification);
+  TeamAddMembersResult teamAddMembers(int sessionID, TeamID teamID, array<string> assertions, TeamRole role, union { null, TeamBotSettings } botSettings, boolean sendChatNotification);
 
   record UserRolePair {
     string assertionOrEmail;
@@ -1167,9 +1218,11 @@ protocol teams {
     union { null, TeamBotSettings } botSettings;
   }
 
-  void teamAddMembersMultiRole(int sessionID, string name, array<UserRolePair> users, boolean sendChatNotification);
+  TeamAddMembersResult teamAddMembersMultiRole(int sessionID, TeamID teamID, array<UserRolePair> users, boolean sendChatNotification);
 
-  void teamRemoveMember(int sessionID, string name, string username, string email, TeamInviteID inviteID);
+  // allowInaction suppresses errors that come from removing an invite that doesn't exist. Relevant for suppressing errors when calling remove while a remove is already in progress.
+  // Note: allowInaction only applies to invite removals, just because that was what was needed.
+  void teamRemoveMember(int sessionID, TeamID teamID, string username, string email, TeamInviteID inviteID, boolean allowInaction);
 
   void teamLeave(int sessionID, string name, boolean permanent);
 
@@ -1207,7 +1260,7 @@ protocol teams {
   // This list is generated without loading each team, and is therefore server-trust.
   SubteamListResult teamGetSubteams(int sessionID, TeamName name);
 
-  void teamDelete(int sessionID, string name);
+  void teamDelete(int sessionID, TeamID teamID);
 
   void teamSetSettings(int sessionID, string name, TeamSettings settings);
 
@@ -1300,6 +1353,7 @@ protocol teams {
     boolean deleteOtherMessages;
     boolean deleteTeam;
     boolean pinMessage;
+    boolean manageBots;
   }
 
   record ProfileTeamLoadRes {
@@ -1329,6 +1383,7 @@ protocol teams {
   array<TeamProfileAddEntry> teamProfileAddList(int sessionID, string username);
 
   record TeamProfileAddEntry {
+    TeamID teamID;
     TeamName teamName;
     boolean open;
     // Reason for disabling selection.
@@ -1369,8 +1424,13 @@ protocol teams {
    */
   TeamID getTeamID(string teamName);
 
-  FastTeamLoadRes ftl(FastTeamLoadArg arg);
+  /**
+   Gets a TeamName from a team id string. Returns an error if the
+   current user can't read the team.
+   */
+  TeamName getTeamName(TeamID teamID);
 
+  FastTeamLoadRes ftl(FastTeamLoadArg arg);
 
   record MemberEmail {
     string email;
@@ -1381,4 +1441,52 @@ protocol teams {
     string username;
     string role;
   }
+
+  record TeamRolePair {
+    TeamRole role;
+    @jsonkey("implicit_role")
+    TeamRole implicitRole;
+  }
+
+  record TeamRoleMapAndVersion {
+    map<TeamID, TeamRolePair> teams;
+    @jsonkey("user_team_version")
+    UserTeamVersion version;
+  }
+
+  record TeamRoleMapStored {
+    TeamRoleMapAndVersion data;
+    Time cachedAt;
+  }
+
+  TeamRoleMapAndVersion getTeamRoleMap();
+
+  @typedef("int")
+  record UserTeamVersion {}
+
+  record UserTeamVersionUpdate {
+    UserTeamVersion version;
+  }
+
+  record AnnotatedTeamMemberDetails {
+    TeamMemberDetails details;
+    TeamRole role;
+  }
+
+  record AnnotatedTeam {
+    TeamID teamID;
+    string name;
+    SubteamListResult transitiveSubteamsUnverified;
+
+    array<AnnotatedTeamMemberDetails> members;
+    array<AnnotatedTeamInvite> invites;
+    array<TeamJoinRequest> joinRequests;
+
+    boolean userIsShowcasing;
+    boolean tarsDisabled;
+    TeamSettings settings;
+    TeamShowcase showcase;
+  }
+
+  AnnotatedTeam getAnnotatedTeam(TeamID teamID);
 }

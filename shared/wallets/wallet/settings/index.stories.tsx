@@ -4,9 +4,8 @@ import Settings from '.'
 import popups from './popups/index.stories'
 import * as Types from '../../../constants/types/wallets'
 import * as Constants from '../../../constants/wallets'
-import * as I from 'immutable'
 
-const testCurrencies = I.List([
+const testCurrencies = [
   {
     code: 'USD',
     description: 'USD ($)',
@@ -37,10 +36,11 @@ const testCurrencies = I.List([
     name: 'British Pount',
     symbol: '£',
   },
-]).map(c => Constants.currencyResultToCurrency(c))
+].map(c => Constants.currencyResultToCurrency(c))
 
 const externalPartner = {
   adminOnly: false,
+  canPurchase: false,
   description: 'Example description.',
   extra: 'Example extra.',
   iconFilename: 'iconfont-identity-stellar',
@@ -56,7 +56,6 @@ const sharedSettingsProps = {
   currencies: testCurrencies,
   currencyWaiting: false,
   externalPartners,
-  inflationDestination: '',
   mobileOnlyEditable: false,
   mobileOnlyMode: false,
   mobileOnlyWaiting: false,
@@ -68,7 +67,6 @@ const sharedSettingsProps = {
   onMobileOnlyModeChange: Sb.action('onMobileOnlyModeChange'),
   onSecretKeySeen: Sb.action('onSecretKeySeen'),
   onSetDefault: Sb.action('setDefault'),
-  onSetupInflation: Sb.action('onSetupInflation'),
   refresh: () => {},
   saveCurrencyWaiting: false,
   secretKey: 'NOTASECRETKEY',
@@ -79,14 +77,14 @@ const sharedSettingsProps = {
 
 const defaultSettingsProps = {
   ...sharedSettingsProps,
-  currency: testCurrencies.get(1) as Types.Currency,
+  currency: testCurrencies[1] as Types.Currency,
   isDefault: true,
   name: 'awesome account',
 }
 
 const secondarySettingsProps = {
   ...sharedSettingsProps,
-  currency: testCurrencies.get(0) as Types.Currency,
+  currency: testCurrencies[0] as Types.Currency,
   isDefault: false,
   mobileOnlyMode: true,
   name: 'some other account',
@@ -107,9 +105,6 @@ const load = () => {
   Sb.storiesOf('Wallets/Wallet/Settings', module)
     .addDecorator(provider)
     .add('Default', () => <Settings {...defaultSettingsProps} />)
-    .add('Default with inflation dest', () => (
-      <Settings {...defaultSettingsProps} inflationDestination="Stellar Development Foundation" />
-    ))
     .add("Not funded account (can't make tx)", () => (
       <Settings {...defaultSettingsProps} canSubmitTx={false} />
     ))

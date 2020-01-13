@@ -252,6 +252,7 @@ func (u *UIDMap) lookupFromServer(ctx context.Context, g libkb.UIDMapperContext,
 	start := g.GetClock().Now()
 	end := start.Add(networkTimeBudget)
 
+	g.GetLog().CDebugf(ctx, "looking up %d uids from server", len(uids))
 	var ret []libkb.UsernamePackage
 	for i := 0; i < len(uids); i += batchSize {
 		high := i + batchSize
@@ -352,9 +353,9 @@ func (u *UIDMap) InformOfEldestSeqno(ctx context.Context, g libkb.UIDMapperConte
 // lookup failed. A non-nil FullNamePackage means that some previous lookup
 // worked, but might be arbitrarily out of date (depending on the cachedAt
 // time). A non-nil FullNamePackage with an empty fullName field means that the
-// user just hasn't supplied a fullName.  FullNames can be cached bt the
-// UIDMap, but expire after networkTimeBudget duration. If that value is 0,
-// then infinitely stale names are allowed. If non-zero, and some names aren't
+// user just hasn't supplied a fullName. FullNames can be cached by the UIDMap,
+// but expire after networkTimeBudget duration. If that value is 0, then
+// infinitely stale names are allowed. If non-zero, and some names aren't
 // stale, we'll have to go to the network.
 //
 // *NOTE* that this function can return useful data and an error. In this
@@ -400,7 +401,6 @@ func (u *UIDMap) MapUIDsToUsernamePackages(ctx context.Context, g libkb.UIDMappe
 
 		apiResults, err = u.lookupFromServer(ctx, g, uidsToLookup, networkTimeBudget)
 		if err == nil {
-
 			for i, row := range apiResults {
 				uid := uidsToLookup[i]
 				if row.FullName != nil {
@@ -460,6 +460,18 @@ func (u *UIDMap) CheckUIDAgainstUsername(uid keybase1.UID, un libkb.NormalizedUs
 
 func (u *UIDMap) MapHardcodedUsernameToUID(un libkb.NormalizedUsername) keybase1.UID {
 	return findHardcodedUsername(un)
+}
+
+func (u *UIDMap) ClearUIDFullName(ctx context.Context, g libkb.UIDMapperContext, uid keybase1.UID) error {
+	u.Lock()
+	defer u.Unlock()
+
+	u.fullNameCache.Remove(uid)
+	key := fullNameDBKey(uid)
+	if err := g.GetKVStore().Delete(key); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (u *UIDMap) ClearUIDAtEldestSeqno(ctx context.Context, g libkb.UIDMapperContext, uid keybase1.UID, s keybase1.Seqno) error {
@@ -562,6 +574,10 @@ func (o *OfflineUIDMap) MapUIDsToUsernamePackages(ctx context.Context, g libkb.U
 
 func (o *OfflineUIDMap) SetTestingNoCachingMode(enabled bool) {
 
+}
+
+func (o *OfflineUIDMap) ClearUIDFullName(ctx context.Context, g libkb.UIDMapperContext, uid keybase1.UID) error {
+	return nil
 }
 
 func (o *OfflineUIDMap) ClearUIDAtEldestSeqno(ctx context.Context, g libkb.UIDMapperContext, uid keybase1.UID, s keybase1.Seqno) error {

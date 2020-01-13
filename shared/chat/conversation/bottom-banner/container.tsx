@@ -6,7 +6,7 @@ import * as Container from '../../../util/container'
 import * as Kb from '../../../common-adapters'
 import {InviteBanner} from '.'
 import openSMS from '../../../util/sms'
-import {showShareActionSheetFromURL} from '../../../actions/platform-specific'
+import {showShareActionSheet} from '../../../actions/platform-specific'
 
 const installMessage = `I sent you encrypted messages on Keybase. You can install it here: https://keybase.io/phone-app`
 
@@ -22,7 +22,7 @@ type Props = {
   openShareSheet: () => void
   openSMS: (email: string) => void
   onDismiss: () => void
-  usernameToContactName: {[username: string]: string}
+  usernameToContactName: Map<string, string>
 }
 
 const BannerContainer = (props: Props) => {
@@ -46,14 +46,17 @@ const BannerContainer = (props: Props) => {
 
 const mapStateToProps = (state: Container.TypedState, {conversationIDKey}: OwnProps) => {
   const _following = state.config.following
-  const _meta = Constants.getMeta(state, conversationIDKey)
+  const _participantInfo = Constants.getParticipantInfo(state, conversationIDKey)
   const _users = state.users
-  const _dismissed = state.chat2.dismissedInviteBannersMap.get(conversationIDKey, false)
+  const _dismissed = state.chat2.dismissedInviteBannersMap.get(conversationIDKey) || false
+  const meta = Constants.getMeta(state, conversationIDKey)
   return {
     _dismissed,
     _following,
-    _meta,
+    _participantInfo,
+    _teamType: meta.teamType,
     _users,
+    hasMessages: !meta.isEmpty,
   }
 }
 
@@ -68,21 +71,20 @@ export default Container.connect(
   (stateProps, dispatchProps, _: OwnProps) => {
     let type: Props['type']
     let users: Array<string> = []
-
-    if (stateProps._meta.teamType !== 'adhoc') {
+    if (stateProps._teamType !== 'adhoc') {
       type = 'none'
     } else {
-      const broken = stateProps._meta.participants.filter(
-        p => stateProps._users.infoMap.getIn([p, 'broken'], false) && stateProps._following.has(p)
+      const broken = stateProps._participantInfo.all.filter(
+        p => (stateProps._users.infoMap.get(p) || {broken: false}).broken && stateProps._following.has(p)
       )
-      if (!broken.isEmpty()) {
+      if (broken.length > 0) {
         type = 'broken'
-        users = broken.toArray()
+        users = broken
       } else {
-        const toInvite = stateProps._meta.participants.filter(p => p.includes('@'))
-        if (!toInvite.isEmpty()) {
+        const toInvite = stateProps._participantInfo.all.filter(p => p.includes('@'))
+        if (toInvite.length > 0) {
           type = 'invite'
-          users = toInvite.toArray()
+          users = toInvite
         } else {
           type = 'none'
         }
@@ -91,16 +93,16 @@ export default Container.connect(
 
     return {
       dismissed: stateProps._dismissed,
-      hasMessages: !stateProps._meta.isEmpty,
+      hasMessages: stateProps.hasMessages,
       onDismiss: dispatchProps.onDismiss,
       openSMS: (phoneNumber: string) => openSMS(['+' + phoneNumber], installMessage),
       openShareSheet: () =>
-        showShareActionSheetFromURL({
+        showShareActionSheet({
           message: installMessage,
           mimeType: 'text/plain',
         }),
       type,
-      usernameToContactName: stateProps._meta.participantToContactName.toObject(),
+      usernameToContactName: stateProps._participantInfo.contactName,
       users,
     }
   }

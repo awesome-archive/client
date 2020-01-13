@@ -49,6 +49,8 @@ const (
 	methodUnpin               = "unpin"
 	methodGetResetConvMembers = "getresetconvmembers"
 	methodAddResetConvMember  = "addresetconvmember"
+	methodGetDeviceInfo       = "getdeviceinfo"
+	methodListMembers         = "listmembers"
 )
 
 // ChatAPIHandler can handle all of the chat json api methods.
@@ -81,6 +83,8 @@ type ChatAPIHandler interface {
 	UnpinV1(context.Context, Call, io.Writer) error
 	GetResetConvMembersV1(context.Context, Call, io.Writer) error
 	AddResetConvMemberV1(context.Context, Call, io.Writer) error
+	GetDeviceInfoV1(context.Context, Call, io.Writer) error
+	ListMembersV1(context.Context, Call, io.Writer) error
 }
 
 // ChatAPI implements ChatAPIHandler and contains a ChatServiceHandler
@@ -140,11 +144,11 @@ func (c ChatMessage) Valid() bool {
 }
 
 type listOptionsV1 struct {
-	UnreadOnly  bool              `json:"unread_only,omitempty"`
-	TopicType   string            `json:"topic_type,omitempty"`
-	ShowErrors  bool              `json:"show_errors,omitempty"`
-	FailOffline bool              `json:"fail_offline,omitempty"`
-	Pagination  *chat1.Pagination `json:"pagination,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	UnreadOnly     bool   `json:"unread_only,omitempty"`
+	TopicType      string `json:"topic_type,omitempty"`
+	ShowErrors     bool   `json:"show_errors,omitempty"`
+	FailOffline    bool   `json:"fail_offline,omitempty"`
 }
 
 func (l listOptionsV1) Check() error {
@@ -545,6 +549,17 @@ func (o setUnfurlSettingsOptionsV1) Check() error {
 	return nil
 }
 
+type getDeviceInfoOptionsV1 struct {
+	Username string `json:"username"`
+}
+
+func (o getDeviceInfoOptionsV1) Check() error {
+	if len(o.Username) == 0 {
+		return errors.New("username required")
+	}
+	return nil
+}
+
 type advertiseCommandsOptionsV1 struct {
 	Alias          string `json:"alias,omitempty"`
 	Advertisements []chat1.AdvertiseCommandAPIParam
@@ -597,6 +612,15 @@ func (o unpinOptionsV1) Check() error {
 		return err
 	}
 	return nil
+}
+
+type listMembersOptionsV1 struct {
+	Channel        ChatChannel
+	ConversationID string `json:"conversation_id"`
+}
+
+func (r listMembersOptionsV1) Check() error {
+	return checkChannelConv(methodRead, r.Channel, r.ConversationID)
 }
 
 func (a *ChatAPI) ListV1(ctx context.Context, c Call, w io.Writer) error {
@@ -1020,6 +1044,36 @@ func (a *ChatAPI) AddResetConvMemberV1(ctx context.Context, c Call, w io.Writer)
 	return a.encodeReply(c, a.svcHandler.AddResetConvMemberV1(ctx, opts), w)
 }
 
+func (a *ChatAPI) GetDeviceInfoV1(ctx context.Context, c Call, w io.Writer) error {
+	if len(c.Params.Options) == 0 {
+		return ErrInvalidOptions{version: 1, method: methodGetDeviceInfo, err: errors.New("empty options")}
+	}
+	var opts getDeviceInfoOptionsV1
+	if err := json.Unmarshal(c.Params.Options, &opts); err != nil {
+		return err
+	}
+	if err := opts.Check(); err != nil {
+		return err
+	}
+	return a.encodeReply(c, a.svcHandler.GetDeviceInfoV1(ctx, opts), w)
+}
+
+func (a *ChatAPI) ListMembersV1(ctx context.Context, c Call, w io.Writer) error {
+	if len(c.Params.Options) == 0 {
+		return ErrInvalidOptions{version: 1, method: methodListMembers, err: errors.New("empty options")}
+	}
+	var opts listMembersOptionsV1
+	if err := json.Unmarshal(c.Params.Options, &opts); err != nil {
+		return err
+	}
+	if err := opts.Check(); err != nil {
+		return err
+	}
+
+	// opts are valid for list-members v1
+
+	return a.encodeReply(c, a.svcHandler.ListMembersV1(ctx, opts), w)
+}
 func (a *ChatAPI) encodeReply(call Call, reply Reply, w io.Writer) error {
 	return encodeReply(call, reply, w, a.indent)
 }

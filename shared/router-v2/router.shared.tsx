@@ -24,6 +24,7 @@ export const mobileTabs = [Tabs.peopleTab, Tabs.chatTab, Tabs.fsTab, Tabs.teamsT
 export const desktopTabs = [
   Tabs.peopleTab,
   Tabs.chatTab,
+  Tabs.cryptoTab,
   Tabs.fsTab,
   Tabs.teamsTab,
   Tabs.walletsTab,
@@ -112,7 +113,10 @@ export const oldActionToNewActions = (action: any, navigation: any, allowAppendD
       // TODO check for append dupes within these
       const actions = action.payload.actions.reduce(
         (arr, a) => [...arr, ...(oldActionToNewActions(a, navigation, true) || [])],
-        [StackActions.push({routeName: tabRoots[action.payload.tab]})]
+        // 'loggedOut' is the root
+        action.payload.tab === 'loggedOut'
+          ? []
+          : [StackActions.push({routeName: tabRoots[action.payload.tab]})]
       )
       return [
         StackActions.reset({

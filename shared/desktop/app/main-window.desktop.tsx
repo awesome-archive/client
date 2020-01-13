@@ -1,4 +1,5 @@
 import URL from 'url-parse'
+import * as SafeElectron from '../../util/safe-electron.desktop'
 import * as Electron from 'electron'
 import * as ConfigGen from '../../actions/config-gen'
 import * as fs from 'fs'
@@ -9,9 +10,9 @@ import {showDevTools} from '../../local-debug.desktop'
 import {guiConfigFilename, isDarwin, isWindows, defaultUseNativeFrame} from '../../constants/platform.desktop'
 import logger from '../../logger'
 import {resolveRootAsURL} from './resolve-root.desktop'
-import {debounce} from 'lodash-es'
+import debounce from 'lodash/debounce'
 
-const htmlFile = resolveRootAsURL('dist', `main${__DEV__ ? '.dev' : ''}.html`)
+let htmlFile = resolveRootAsURL('dist', `main${__DEV__ ? '.dev' : ''}.html`)
 
 const setupDefaultSession = () => {
   const ds = Electron.session.defaultSession
@@ -41,7 +42,7 @@ const defaultWindowState: WindowState = {
   dockHidden: false,
   height: 600,
   isFullScreen: false,
-  width: 800,
+  width: 810,
   windowHidden: false,
   x: 0,
   y: 0,
@@ -65,6 +66,30 @@ const setupWindowEvents = (win: Electron.BrowserWindow) => {
   win.on('close', saveWindowState)
   win.on('resize', saveWindowState)
   win.on('move', saveWindowState)
+
+  // workaround a bug on osx where resizing vertically messes up draggable areas!
+  if (isDarwin) {
+    let inResize = false
+    let oldWidth = 0
+    win.on('resize', () => {
+      // don't recurse
+      if (inResize) {
+        return
+      }
+      const winBounds = win.getNormalBounds()
+      const {height, width} = winBounds
+      // only happens if resizing vertically
+      if (width === oldWidth) {
+        inResize = true
+        setTimeout(() => {
+          win.setSize(width + 1, height)
+          win.setSize(width, height)
+          inResize = false
+        }, 100)
+      }
+      oldWidth = width
+    })
+  }
 
   const hideInsteadOfClose = (event: Electron.Event) => {
     event.preventDefault()
@@ -106,6 +131,8 @@ export const showDockIcon = () => changeDock(true)
 export const hideDockIcon = () => changeDock(false)
 
 let useNativeFrame = defaultUseNativeFrame
+let isDarkMode = false
+let darkModePreference = undefined
 
 /**
  * loads data that we normally save from configGuiSetValue. At this point the service might not exist so we must read it directly
@@ -123,6 +150,24 @@ const loadWindowState = () => {
 
     if (guiConfig.useNativeFrame !== undefined) {
       useNativeFrame = guiConfig.useNativeFrame
+    }
+
+    if (guiConfig.ui) {
+      const {darkMode} = guiConfig.ui
+      switch (darkMode) {
+        case 'system':
+          darkModePreference = darkMode
+          isDarkMode = SafeElectron.workingIsDarkMode()
+          break
+        case 'alwaysDark':
+          darkModePreference = darkMode
+          isDarkMode = true
+          break
+        case 'alwaysLight':
+          darkModePreference = darkMode
+          isDarkMode = false
+          break
+      }
     }
 
     const obj = JSON.parse(guiConfig.windowState)
@@ -241,11 +286,14 @@ export default () => {
   setupDefaultSession()
   loadWindowState()
 
+  // pass to main window
+  htmlFile = htmlFile + `?darkModePreference=${darkModePreference || ''}`
   const win = new Electron.BrowserWindow({
+    backgroundColor: isDarkMode ? '#191919' : '#ffffff',
     frame: useNativeFrame,
     height: windowState.height,
     minHeight: 600,
-    minWidth: 400,
+    minWidth: 740,
     show: false,
     webPreferences: {
       backgroundThrottling: false,

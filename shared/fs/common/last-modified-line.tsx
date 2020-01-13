@@ -9,12 +9,12 @@ export type LastModifiedLineProps = {
   mode: 'row' | 'default' | 'menu'
 }
 
-const Username = ({mode, lastWriter}) =>
+const Username = ({mode, lastWriter}: {mode: LastModifiedLineProps['mode']; lastWriter: string}) =>
   mode === 'row' && Styles.isMobile ? (
     <Kb.Text type="BodySmall">{lastWriter}</Kb.Text>
   ) : (
     <Kb.ConnectedUsernames
-      type="BodyTinyLink"
+      type={mode === 'menu' ? 'BodyTinyLink' : 'BodySmallSecondaryLink'}
       usernames={[lastWriter]}
       inline={true}
       onUsernameClicked="profile"

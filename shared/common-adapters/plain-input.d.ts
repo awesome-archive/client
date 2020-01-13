@@ -1,5 +1,5 @@
 import * as React from 'react'
-import {StylesCrossPlatform, globalMargins, StylesCrossPlatformWithSomeDisallowed} from '../styles'
+import {StylesCrossPlatform, globalMargins, CustomStyles} from '../styles'
 import {TextType} from './text'
 
 export type KeyboardType =
@@ -55,11 +55,7 @@ export type Selection = {
   end: number | null
 }
 
-export type DisallowedStyles = {
-  padding?: never
-}
-
-export type InputStyle = StylesCrossPlatformWithSomeDisallowed<DisallowedStyles>
+export type InputStyle = CustomStyles<'padding', {}>
 
 export type Props = {
   autoFocus?: boolean
@@ -75,6 +71,8 @@ export type Props = {
   // doesn't enforce on longer `props.value`s coming in
   maxBytes?: number
   multiline?: boolean
+  // Allows multiline to grow to fill the parent and have scrollbars
+  growAndScroll?: boolean
   onBlur?: () => void
   onChangeText?: (text: string) => void
   onFocus?: () => void
@@ -83,9 +81,10 @@ export type Props = {
   placeholderColor?: string
   rowsMin?: number
   rowsMax?: number
+  secureTextEntry?: boolean
   style?: InputStyle
   textType?: TextType
-  type?: 'password' | 'text'
+  type?: 'password' | 'text' | 'passwordVisible'
   value?: string // Makes this a controlled input when passed. Also disables mutating value via `transformText`, see note at component API,
   dummyInput?: boolean // Only affects mobile
   /* Platform discrepancies */
@@ -97,6 +96,7 @@ export type Props = {
   onKeyUp?: (event: React.KeyboardEvent, isComposingIME: boolean) => void
   // Mobile only
   children?: React.ReactNode
+  allowFontScaling?: boolean
   onKeyPress?: (event: {
     nativeEvent: {
       key: 'Enter' | 'Backspace' | string
@@ -105,6 +105,7 @@ export type Props = {
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'
   autoCorrect?: boolean
   keyboardType?: KeyboardType
+  resize?: boolean
   returnKeyType?: 'done' | 'go' | 'next' | 'search' | 'send'
   selectTextOnFocus?: boolean
   onEndEditing?: () => void

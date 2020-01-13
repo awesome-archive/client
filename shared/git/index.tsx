@@ -4,8 +4,8 @@ import * as Styles from '../styles'
 import Row from './row/container'
 
 export type Props = {
+  error?: Error
   expandedSet: Set<string>
-  clearBadges: () => void
   loading: boolean
   onShowDelete: (id: string) => void
   onNewPersonalRepo: () => void
@@ -16,13 +16,16 @@ export type Props = {
 }
 
 class Git extends React.Component<Props & Kb.OverlayParentProps, {}> {
-  private menuItems = [
-    {onClick: () => this.props.onNewPersonalRepo(), title: 'New personal repository'},
+  private menuItems: Kb.MenuItems = [
     {
-      disabled: Styles.isMobile,
-      onClick: Styles.isMobile ? undefined : () => this.props.onNewTeamRepo(),
-      style: Styles.isMobile ? {paddingLeft: 0, paddingRight: 0} : {},
-      title: `New team repository${Styles.isMobile ? ' (desktop only)' : ''}`,
+      icon: 'iconfont-person',
+      onClick: () => this.props.onNewPersonalRepo(),
+      title: 'New personal repository',
+    },
+    {
+      icon: 'iconfont-people',
+      onClick: () => this.props.onNewTeamRepo(),
+      title: 'New team repository',
     },
   ]
 
@@ -42,6 +45,7 @@ class Git extends React.Component<Props & Kb.OverlayParentProps, {}> {
   render() {
     return (
       <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.container}>
+        {!!this.props.error && <Kb.Banner color="red">{this.props.error.message}</Kb.Banner>}
         {Styles.isMobile && (
           <Kb.ClickableBox
             ref={this.props.setAttachmentRef}

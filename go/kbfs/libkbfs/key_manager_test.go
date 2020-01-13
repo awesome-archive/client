@@ -628,6 +628,7 @@ func testKeyManagerPromoteReaderSelf(t *testing.T, ver kbfsmd.MetadataVer) {
 	oldKeyGen := rmd.LatestKeyGeneration()
 
 	config2 := ConfigAsUser(config, "bob")
+	defer CheckConfigAndShutdown(ctx, t, config2)
 
 	// Pretend that bob@twitter now resolves to bob.
 	daemon := config2.KeybaseService().(*KeybaseDaemonLocal)
@@ -679,6 +680,7 @@ func testKeyManagerReaderRekeyShouldNotPromote(t *testing.T, ver kbfsmd.Metadata
 	require.False(t, hasWriterKey(t, rmd, charlieUID))
 
 	config2 := ConfigAsUser(config, "bob")
+	defer CheckConfigAndShutdown(ctx, t, config2)
 
 	// Pretend that charlie@twitter now resolves to charlie.
 	daemon := config2.KeybaseService().(*KeybaseDaemonLocal)
@@ -1066,6 +1068,10 @@ func testKeyManagerRekeyAddAndRevokeDevice(t *testing.T, ver kbfsmd.MetadataVer)
 
 	// meanwhile, device 3 should be able to read both the new and the
 	// old files
+	kbfsOps3 := config2Dev3.KBFSOps()
+	err = kbfsOps3.SyncFromServer(
+		ctx, rootNode2.GetFolderBranch(), nil)
+	require.NoError(t, err)
 	rootNode2Dev3 := GetRootNodeOrBust(ctx, t, config2Dev3, name, tlf.Private)
 
 	kbfsOps2Dev3 := config2Dev3.KBFSOps()

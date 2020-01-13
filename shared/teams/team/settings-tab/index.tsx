@@ -10,6 +10,7 @@ import {pluralize} from '../../../util/string'
 import RetentionPicker from './retention/container'
 
 type Props = {
+  canShowcase: boolean
   isBigTeam: boolean
   ignoreAccessRequests: boolean
   publicityAnyMember: boolean
@@ -30,7 +31,7 @@ type RolePickerProps = {
   onOpenRolePicker: () => void
   onSelectRole: (role: Types.TeamRoleType) => void
   newOpenTeamRole: Types.TeamRoleType
-  disabledReasonsForRolePicker: {[K in Types.TeamRoleType]: string}
+  disabledReasonsForRolePicker: {[K in Types.TeamRoleType]?: string}
 }
 
 type NewSettings = {
@@ -60,23 +61,23 @@ const SetMemberShowcase = (props: SettingProps) => (
   <Box style={{...globalStyles.flexBoxColumn, alignItems: 'flex-start', paddingRight: globalMargins.small}}>
     <Checkbox
       checked={props.newPublicityMember}
-      disabled={!props.yourOperations.setMemberShowcase}
+      disabled={!props.canShowcase}
       labelComponent={
         <Box style={{...globalStyles.flexBoxColumn}}>
           <Text
             style={{
-              color: props.yourOperations.setMemberShowcase ? globalColors.black : globalColors.black_50,
+              color: props.canShowcase ? globalColors.black : globalColors.black_50,
             }}
             type="Body"
           >
-            Publish team on your own profile
+            Feature team on your own profile
           </Text>
           <Text type="BodySmall">
-            {props.yourOperations.setMemberShowcase
+            {props.canShowcase
               ? 'Your profile will mention this team. Team description and number of members will be public.'
               : props.yourOperations.joinTeam
-              ? 'You must join this team to publish it on your profile.'
-              : "Admins aren't allowing members to publish this team on their profile."}
+              ? 'You must join this team to feature it on your profile.'
+              : "Admins aren't allowing members to feature this team on their profile."}
           </Text>
         </Box>
       }
@@ -93,7 +94,7 @@ const PublicityAnyMember = (props: SettingProps) =>
         checked={props.newPublicityAnyMember}
         labelComponent={
           <Box style={{...globalStyles.flexBoxColumn, flexShrink: 1}}>
-            <Text type="Body">Allow non-admin members to publish the team on their profile</Text>
+            <Text type="Body">Allow non-admin members to feature the team on their profile</Text>
             <Text type="BodySmall">Team descriptions and number of members will be public.</Text>
           </Box>
         }
@@ -302,7 +303,7 @@ export class Settings extends React.Component<Props, State> {
           alignSelf: 'stretch',
           flexBasis: 0,
           flexGrow: 1,
-          padding: globalMargins.medium,
+          padding: globalMargins.small,
         }}
       >
         <SetMemberShowcase {...this.props} {...this.state} setBoolSettings={this.setBoolSettings} />

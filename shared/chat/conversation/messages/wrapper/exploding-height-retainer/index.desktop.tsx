@@ -6,16 +6,13 @@ import {urlsToImgSet} from '../../../../../common-adapters/icon.desktop'
 import {Props} from '.'
 import SharedTimer, {SharedTimerID} from '../../../../../util/shared-timers'
 
-const explodedIllustration = resolveRootAsURL('../images/icons/pattern-ashes-desktop-400-68.png')
-const explodedIllustrationUrl = urlsToImgSet({'68': explodedIllustration}, 68)
-
 const copyChildren = (children: React.ReactNode): React.ReactNode =>
   // @ts-ignore
   React.Children.map(children, child => (child ? React.cloneElement(child) : child))
 
 export const animationDuration = 1500
 
-const retainedHeights = {}
+const retainedHeights = new Set<string>()
 
 type State = {
   animating: boolean
@@ -34,8 +31,8 @@ class ExplodingHeightRetainer extends React.PureComponent<Props, State> {
 
   componentDidMount() {
     // remeasure if we are already exploded
-    if (this.props.retainHeight && retainedHeights[this.props.messageKey] && this.props.measure) {
-      delete retainedHeights[this.props.messageKey]
+    if (this.props.retainHeight && retainedHeights.has(this.props.messageKey) && this.props.measure) {
+      retainedHeights.delete(this.props.messageKey)
       this.props.measure()
     }
   }
@@ -63,7 +60,7 @@ class ExplodingHeightRetainer extends React.PureComponent<Props, State> {
     if (node instanceof HTMLElement) {
       const height = node.clientHeight
       if (height && height !== this.state.height) {
-        retainedHeights[this.props.messageKey] = true
+        retainedHeights.add(this.props.messageKey)
         this.setState({height})
       }
     }
@@ -188,22 +185,29 @@ class Flame extends React.Component<{}, {color: string; timer: number; width: nu
   }
 }
 
+const explodedIllustrationUrl = (): string =>
+  Styles.isDarkMode()
+    ? urlsToImgSet({'68': resolveRootAsURL('../images/icons/dark-pattern-ashes-desktop-400-68.png')}, 68)
+    : urlsToImgSet({'68': resolveRootAsURL('../images/icons/pattern-ashes-desktop-400-68.png')}, 68)
+
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      ashBox: {
-        backgroundColor: Styles.globalColors.white, // exploded messages don't have hover effects and we need to cover the message
-        backgroundImage: explodedIllustrationUrl,
-        backgroundRepeat: 'repeat',
-        backgroundSize: '400px 68px',
-        bottom: 0,
-        left: 0,
-        overflow: 'hidden',
-        position: 'absolute',
-        top: 0,
-        transition: `width 0s`,
-        width: 0,
-      },
+      ashBox: Styles.platformStyles({
+        isElectron: {
+          backgroundColor: Styles.globalColors.white, // exploded messages don't have hover effects and we need to cover the message
+          backgroundImage: explodedIllustrationUrl(),
+          backgroundRepeat: 'repeat',
+          backgroundSize: '400px 68px',
+          bottom: 0,
+          left: 0,
+          overflow: 'hidden',
+          position: 'absolute',
+          top: 0,
+          transition: `width 0s`,
+          width: 0,
+        },
+      }),
       container: {...Styles.globalStyles.flexBoxColumn, flex: 1},
       exploded: Styles.platformStyles({
         isElectron: {
@@ -233,13 +237,15 @@ const styles = Styles.styleSheetCreate(
 )
 
 // @ts-ignore
-const AshBox = Styles.styled.div({
-  '&.full-width': {
-    overflow: 'visible',
-    transition: `width ${animationDuration}ms linear`,
-    width: '100%',
+const AshBox = Styles.styled.div(
+  {
+    '&.full-width': {
+      overflow: 'visible',
+      transition: `width ${animationDuration}ms linear`,
+      width: '100%',
+    },
   },
-  ...styles.ashBox,
-})
+  () => styles.ashBox
+)
 
 export default ExplodingHeightRetainer

@@ -4,7 +4,8 @@
     "import * as Types from '../constants/types/chat2'",
     "import * as TeamsTypes from '../constants/types/teams'",
     "import HiddenString from '../util/hidden-string'",
-    "import {RetentionPolicy} from '../constants/types/retention-policy'"
+    "import {RetentionPolicy} from '../constants/types/retention-policy'",
+    "import {AmpTracker} from '../chat/audio/amptracker'"
   ],
   "actions": {
     "toggleSmallTeamsExpanded": {},
@@ -41,10 +42,14 @@
         "'teamChat'", // from team
         "'addedToChannel'", // just added people to this channel
         "'teamMention'" // from team mention
-      ]
+      ],
+      "navKey?": "string"
     },
     // Got an error while creating a conversation.
     "conversationErrored": {
+      "allowedUsers": "Array<string>",
+      "code": "number",
+      "disallowedUsers": "Array<string>",
       "message": "string"
     },
     // Select an existing conversation or setup an empty one. Can either be adhoc or a tlf (adhoc or team)
@@ -75,7 +80,9 @@
         "'sentPayment'",
         "'requestedPayment'",
         "'teamMention'",
-        "'appLink'"
+        "'appLink'",
+        "'search'",
+        "'journeyCardPopular'"
       ]
     },
     "createConversation": {
@@ -101,7 +108,8 @@
         "'joinedAConversation'",
         "'leftAConversation'",
         "'teamTypeChanged'",
-        "'maybeKickedFromTeam'"
+        "'maybeKickedFromTeam'",
+        "'widgetRefresh'"
       ]
     },
     // We want to unbox an inbox row
@@ -119,18 +127,31 @@
     "metaRequestTrusted": {
       "force?": "boolean",
       "noWaiting?": "boolean",
+      "reason": [
+        "'refreshPreviousSelected'",
+        "'requestTeamsUnboxing'",
+        "'inboxSynced'",
+        "'setConvRetention'",
+        "'subTeamRename'",
+        "'tlfFinalize'",
+        "'threadStale'",
+        "'membersUpdate'",
+        "'scroll'",
+        "'ensureSelectedMeta'",
+        "'ensureWidgetMetas'",
+        "'inboxSearchResults'"
+      ],
       "conversationIDKeys": "Array<Types.ConversationIDKey>"
     },
     // Got some new inbox rows
     "metasReceived": {
       "metas": "Array<Types.ConversationMeta>",
       "removals?": "Array<Types.ConversationIDKey>", // convs to remove
-      "neverCreate?": "boolean", // If true never create a brand new meta, only update
-      "clearExistingMetas?": "boolean", // If true, clear out the existing metaMap before inserting
-      "clearExistingMessages?": "boolean", // If true, clear out any message data we already have.
       "fromInboxRefresh?": "boolean", // If true from an inbox refresh
       "initialTrustedLoad?": "boolean" // If true this is the first trusted inbox load
     },
+    "clearMetas": {},
+    "clearMessages": {},
     // Got some inbox errors
     "metaReceivedError": {
       "conversationIDKey": "Types.ConversationIDKey",
@@ -167,6 +188,7 @@
     "messageErrored": {
       "conversationIDKey": "Types.ConversationIDKey",
       "reason": "string",
+      "errorTyp": "number | null",
       "outboxID": "Types.OutboxID"
     },
     // Start editing a message / or edit the last message / or clear editing
@@ -197,9 +219,9 @@
       "conversationIDKey": "Types.ConversationIDKey",
       "messageID": "RPCChatTypes.MessageID",
       "text": "HiddenString",
-      "mentionsAt": "I.Set<string>",
+      "mentionsAt": "Set<string>",
       "mentionsChannel": "'none' | 'all' | 'here'",
-      "mentionsChannelName": "I.Map<string, Types.ConversationIDKey>"
+      "mentionsChannelName": "Map<string, Types.ConversationIDKey>"
     },
     "pendingMessageWasEdited": {
       "conversationIDKey": "Types.ConversationIDKey",
@@ -211,7 +233,7 @@
       "conversationIDKey": "Types.ConversationIDKey",
       "messageIDs?": "Array<RPCChatTypes.MessageID>",
       "upToMessageID?": "RPCChatTypes.MessageID", // expunge calls give us a message we should delete up to (don't delete it)
-      "deletableMessageTypes?": "I.Set<Types.MessageType>", // expunge calls don't delete _all_ messages, only these types
+      "deletableMessageTypes?": "Set<Types.MessageType>", // expunge calls don't delete _all_ messages, only these types
       "ordinals?": "Array<Types.Ordinal>"
     },
     "messagesExploded": {
@@ -251,7 +273,13 @@
     "messageSend": {
       "conversationIDKey": "Types.ConversationIDKey",
       "text": "HiddenString",
-      "replyTo?": "Types.MessageID"
+      "replyTo?": "Types.MessageID",
+      "waitingKey?": "string"
+    },
+    "messageSendByUsernames": {
+      "usernames": "string",
+      "text": "HiddenString",
+      "waitingKey?": "string"
     },
     "toggleLocalReaction": {
       "_description": "Toggle a reaction in the store.",
@@ -327,8 +355,8 @@
     // We saved an attachment to the local disk
     "attachmentDownloaded": {
       "message": "Types.Message",
-      "path?": "string",
-      "canError": {"error": "string", "message": "Types.Message"}
+      "error?": "string",
+      "path?": "string"
     },
     // We want to upload some attachments
     "attachmentsUpload": {
@@ -383,10 +411,7 @@
       "updateType": "RPCChatTypes.StaleUpdateType"
     },
     // Navigation helpers. Nav is slightly different on mobile / desktop
-    "navigateToInbox": {
-      "avoidConversationID?": "Types.ConversationIDKey",
-      "findNewConversation": "boolean"
-    },
+    "navigateToInbox": {},
     "navigateToThread": {},
     // Share to external app on mobile
     "messageAttachmentNativeShare": {
@@ -543,10 +568,8 @@
     },
     "setPaymentConfirmInfo": {
       "_description": "Set the payment confirm modal payment data",
-      "summary": "RPCChatTypes.UIChatPaymentSummary",
-      "canError": {
-        "error": "RPCTypes.Status"
-      }
+      "error?": "RPCTypes.Status",
+      "summary?": "RPCChatTypes.UIChatPaymentSummary"
     },
     "confirmScreenResponse": {
       "_description": "User responded to the chat Stellar confirm screen",
@@ -555,7 +578,7 @@
     "setUnsentText": {
       "_description": "Set unsent text for a conversation",
       "conversationIDKey": "Types.ConversationIDKey",
-      "text": "HiddenString | null"
+      "text?": "HiddenString"
     },
     "setPrependText": {
       "_description": "Set prepend text for a conversation",
@@ -645,7 +668,7 @@
     },
     "inboxSearchNameResults": {
       "_description": "Inbox search name results received",
-      "results": "I.List<Types.InboxSearchConvHit>",
+      "results": "Array<Types.InboxSearchConvHit>",
       "unread": "boolean"
     },
     "inboxSearchTextResult": {
@@ -747,6 +770,133 @@
     "updateLastCoord": {
       "_description": "Update last known coordinate",
       "coord": "Types.Coordinate"
+    },
+    "toggleGiphyPrefill": {
+      "_description": "Toggle /giphy text to trigger preview window",
+      "conversationIDKey": "Types.ConversationIDKey"
+    },
+    "setChannelSearchText": {
+      "_description": "Set filter for channel search",
+      "text": "string"
+    },
+    "updateBlockButtons": {
+      "_description": "Show or hide invitation to block for a given team ID",
+      "teamID": "RPCTypes.TeamID",
+      "adder?": "string",
+      "show": "boolean"
+    },
+    "dismissBlockButtons": {
+      "teamID": "RPCTypes.TeamID"
+    },
+    "setInboxNumSmallRows": {
+      "ignoreWrite?": "boolean",
+      "rows": "number"
+    },
+    "enableAudioRecording": {
+      "conversationIDKey": "Types.ConversationIDKey",
+      "meteringCb": "(amp: number) => void"
+    },
+    "attemptAudioRecording": {
+      "conversationIDKey": "Types.ConversationIDKey",
+      "meteringCb": "(amp: number) => void"
+    },
+    "stopAudioRecording": {
+      "conversationIDKey": "Types.ConversationIDKey",
+      "stopType": "Types.AudioStopType",
+      "amps?": "AmpTracker"
+    },
+    "lockAudioRecording": {
+      "conversationIDKey": "Types.ConversationIDKey"
+    },
+    "sendAudioRecording": {
+      "conversationIDKey": "Types.ConversationIDKey",
+      "fromStaged": "boolean",
+      "info": "Types.AudioRecordingInfo"
+    },
+    "setAudioRecordingPostInfo": {
+      "conversationIDKey": "Types.ConversationIDKey",
+      "path": "string",
+      "outboxID": "Buffer"
+    },
+    "loadNextBotPage": {
+      "_description": "loads next page of featured bots from backend",
+      "pageSize": "number"
+    },
+    "setLoadedBotPage": {
+      "_description": "set page # for a conversation",
+      "page": "number"
+    },
+    "refreshBotPublicCommands": {
+      "_description": "refresh bot public commands",
+      "username": "string"
+    },
+    "setBotPublicCommands": {
+      "_description": "set bot public commands",
+      "username": "string",
+      "commands": "Types.BotPublicCommands"
+    },
+    "addBotMember": {
+      "_description": "add bot member to channel",
+      "conversationIDKey": "Types.ConversationIDKey",
+      "convs?": "Array<string>",
+      "allowCommands": "boolean",
+      "allowMentions": "boolean",
+      "username": "string",
+      "restricted": "boolean"
+    },
+    "refreshBotSettings": {
+      "_description": "refresh bot settings",
+      "conversationIDKey": "Types.ConversationIDKey",
+      "username": "string"
+    },
+    "setBotSettings": {
+      "_description": "set bot settings",
+      "conversationIDKey": "Types.ConversationIDKey",
+      "username": "string",
+      "settings": "RPCTypes.TeamBotSettings"
+    },
+    "removeBotMember": {
+      "_description": "remove a bot member",
+      "conversationIDKey": "Types.ConversationIDKey",
+      "username": "string"
+    },
+    "editBotSettings": {
+      "_description": "edit bot settings",
+      "conversationIDKey": "Types.ConversationIDKey",
+      "username": "string",
+      "allowCommands": "boolean",
+      "allowMentions": "boolean",
+      "convs?": "Array<string>"
+    },
+    "loadMoreSmalls": {
+      "_description": "Tell the service to give us more small teams"
+    },
+    "resetSmalls": {
+      "_description": "Tell the service to revert to default number of small teams"
+    },
+    "setParticipants": {
+      "_description": "Set conversation participant info",
+      "participants": "Array<{conversationIDKey: Types.ConversationIDKey, participants: Types.ParticipantInfo}>"
+    },
+    "findGeneralConvIDFromTeamID": {
+      "_description": "Get the general channel conv ID from team ID",
+      "teamID": "TeamsTypes.TeamID"
+    },
+    "setGeneralConvFromTeamID": {
+      "_description": "Record teamID to general convID mapping",
+      "teamID": "TeamsTypes.TeamID",
+      "conversationIDKey": "Types.ConversationIDKey"
+    },
+    "refreshBotRoleInConv": {
+      "_description": "Refresh role in conversation",
+      "conversationIDKey": "Types.ConversationIDKey",
+      "username": "string"
+    },
+    "setBotRoleInConv": {
+      "_description": "Set bot role in conversation",
+      "conversationIDKey": "Types.ConversationIDKey",
+      "username": "string",
+      "role": "TeamsTypes.TeamRoleType | null"
     }
   }
 }

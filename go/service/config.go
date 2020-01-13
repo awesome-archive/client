@@ -9,8 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -105,6 +105,8 @@ func (h ConfigHandler) setValue(_ context.Context, arg keybase1.SetValueArg, w l
 		err = w.SetStringAtPath(arg.Path, *arg.Value.S)
 	case arg.Value.I != nil:
 		err = w.SetIntAtPath(arg.Path, *arg.Value.I)
+	case arg.Value.F != nil:
+		err = w.SetFloatAtPath(arg.Path, *arg.Value.F)
 	case arg.Value.B != nil:
 		err = w.SetBoolAtPath(arg.Path, *arg.Value.B)
 	case arg.Value.O != nil:
@@ -264,11 +266,7 @@ func mergeIntoPath(g *libkb.GlobalContext, p2 string) error {
 }
 
 func (h ConfigHandler) HelloIAm(_ context.Context, arg keybase1.ClientDetails) error {
-	tmp := fmt.Sprintf("%v", arg.Argv)
-	re := regexp.MustCompile(`\b(chat|fs|encrypt|git|accept-invite|wallet\s+send|wallet\s+import|passphrase\s+check)\b`)
-	if mtch := re.FindString(tmp); len(mtch) > 0 {
-		arg.Argv = []string{arg.Argv[0], mtch, "(redacted)"}
-	}
+	arg.Redact()
 	h.G().Log.Debug("HelloIAm: %d - %v", h.connID, arg)
 	return h.G().ConnectionManager.Label(h.connID, arg)
 }
@@ -319,14 +317,24 @@ func (h ConfigHandler) GetBootstrapStatus(ctx context.Context, sessionID int) (k
 		return keybase1.BootstrapStatus{}, err
 	}
 	status := eng.Status()
-	addr, err := h.svc.httpSrv.Addr()
-	if err != nil {
-		h.G().Log.CDebugf(ctx, "GetBootstrapStatus: failed to get HTTP server address: %s", err)
-	} else {
-		status.HttpSrvInfo = &keybase1.HttpSrvInfo{
-			Address: addr,
-			Token:   h.svc.httpSrv.Token(),
+	h.G().Log.CDebugf(ctx, "GetBootstrapStatus: attempting to get HTTP server address")
+	for i := 0; i < 40; i++ { // wait at most 2 seconds
+		addr, err := h.svc.httpSrv.Addr()
+		if err != nil {
+			h.G().Log.CDebugf(ctx, "GetBootstrapStatus: failed to get HTTP server address: %s", err)
+		} else {
+			h.G().Log.CDebugf(ctx, "GetBootstrapStatus: http server: addr: %s token: %s", addr,
+				h.svc.httpSrv.Token())
+			status.HttpSrvInfo = &keybase1.HttpSrvInfo{
+				Address: addr,
+				Token:   h.svc.httpSrv.Token(),
+			}
+			break
 		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if status.HttpSrvInfo == nil {
+		h.G().Log.CDebugf(ctx, "GetBootstrapStatus: failed to get HTTP srv info after max attempts")
 	}
 	return status, nil
 }
@@ -337,11 +345,20 @@ func (h ConfigHandler) RequestFollowerInfo(ctx context.Context, uid keybase1.UID
 }
 
 func (h ConfigHandler) GetRememberPassphrase(ctx context.Context, sessionID int) (bool, error) {
-	return h.G().Env.RememberPassphrase(), nil
+	username := h.G().Env.GetUsername()
+	if username.IsNil() {
+		h.G().Log.CDebugf(ctx, "GetRememberPassphrase: got nil username; using legacy remember_passphrase setting")
+	}
+	return h.G().Env.GetRememberPassphrase(username), nil
 }
 
 func (h ConfigHandler) SetRememberPassphrase(ctx context.Context, arg keybase1.SetRememberPassphraseArg) error {
 	m := libkb.NewMetaContext(ctx, h.G())
+
+	username := m.G().Env.GetUsername()
+	if username.IsNil() {
+		m.Debug("SetRememberPassphrase: got nil username; using legacy remember_passphrase setting")
+	}
 	remember, err := h.GetRememberPassphrase(ctx, arg.SessionID)
 	if err != nil {
 		return err
@@ -353,7 +370,7 @@ func (h ConfigHandler) SetRememberPassphrase(ctx context.Context, arg keybase1.S
 
 	// set the config variable
 	w := h.G().Env.GetConfigWriter()
-	if err := w.SetRememberPassphrase(arg.Remember); err != nil {
+	if err := w.SetRememberPassphrase(username, arg.Remember); err != nil {
 		return err
 	}
 	err = h.G().ConfigReload()
@@ -361,13 +378,12 @@ func (h ConfigHandler) SetRememberPassphrase(ctx context.Context, arg keybase1.S
 		return err
 	}
 
-	// replace the secret store
 	if err := h.G().ReplaceSecretStore(ctx); err != nil {
 		m.Debug("error replacing secret store for SetRememberPassphrase(%v): %s", arg.Remember, err)
 		return err
 	}
 
-	m.Debug("SetRememberPassphrase(%v) success", arg.Remember)
+	m.Debug("SetRememberPassphrase(%s, %v) success", username.String(), arg.Remember)
 
 	return nil
 }
@@ -505,4 +521,20 @@ func (h ConfigHandler) AppendGUILogs(ctx context.Context, content string) error 
 	}
 	_, err := io.WriteString(wr, content)
 	return err
+}
+
+func (h ConfigHandler) GenerateWebAuthToken(ctx context.Context) (ret string, err error) {
+	if err := assertLoggedIn(ctx, h.G()); err != nil {
+		return ret, err
+	}
+
+	nist, err := h.G().ActiveDevice.NISTWebAuthToken(ctx)
+	if err != nil {
+		return ret, err
+	}
+	if nist == nil {
+		return ret, fmt.Errorf("cannot generate a token when you are logged off")
+	}
+	uri := libkb.SiteURILookup[h.G().Env.GetRunMode()] + "/_/login/nist?tok=" + nist.Token().String()
+	return uri, nil
 }

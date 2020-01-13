@@ -6,6 +6,8 @@ import installer from './installer.desktop'
 import menuBar from './menu-bar.desktop'
 import menuHelper from './menu-helper.desktop'
 import os from 'os'
+import fs from 'fs'
+import path from 'path'
 import * as ConfigGen from '../../actions/config-gen'
 import * as DeeplinksGen from '../../actions/deeplinks-gen'
 import * as SafeElectron from '../../util/safe-electron.desktop'
@@ -17,7 +19,7 @@ import {quit} from './ctl.desktop'
 import logger from '../../logger'
 import {resolveRootAsURL} from './resolve-root.desktop'
 
-let mainWindow: (ReturnType<typeof MainWindow>) | null = null
+let mainWindow: ReturnType<typeof MainWindow> | null = null
 let appStartedUp = false
 let startupURL: string | null = null
 
@@ -169,6 +171,13 @@ let menubarWindowID = 0
 
 type Action =
   | {type: 'appStartedUp'}
+  | {
+      type: 'activeChanged'
+      payload: {
+        changedAtMs: number
+        isUserActive: boolean
+      }
+    }
   | {type: 'requestStartService'}
   | {type: 'closeWindows'}
   | {
@@ -213,10 +222,28 @@ const findRemoteComponent = (windowComponent: string, windowParam: string) => {
 const plumbEvents = () => {
   Electron.app.on('KBkeybase' as any, (_: string, action: Action) => {
     switch (action.type) {
+      case 'activeChanged':
+        // the installer reads this file to understand the gui state to not interrupt
+        // TODO change how this works
+        try {
+          fs.writeFileSync(
+            path.join(SafeElectron.getApp().getPath('userData'), 'app-state.json'),
+            JSON.stringify({
+              changedAtMs: action.payload.changedAtMs,
+              isUserActive: action.payload.isUserActive,
+            }),
+            {encoding: 'utf8'}
+          )
+        } catch (e) {
+          console.warn('update app state failed' + e)
+        }
+        break
       case 'appStartedUp':
         appStartedUp = true
         if (menubarWindowID) {
           mainWindowDispatch(ConfigGen.createUpdateMenubarWindowID({id: menubarWindowID}))
+          // reset it
+          menubarWindowID = 0
         }
         if (startupURL) {
           // Mac calls open-url for a launch URL before redux is up, so we
@@ -258,7 +285,7 @@ const plumbEvents = () => {
         break
       }
       case 'makeRenderer': {
-        const defaultWindowOpts = {
+        const opts = {
           frame: false,
           fullscreen: false,
           height: 300,
@@ -270,12 +297,10 @@ const plumbEvents = () => {
             nodeIntegrationInWorker: false,
           },
           width: 500,
+          ...action.payload.windowOpts,
         }
 
-        const remoteWindow = new Electron.BrowserWindow({
-          ...defaultWindowOpts,
-          ...action.payload.windowOpts,
-        })
+        const remoteWindow = new Electron.BrowserWindow(opts)
 
         if (action.payload.windowPositionBottomRight && Electron.screen.getPrimaryDisplay()) {
           const {width, height} = Electron.screen.getPrimaryDisplay().workAreaSize
@@ -337,7 +362,13 @@ const start = () => {
 
   // Load menubar and get its browser window id so we can tell the main window
   menuBar(id => {
-    menubarWindowID = id
+    // its possible the app started up way before we get this id in rare cases
+    if (appStartedUp && id) {
+      mainWindowDispatch(ConfigGen.createUpdateMenubarWindowID({id}))
+    } else {
+      // else stash it for later
+      menubarWindowID = id
+    }
   })
 
   plumbEvents()

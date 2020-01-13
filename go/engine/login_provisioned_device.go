@@ -73,7 +73,8 @@ func (e *LoginProvisionedDevice) loadMe(m libkb.MetaContext) (err error) {
 
 	var config *libkb.UserConfig
 	var nu libkb.NormalizedUsername
-	loadUserArg := libkb.NewLoadUserArgWithMetaContext(m).WithPublicKeyOptional().WithForcePoll(true)
+	loadUserArg := libkb.NewLoadUserArgWithMetaContext(m).
+		WithPublicKeyOptional().WithForcePoll(true).WithStaleOK(true)
 	if len(e.username) == 0 {
 		m.Debug("| using current username")
 		config, err = m.G().Env.GetConfig().GetUserConfig()
@@ -295,4 +296,9 @@ func (e *LoginProvisionedDevice) connectivityWarning(m libkb.MetaContext) {
 			m.Debug("after CheckReachability(), IsConnected() => %v (connected? %v)", connected, connected == libkb.ConnectivityMonitorYes)
 		}
 	}
+}
+
+// Returns the username that the user typed during the engine's execution
+func (e *LoginProvisionedDevice) GetUsername() libkb.NormalizedUsername {
+	return e.username
 }

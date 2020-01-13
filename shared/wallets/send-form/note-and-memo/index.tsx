@@ -137,7 +137,7 @@ class SecretNote extends React.Component<SecretNoteProps, SecretNoteState> {
               <Kb.Icon
                 boxStyle={styles.emojiIcon}
                 onClick={this._emojiPickerToggle}
-                style={Kb.iconCastPlatformStyles(styles.emojiIcon)}
+                style={styles.emojiIcon}
                 type="iconfont-emoji"
                 ref={this._emojiIcon}
               />
@@ -226,10 +226,18 @@ const styles = Styles.styleSheetCreate(
       flexOne: {
         flex: 1,
       },
-      input: {
-        backgroundColor: Styles.globalColors.white,
-        color: Styles.globalColors.black_on_white,
-      },
+      input: Styles.platformStyles({
+        common: {
+          backgroundColor: Styles.globalColors.white,
+          color: Styles.globalColors.black_on_white,
+        },
+        isElectron: {
+          // Line height change is so that emojis (unicode characters inside
+          // textarea) are not clipped at the top. This change is accompanied by
+          // a change in padding to offset the increased line height
+          lineHeight: '22px',
+        },
+      }),
       inputDisabled: {
         backgroundColor: Styles.globalColors.white,
         color: Styles.globalColors.greyDarker,

@@ -7,32 +7,29 @@ import * as Container from '../../../util/container'
 import {HeaderHoc} from '../../../common-adapters'
 import {createShowUserProfile} from '../../../actions/profile-gen'
 import {TeamMember, MemberProps} from '.'
-import {
-  getCanPerform,
-  getTeamMembers,
-  teamWaitingKey,
-  getDisabledReasonsForRolePicker,
-  hasCanPerform,
-} from '../../../constants/teams'
+import * as Constants from '../../../constants/teams'
 import {anyWaiting} from '../../../constants/waiting'
 
-type OwnProps = Container.RouteProps<{username: string; teamname: string}>
+type OwnProps = Container.RouteProps<{username: string; teamID: Types.TeamID}>
 
 const mapStateToProps = (state: Container.TypedState, ownProps: OwnProps) => {
   const username = Container.getRouteProps(ownProps, 'username', '')
-  const teamname = Container.getRouteProps(ownProps, 'teamname', '')
-  const disabledReasonsForRolePicker = getDisabledReasonsForRolePicker(state, teamname, username)
+  const teamID = Container.getRouteProps(ownProps, 'teamID', '')
+  const teamDetails = Constants.getTeamDetails(state, teamID)
+  const {teamname} = teamDetails
+  const disabledReasonsForRolePicker = Constants.getDisabledReasonsForRolePicker(state, teamID, username)
 
   return {
-    _memberInfo: getTeamMembers(state, teamname),
+    _memberInfo: teamDetails.members,
     _username: username,
     _you: state.config.username,
     disabledReasonsForRolePicker,
     follower: state.config.followers.has(username),
     following: state.config.following.has(username),
-    loading: anyWaiting(state, teamWaitingKey(teamname)) || !hasCanPerform(state, teamname),
-    teamname: teamname,
-    yourOperations: getCanPerform(state, teamname),
+    loading: anyWaiting(state, Constants.teamWaitingKey(teamname)),
+    teamID,
+    teamname,
+    yourOperations: Constants.getCanPerform(state, teamname),
   }
 }
 
@@ -42,19 +39,26 @@ const mapDispatchToProps = (dispatch: Container.TypedDispatch, ownProps: OwnProp
   },
   _onEditRole: (teamname: string, username: string, role: Types.TeamRoleType) =>
     dispatch(TeamsGen.createEditMembership({role, teamname, username})),
-  _onLeaveTeam: (teamname: string) => {
-    dispatch(
-      RouteTreeGen.createNavigateAppend({path: [{props: {teamname}, selected: 'teamReallyLeaveTeam'}]})
-    )
-  },
-  _onRemoveMember: (teamname: string, username: string) => {
+  _onRemoveMember: (teamID: Types.TeamID, username: string) => {
     dispatch(
       RouteTreeGen.createNavigateAppend({
-        path: [{props: {teamname, username}, selected: 'teamReallyRemoveMember'}],
+        path: [{props: {teamID, username}, selected: 'teamReallyRemoveMember'}],
       })
     )
   },
   onBack: () => dispatch(RouteTreeGen.createNavigateUp()),
+  onLeaveTeam: () => {
+    dispatch(
+      RouteTreeGen.createNavigateAppend({
+        path: [
+          {
+            props: {teamID: Container.getRouteProps(ownProps, 'teamID', Types.noTeamID)},
+            selected: 'teamReallyLeaveTeam',
+          },
+        ],
+      })
+    )
+  },
   onOpenProfile: () =>
     dispatch(createShowUserProfile({username: Container.getRouteProps(ownProps, 'username', '')})),
 })
@@ -97,8 +101,8 @@ export default Container.connect(
   mapDispatchToProps,
   (stateProps, dispatchProps, _: OwnProps) => {
     // Gather contextual team membership info
-    const yourInfo = stateProps._memberInfo.get(stateProps._you)
-    const userInfo: Types.MemberInfo | undefined = stateProps._memberInfo.get(stateProps._username)
+    const yourInfo = stateProps._memberInfo && stateProps._memberInfo.get(stateProps._you)
+    const userInfo = stateProps._memberInfo && stateProps._memberInfo.get(stateProps._username)
     const you = {
       type: yourInfo ? yourInfo.type : null,
       username: stateProps._you,
@@ -125,9 +129,9 @@ export default Container.connect(
       onOpenProfile: dispatchProps.onOpenProfile,
       onRemoveMember: () => {
         if (stateProps._username === stateProps._you) {
-          dispatchProps._onLeaveTeam(stateProps.teamname)
+          dispatchProps.onLeaveTeam()
         } else {
-          dispatchProps._onRemoveMember(stateProps.teamname, stateProps._username)
+          dispatchProps._onRemoveMember(stateProps.teamID, stateProps._username)
         }
       },
       teamname: stateProps.teamname,

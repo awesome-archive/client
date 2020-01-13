@@ -10,12 +10,24 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 )
 
-func SendTeamChatWelcomeMessage(ctx context.Context, g *libkb.GlobalContext, team, user string) (err error) {
-	teamDetails, err := Details(ctx, g, team)
+func SendTeamChatWelcomeMessage(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID, team, user string,
+	membersType chat1.ConversationMembersType, role keybase1.TeamRole) (err error) {
+	var teamDetails keybase1.TeamDetails
+	if teamID.IsNil() {
+		teamDetails, err = Details(ctx, g, team)
+	} else {
+		teamDetails, err = DetailsByID(ctx, g, teamID)
+	}
 	if err != nil {
 		return fmt.Errorf("getting team details: %v", err)
 	}
-
+	if team == "" && !teamID.IsNil() {
+		teamname, err := ResolveIDToName(ctx, g, teamID)
+		if err != nil {
+			return fmt.Errorf("getting team name: %v", err)
+		}
+		team = teamname.String()
+	}
 	var ownerNames, adminNames, writerNames, readerNames, botNames, restrictedBotNames []string
 	for _, owner := range teamDetails.Members.Owners {
 		ownerNames = append(ownerNames, owner.Username)
@@ -39,6 +51,7 @@ func SendTeamChatWelcomeMessage(ctx context.Context, g *libkb.GlobalContext, tea
 	subBody := chat1.NewMessageSystemWithAddedtoteam(chat1.MessageSystemAddedToTeam{
 		Adder:          username.String(),
 		Addee:          user,
+		Role:           role,
 		Team:           team,
 		Owners:         ownerNames,
 		Admins:         adminNames,
@@ -52,16 +65,19 @@ func SendTeamChatWelcomeMessage(ctx context.Context, g *libkb.GlobalContext, tea
 	// Ensure we have chat available, since TeamAddMember may also be
 	// coming from a standalone launch.
 	g.StartStandaloneChat()
+	var topicName *string
+	if membersType == chat1.ConversationMembersType_TEAM {
+		topicName = &globals.DefaultTeamTopic
+	}
 
 	_, err = g.ChatHelper.SendMsgByNameNonblock(ctx, team,
-		&globals.DefaultTeamTopic,
-		chat1.ConversationMembersType_TEAM, keybase1.TLFIdentifyBehavior_CHAT_CLI, body,
+		topicName, membersType, keybase1.TLFIdentifyBehavior_CHAT_CLI, body,
 		chat1.MessageType_SYSTEM, nil)
 	return err
 }
 
 func SendChatInviteWelcomeMessage(ctx context.Context, g *libkb.GlobalContext, team string,
-	category keybase1.TeamInviteCategory, inviter, invitee keybase1.UID) (res bool) {
+	category keybase1.TeamInviteCategory, inviter, invitee keybase1.UID, role keybase1.TeamRole) (res bool) {
 
 	if !g.Env.SendSystemChatMessages() {
 		g.Log.CDebugf(ctx, "Skipping SentChatInviteWelcomeMessage via environment flag")
@@ -85,6 +101,7 @@ func SendChatInviteWelcomeMessage(ctx context.Context, g *libkb.GlobalContext, t
 		Inviter:    inviterName.String(),
 		Invitee:    inviteeName.String(),
 		Adder:      username.String(),
+		Role:       role,
 		InviteType: category,
 	})
 	body := chat1.NewMessageBodyWithSystem(subBody)

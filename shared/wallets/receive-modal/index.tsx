@@ -39,7 +39,7 @@ const ReceiveModal = (props: Props) => {
       <Kb.Box2 centerChildren={true} direction="vertical" fullWidth={true} style={styles.sidePaddings}>
         <Kb.Icon
           type={Styles.isMobile ? 'icon-wallet-receive-64' : 'icon-wallet-receive-48'}
-          style={Kb.iconCastPlatformStyles(styles.icon)}
+          style={styles.icon}
         />
         {!Styles.isMobile && header}
         {props.isDefaultAccount && (
@@ -54,7 +54,7 @@ const ReceiveModal = (props: Props) => {
               type="iconfont-stellar-request"
               sizeType="Small"
               color={Styles.globalColors.white}
-              style={Kb.iconCastPlatformStyles(styles.requestIcon)}
+              style={styles.requestIcon}
             />
           </Kb.Button>
         )}
@@ -161,6 +161,7 @@ const styles = Styles.styleSheetCreate(
         marginBottom: Styles.globalMargins.tiny,
       },
       qrContainer: {
+        backgroundColor: Styles.globalColors.whiteOrWhite,
         borderColor: Styles.globalColors.black_10,
         borderRadius: Styles.borderRadius,
         borderStyle: 'solid',
@@ -168,7 +169,6 @@ const styles = Styles.styleSheetCreate(
         padding: Styles.globalMargins.tiny,
       },
       requestButton: {
-        flex: 0,
         width: '100%',
       },
       requestIcon: {marginRight: Styles.globalMargins.tiny},

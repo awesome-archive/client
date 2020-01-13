@@ -36,11 +36,11 @@ func newCmdChatAddBotMember(cl *libcmdline.CommandLine, g *libkb.GlobalContext) 
 		Usage: "username",
 	}, cli.StringFlag{
 		Name:  "r, role",
-		Usage: "team role (bot, restricted)",
+		Usage: "team role (bot, restrictedbot)",
 	})
 	return cli.Command{
 		Name:         "add-bot-member",
-		Usage:        "Add a bot or a restricted bot to a conversation",
+		Usage:        "Add a bot or a restricted bot to a conversation.",
 		ArgumentHelp: "[conversation]",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(NewCmdChatAddBotMemberRunner(g), "add-bot-member", c)
@@ -112,12 +112,10 @@ func (c *CmdChatAddBotMember) Run() (err error) {
 	}
 
 	if err = resolver.ChatClient.AddBotMember(context.TODO(), chat1.AddBotMemberArg{
-		TlfName:     conversationInfo.TlfName,
+		ConvID:      conversationInfo.Id,
 		Username:    c.username,
 		Role:        c.role,
 		BotSettings: c.botSettings,
-		MembersType: conversationInfo.MembersType,
-		TlfPublic:   conversationInfo.Visibility == keybase1.TLFVisibility_PUBLIC,
 	}); err != nil {
 		return err
 	}

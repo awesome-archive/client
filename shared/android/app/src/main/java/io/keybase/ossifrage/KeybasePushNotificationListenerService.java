@@ -5,11 +5,12 @@ import android.app.NotificationManager;
 import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.RequiresApi;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationCompat.MessagingStyle;
-import android.support.v4.app.NotificationManagerCompat;
-import android.support.v4.app.Person;
+
+import androidx.annotation.RequiresApi;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationCompat.MessagingStyle;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.app.Person;
 
 import com.dieam.reactnativepushnotification.helpers.ApplicationBadgeHelper;
 import com.google.firebase.messaging.FirebaseMessagingService;
@@ -179,14 +180,20 @@ public class KeybasePushNotificationListenerService extends FirebaseMessagingSer
                     boolean dontNotify = (type.equals("chat.newmessageSilent_2") && !n.displayPlaintext);
 
                     notifier.setMsgCache(msgCache.get(n.convID));
-                    WithBackgroundActive withBackgroundActive = () -> Keybase.handleBackgroundNotification(n.convID, payload, n.serverMessageBody, n.sender,
+                    WithBackgroundActive withBackgroundActive = () -> {
+                      try {
+                          Keybase.handleBackgroundNotification(n.convID, payload, n.serverMessageBody, n.sender,
                             n.membersType, n.displayPlaintext, n.messageId, n.pushId,
-                            n.badgeCount, n.unixTime, n.soundName, dontNotify ? null : notifier);
+                            n.badgeCount, n.unixTime, n.soundName, dontNotify ? null : notifier, true);
+                          if (!dontNotify) {
+                              seenChatNotifications.add(n.convID + n.messageId);
+                          }
+                      } catch (Exception ex) {
+                        NativeLogger.error("Go Couldn't handle background notification: " + ex.getMessage());
+                      }
+                    };
                     withBackgroundActive.whileActive(getApplicationContext());
 
-                    if (!dontNotify) {
-                        seenChatNotifications.add(n.convID + n.messageId);
-                    }
                 }
                 break;
                 case "follow": {

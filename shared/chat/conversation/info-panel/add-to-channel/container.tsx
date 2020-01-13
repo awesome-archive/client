@@ -1,4 +1,3 @@
-import * as I from 'immutable'
 import * as Container from '../../../../util/container'
 import * as Constants from '../../../../constants/chat2'
 import * as Types from '../../../../constants/types/chat2'
@@ -17,13 +16,15 @@ const mapStateToProps = (state: Container.TypedState, ownProps: OwnProps) => {
     Constants.noConversationIDKey
   )
   const meta = Constants.getMeta(state, conversationIDKey)
+  const participantInfo = Constants.getParticipantInfo(state, conversationIDKey)
   const teamname = meta.teamname
   const generalChannel = Constants.getChannelForTeam(state, teamname, 'general')
+  const generalParts = Constants.getParticipantInfo(state, generalChannel.conversationIDKey)
   const _fullnames = state.users.infoMap
   const title = `Add to #${meta.channelname}`
   return {
-    _allMembers: generalChannel ? generalChannel.participants : I.List<string>(),
-    _alreadyAdded: meta.participants,
+    _allMembers: generalChannel ? generalParts.all : [],
+    _alreadyAdded: participantInfo.all,
     _conversationIDKey: conversationIDKey,
     _fullnames,
     error: anyErrors(state, Constants.waitingKeyAddUsersToChannel),
@@ -47,14 +48,13 @@ export default Container.namedConnect(
     const users = stateProps._allMembers
       .map(username => ({
         alreadyAdded: stateProps._alreadyAdded.includes(username),
-        fullname: stateProps._fullnames.get(username, {fullname: ''}).fullname,
+        fullname: (stateProps._fullnames.get(username) || {fullname: ''}).fullname || '',
         username,
       }))
       .sort((a, b) => {
         if (a.alreadyAdded === b.alreadyAdded) return a.username.localeCompare(b.username)
         return a.alreadyAdded ? 1 : -1
       })
-      .toArray()
     let error: string | null = null
     if (stateProps.error) {
       const e = stateProps.error

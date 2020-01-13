@@ -1,5 +1,7 @@
 import autoresetSaga from '../actions/autoreset'
+import botsSaga from '../actions/bots'
 import chat2Saga from '../actions/chat2'
+import cryptoSaga from '../actions/crypto'
 import configSaga from '../actions/config'
 import createSagaMiddleware from 'redux-saga'
 import deeplinksSaga from '../actions/deeplinks'
@@ -15,21 +17,19 @@ import pinentrySaga from '../actions/pinentry'
 import profileSaga from '../actions/profile'
 import recoverPasswordSaga from '../actions/recover-password'
 import tracker2Saga from '../actions/tracker2'
-import sagaMonitor from './saga-monitor'
-import searchSaga from '../actions/search'
 import settingsSaga from '../actions/settings'
 import signupSaga from '../actions/signup'
 import teamsSaga from '../actions/teams'
 import unlockFoldersSaga from '../actions/unlock-folders'
 import usersSaga from '../actions/users'
 import walletsSaga from '../actions/wallets'
-import {reduxSagaLogger} from '../local-debug'
-import {sagaTimer} from '../util/user-timings'
 import * as Saga from '../util/saga'
 
 function* mainSaga() {
   yield Saga.spawn(autoresetSaga)
+  yield Saga.spawn(botsSaga)
   yield Saga.spawn(chat2Saga)
+  yield Saga.spawn(cryptoSaga)
   yield Saga.spawn(configSaga)
   yield Saga.spawn(deeplinksSaga)
   yield Saga.spawn(deviceSaga)
@@ -42,7 +42,6 @@ function* mainSaga() {
   yield Saga.spawn(profileSaga)
   yield Saga.spawn(recoverPasswordSaga)
   yield Saga.spawn(tracker2Saga)
-  yield Saga.spawn(searchSaga)
   yield Saga.spawn(settingsSaga)
   yield Saga.spawn(teamsSaga)
   yield Saga.spawn(unlockFoldersSaga)
@@ -60,7 +59,6 @@ function create(crashHandler: (err: any) => void) {
   }
   middleWare = createSagaMiddleware({
     onError: crashHandler,
-    sagaMonitor: sagaTimer || (reduxSagaLogger ? sagaMonitor : undefined),
   })
   return middleWare
 }

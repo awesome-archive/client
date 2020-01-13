@@ -9,28 +9,31 @@ type Props = {
   color: Types.AssertionColor
   isSuggestion: boolean
   isYours: boolean
-  metas: ReadonlyArray<Types._AssertionMeta>
+  metas: ReadonlyArray<Types.AssertionMeta>
   notAUser: boolean
   onCopyAddress: () => void
+  onHideStellar: (hidden: boolean) => void
   onRequestLumens: () => void
-  onRecheck: (() => void) | null
-  onRevoke: (() => void) | null
+  onRecheck?: () => void
+  onRevoke?: () => void
   onSendLumens: () => void
   onShowProof?: () => void
-  onShowSite: (() => void) | null
-  onCreateProof: (() => void) | null
+  onShowSite?: () => void
+  onCreateProof?: () => void
   onWhatIsStellar: () => void
   proofURL: string
-  siteIcon: Types.SiteIconSet | null
-  siteIconFull: Types.SiteIconSet | null
+  siteIcon?: Types.SiteIconSet
+  siteIconFull?: Types.SiteIconSet
+  siteIconWhite?: Types.SiteIconSet
   siteURL: string
   state: Types.AssertionState
+  stellarHidden: boolean
   timestamp: number
   type: string
   value: string
 }
 
-const proofTypeToDesc = proofType => {
+const proofTypeToDesc = (proofType: string) => {
   switch (proofType) {
     case 'btc':
     case 'zcash':
@@ -40,7 +43,7 @@ const proofTypeToDesc = proofType => {
   }
 }
 
-const stateToIcon = state => {
+const stateToIcon = (state: Types.AssertionState) => {
   switch (state) {
     case 'checking':
       return 'iconfont-proof-pending'
@@ -53,12 +56,12 @@ const stateToIcon = state => {
     case 'suggestion':
       return 'iconfont-proof-placeholder'
     default:
-      throw new Error('Impossible')
+      return 'iconfont-proof-pending'
   }
 }
 
 // alternate versions of the ones from `stateToIcon` for the popup menu header
-const stateToDecorationIcon = state => {
+const stateToDecorationIcon = (state: Types.AssertionState) => {
   switch (state) {
     case 'checking':
       return 'icon-proof-pending'
@@ -71,11 +74,11 @@ const stateToDecorationIcon = state => {
     case 'suggestion':
       return 'icon-proof-unfinished'
     default:
-      throw new Error('impossible')
+      return 'icon-proof-pending'
   }
 }
 
-const stateToValueTextStyle = state => {
+const stateToValueTextStyle = (state: Types.AssertionState) => {
   switch (state) {
     case 'revoked':
       return styles.strikeThrough
@@ -84,9 +87,8 @@ const stateToValueTextStyle = state => {
     case 'error':
     case 'warning':
     case 'suggestion':
-      return null
     default:
-      throw new Error('Impossible')
+      return null
   }
 }
 
@@ -130,9 +132,7 @@ const assertionColorToColor = (c: Types.AssertionColor) => {
 
 class _StellarValue extends React.PureComponent<
   Props & Kb.OverlayParentProps,
-  {
-    storedAttachmentRef: Kb.Box | null
-  }
+  {storedAttachmentRef: Kb.Box | null}
 > {
   state = {storedAttachmentRef: null}
   // only set this once ever
@@ -192,7 +192,7 @@ const Value = (p: Props) => {
     content = <StellarValue {...p} />
   } else {
     let str = p.value
-    let style = styles.username
+    let style: Styles.StylesCrossPlatform = styles.username
 
     if (!p.isSuggestion) {
       switch (p.type) {
@@ -245,15 +245,21 @@ class Assertion extends React.PureComponent<Props, State> {
   _getRef = () => this._ref.current
   _getMenu = () => {
     const p = this.props
-    if (!p.isYours || p.isSuggestion || p.type === 'stellar') {
+    if (!p.isYours || p.isSuggestion) {
       return {}
     }
-
-    const onRevoke = {
-      danger: true,
-      onClick: p.onRevoke,
-      title: p.type === 'pgp' ? 'Drop' : 'Revoke',
-    }
+    const onRevoke =
+      p.type === 'stellar'
+        ? {
+            danger: true,
+            onClick: () => p.onHideStellar(!this.props.stellarHidden),
+            title: `${this.props.stellarHidden ? 'Show' : 'Hide'} Stellar address on profile`,
+          }
+        : {
+            danger: true,
+            onClick: p.onRevoke,
+            title: p.type === 'pgp' ? 'Drop' : 'Revoke',
+          }
 
     if (p.metas.find(m => m.label === 'unreachable')) {
       return {
@@ -274,7 +280,7 @@ class Assertion extends React.PureComponent<Props, State> {
     }
 
     if (p.metas.find(m => m.label === 'pending')) {
-      let pendingMessage
+      let pendingMessage: undefined | string
       switch (p.type) {
         case 'hackernews':
           pendingMessage =
@@ -327,7 +333,11 @@ class Assertion extends React.PureComponent<Props, State> {
     }
   }
   _siteIcon = (full: boolean) => {
-    const set = full ? this.props.siteIconFull : this.props.siteIcon
+    const set = full
+      ? this.props.siteIconFull
+      : Styles.isDarkMode()
+      ? this.props.siteIconWhite
+      : this.props.siteIcon
     if (!set) return null
     let child = <SiteIcon full={full} set={set} />
     if (full) {

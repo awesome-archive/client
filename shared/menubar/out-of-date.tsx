@@ -5,7 +5,6 @@ import * as ConfigTypes from '../constants/types/config'
 import flags from '../util/feature-flags'
 
 type Props = {
-  // eslint-disable-next-line no-use-before-define
   outOfDate?: ConfigTypes.OutOfDate
   updateNow?: () => void
 }
@@ -45,8 +44,7 @@ const OutOfDate = ({outOfDate, updateNow}: Props) => {
 
 const styles = Styles.styleSheetCreate(() => ({
   banner: {
-    paddingBottom: Styles.globalMargins.tiny,
-    paddingTop: Styles.globalMargins.tiny,
+    flexShrink: 0,
   },
   textContainerStyle: {
     paddingLeft: Styles.globalMargins.small,

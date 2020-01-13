@@ -6,6 +6,7 @@ package libkb
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -124,14 +125,9 @@ func GetConfiguredAccountsFromProvisionedUsernames(m MetaContext, s SecretStoreA
 	}
 
 	// Get the full names
-
 	uids := make([]keybase1.UID, len(allUsernames))
 	for idx, username := range allUsernames {
-		uid := m.G().UIDMapper.MapHardcodedUsernameToUID(username)
-		if !uid.Exists() {
-			uid = UsernameToUIDPreserveCase(username.String())
-		}
-		uids[idx] = uid
+		uids[idx] = GetUIDByNormalizedUsername(m.G(), username)
 	}
 	usernamePackages, err := m.G().UIDMapper.MapUIDsToUsernamePackages(m.Ctx(), m.G(),
 		uids, time.Hour*24, time.Second*10, false)
@@ -178,6 +174,34 @@ func GetConfiguredAccountsFromProvisionedUsernames(m MetaContext, s SecretStoreA
 		configuredAccounts = append(configuredAccounts, account)
 	}
 
+	loginTimes, err := getLoginTimes(m)
+	if err != nil {
+		m.Warning("Failed to get login times: %s", err)
+		loginTimes = make(loginTimeMap)
+	}
+
+	sort.Slice(configuredAccounts, func(i, j int) bool {
+		iUsername := configuredAccounts[i].Username
+		jUsername := configuredAccounts[j].Username
+		iTime, iOk := loginTimes[NormalizedUsername(iUsername)]
+		jTime, jOk := loginTimes[NormalizedUsername(jUsername)]
+		if !iOk && !jOk {
+			iSignedIn := configuredAccounts[i].HasStoredSecret
+			jSignedIn := configuredAccounts[j].HasStoredSecret
+			if iSignedIn != jSignedIn {
+				return iSignedIn
+			}
+			return strings.Compare(iUsername, jUsername) < 0
+		}
+		if !iOk {
+			return false
+		}
+		if !jOk {
+			return true
+		}
+		return iTime.After(jTime)
+	})
+
 	return configuredAccounts, nil
 }
 
@@ -209,27 +233,20 @@ type SecretStoreLocked struct {
 }
 
 func NewSecretStoreLocked(m MetaContext) *SecretStoreLocked {
-	var disk SecretStoreAll
-
-	mem := NewSecretStoreMem()
-
-	if m.G().Env.RememberPassphrase() {
-		// use os-specific secret store
-		m.Debug("NewSecretStoreLocked: using os-specific SecretStore")
-		disk = NewSecretStoreAll(m)
-	} else {
-		// config or command line flag said to use in-memory secret store
-		m.Debug("NewSecretStoreLocked: using memory-only SecretStore")
-	}
-
+	// We always make an on-disk secret store, but if the user has opted not
+	// to remember their passphrase, we don't store it on-disk.
 	return &SecretStoreLocked{
-		mem:  mem,
-		disk: disk,
+		mem:  NewSecretStoreMem(),
+		disk: NewSecretStoreAll(m),
 	}
 }
 
 func (s *SecretStoreLocked) isNil() bool {
 	return s.mem == nil && s.disk == nil
+}
+
+func (s *SecretStoreLocked) ClearMem() {
+	s.mem = NewSecretStoreMem()
 }
 
 func (s *SecretStoreLocked) RetrieveSecret(m MetaContext, username NormalizedUsername) (LKSecFullSecret, error) {
@@ -274,6 +291,10 @@ func (s *SecretStoreLocked) StoreSecret(m MetaContext, username NormalizedUserna
 	if s.disk == nil {
 		return err
 	}
+	if !m.G().Env.GetRememberPassphrase(username) {
+		m.Debug("SecretStoreLocked: should not remember passphrase for %s; not storing on disk", username)
+		return err
+	}
 	return s.disk.StoreSecret(m, username, secret)
 }
 
@@ -306,10 +327,31 @@ func (s *SecretStoreLocked) GetUsersWithStoredSecrets(m MetaContext) ([]string, 
 	}
 	s.Lock()
 	defer s.Unlock()
-	if s.disk == nil {
-		return s.mem.GetUsersWithStoredSecrets(m)
+	users := make(map[string]struct{})
+
+	memUsers, memErr := s.mem.GetUsersWithStoredSecrets(m)
+	if memErr == nil {
+		for _, memUser := range memUsers {
+			users[memUser] = struct{}{}
+		}
 	}
-	return s.disk.GetUsersWithStoredSecrets(m)
+	if s.disk == nil {
+		return memUsers, memErr
+	}
+	diskUsers, diskErr := s.disk.GetUsersWithStoredSecrets(m)
+	if diskErr == nil {
+		for _, diskUser := range diskUsers {
+			users[diskUser] = struct{}{}
+		}
+	}
+	if memErr != nil && diskErr != nil {
+		return nil, CombineErrors(memErr, diskErr)
+	}
+	var ret []string
+	for user := range users {
+		ret = append(ret, user)
+	}
+	return ret, nil
 }
 
 func (s *SecretStoreLocked) PrimeSecretStores(mctx MetaContext) (err error) {
@@ -442,4 +484,35 @@ func reportPrimeSecretStoreFailure(mctx MetaContext, ss SecretStoreAll, reportEr
 	}
 	var apiRes AppStatusEmbed
 	err = mctx.G().API.PostDecode(mctx, apiArg, &apiRes)
+}
+
+type loginTimeMap map[NormalizedUsername]time.Time
+
+func loginTimesDbKey(mctx MetaContext) DbKey {
+	return DbKey{
+		// Should not be per-user, so not using uid in the db key
+		Typ: DBLoginTimes,
+		Key: "",
+	}
+}
+
+func getLoginTimes(mctx MetaContext) (ret loginTimeMap, err error) {
+	found, err := mctx.G().LocalDb.GetInto(&ret, loginTimesDbKey(mctx))
+	if err != nil {
+		return ret, err
+	}
+	if !found {
+		ret = make(loginTimeMap)
+	}
+	return ret, nil
+}
+
+func RecordLoginTime(mctx MetaContext, username NormalizedUsername) (err error) {
+	ret, err := getLoginTimes(mctx)
+	if err != nil {
+		mctx.Warning("failed to get login times from db; overwriting existing data: %s", err)
+		ret = make(loginTimeMap)
+	}
+	ret[username] = time.Now()
+	return mctx.G().LocalDb.PutObj(loginTimesDbKey(mctx), nil, ret)
 }

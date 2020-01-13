@@ -14,13 +14,14 @@ export type Props = {
   policy: RetentionPolicy
   policyIsExploding: boolean
   teamPolicy?: RetentionPolicy
+  load?: () => void
   loading: boolean // for when we're waiting to fetch the team policy
   showInheritOption: boolean
   showOverrideNotice: boolean
   showSaveIndicator: boolean
   type: 'simple' | 'auto'
   saveRetentionPolicy: (policy: RetentionPolicy) => void
-  onSelect: (policy: RetentionPolicy, changed: boolean, decreased: boolean) => void
+  onSelect?: (policy: RetentionPolicy, changed: boolean, decreased: boolean) => void
   onShowWarning: (policy: RetentionPolicy, onConfirm: () => void, onCancel: () => void) => void
 }
 
@@ -50,7 +51,7 @@ class _RetentionPicker extends React.Component<PropsWithOverlay<Props>, State> {
       policyToComparable(selected, this.props.teamPolicy) <
       policyToComparable(this.props.policy, this.props.teamPolicy)
     if (this.props.type === 'simple') {
-      this.props.onSelect(selected, changed, decreased)
+      this.props.onSelect?.(selected, changed, decreased)
       return
     }
     // auto case; show dialog if decreased, set immediately if not
@@ -98,10 +99,20 @@ class _RetentionPicker extends React.Component<PropsWithOverlay<Props>, State> {
           return [...arr, {onClick: () => this._onSelect(policy), title: policy.title}] as Kb.MenuItems
         case 'inherit':
           if (this.props.teamPolicy) {
+            let title = ''
+            switch (this.props.teamPolicy.type) {
+              case 'retain':
+                title = 'Team default (Never auto-delete)'
+                break
+              case 'expire':
+              case 'explode':
+                title = `Team default (${this.props.teamPolicy.title})`
+                break
+            }
             return [
               {
                 onClick: () => this._onSelect(policy),
-                title: `Team default (${this.props.teamPolicy.title})`,
+                title,
               },
               'Divider',
               ...arr,
@@ -113,25 +124,9 @@ class _RetentionPicker extends React.Component<PropsWithOverlay<Props>, State> {
           return [
             ...arr,
             {
+              icon: 'iconfont-timer',
               onClick: () => this._onSelect(policy),
               title: policy.title,
-              view: (
-                <Kb.Box2
-                  centerChildren={Styles.isMobile}
-                  alignItems="center"
-                  direction="horizontal"
-                  gap="tiny"
-                  fullWidth={true}
-                >
-                  <Kb.Icon type="iconfont-timer" />
-                  <Kb.Text
-                    type={Styles.isMobile ? 'BodyBig' : 'Body'}
-                    style={Styles.isMobile ? {color: Styles.globalColors.blueDark} : undefined}
-                  >
-                    {policy.title}
-                  </Kb.Text>
-                </Kb.Box2>
-              ),
             },
           ] as Kb.MenuItems
       }
@@ -144,7 +139,7 @@ class _RetentionPicker extends React.Component<PropsWithOverlay<Props>, State> {
     const p = policy || this.props.policy
     this.setState({selected: p})
     // tell parent that nothing has changed
-    this.props.type === 'simple' && this.props.onSelect(p, false, false)
+    this.props.type === 'simple' && this.props.onSelect?.(p, false, false)
   }
 
   _label = () => {
@@ -422,6 +417,14 @@ const RetentionSwitcher = (
     entityType: RetentionEntityType
   } & Props
 ) => {
+  const {load} = props
+  React.useEffect(
+    () => {
+      load?.()
+    },
+    // eslint-disable-next-line
+    []
+  )
   if (props.loading) {
     return <Kb.ProgressIndicator style={styles.progressIndicator} />
   }

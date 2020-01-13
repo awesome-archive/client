@@ -3,23 +3,27 @@ import * as Types from '../../../constants/types/chat2'
 import * as Styles from '../../../styles'
 import * as Kb from '../../../common-adapters'
 import * as RPCChatTypes from '../../../constants/types/rpc-chat-gen'
+import * as RPCTypes from '../../../constants/types/rpc-gen'
+import flags from '../../../util/feature-flags'
 import {Props as HeaderHocProps} from '../../../common-adapters/header-hoc/types'
 import {AdhocHeader, TeamHeader} from './header'
 import {SettingsPanel} from './panels'
 import Participant from './participant'
+import Bot from './bot'
 import {AttachmentTypeSelector, DocView, LinkView, MediaView} from './attachments'
 
-export type Panel = 'settings' | 'members' | 'attachments'
+export type Panel = 'settings' | 'members' | 'attachments' | 'bots'
 export type ParticipantTyp = {
   username: string
   fullname: string
   isAdmin: boolean
   isOwner: boolean
 }
+
 export type EntityType = 'adhoc' | 'small team' | 'channel'
 export type Section = {
   data: Array<any>
-  renderItem: ({item: any, index: number}) => void
+  renderItem: (i: {item: any; index: number}) => void
   renderSectionHeader: (i: any) => void
 }
 
@@ -69,9 +73,19 @@ type LinkProps = {
   status: Types.AttachmentViewStatus
 }
 
+const auditingBannerItem = 'auditing banner'
+const inThisChannelHeader = 'bots: in this channel'
+const featuredBotsHeader = 'bots: featured bots'
+const loadMoreBotsButton = 'bots: load more'
+const addBotButton = 'bots: add bot'
+const featuredBotSpinner = 'bots: featured spinners'
+
 export type InfoPanelProps = {
+  loadDelay?: number
   selectedConversationIDKey: Types.ConversationIDKey
   participants: ReadonlyArray<ParticipantTyp>
+  installedBots: ReadonlyArray<RPCTypes.FeaturedBot>
+  featuredBots: ReadonlyArray<RPCTypes.FeaturedBot>
   isPreview: boolean
   teamname?: string
   channelname?: string
@@ -81,6 +95,7 @@ export type InfoPanelProps = {
   spinnerForHide: boolean
   selectedAttachmentView: RPCChatTypes.GalleryItemTyp
   selectedTab: Panel
+  showAuditingBanner: boolean
 
   // Attachment stuff
   docs: DocProps
@@ -113,6 +128,15 @@ export type InfoPanelProps = {
   onEditChannel: () => void
   onLeaveConversation: () => void
   onJoinChannel: () => void
+
+  // Used for bots
+  canManageBots: boolean
+  loadedAllBots: boolean
+  loadingBots: boolean
+  onSearchFeaturedBots: (username: string) => void
+  onLoadMoreBots: () => void
+  onBotSelect: (username: string) => void
+  onBotAdd: () => void
 } & HeaderHocProps
 
 const TabText = ({selected, text}: {selected: boolean; text: string}) => (
@@ -121,47 +145,68 @@ const TabText = ({selected, text}: {selected: boolean; text: string}) => (
   </Kb.Text>
 )
 
-class _InfoPanel extends React.Component<InfoPanelProps> {
+class _InfoPanel extends React.PureComponent<InfoPanelProps> {
+  private animationDelayLoad: NodeJS.Timeout | undefined
   componentDidMount() {
-    this._retryLoad()
+    this.animationDelayLoad = setTimeout(() => {
+      if (this.props.selectedTab === 'attachments') {
+        this.loadAttachments()
+      }
+      if (this.props.selectedTab === 'bots') {
+        this.loadBots()
+      }
+    }, this.props.loadDelay || 0)
+  }
+  componentWillUnmount() {
+    this.animationDelayLoad && clearTimeout(this.animationDelayLoad)
   }
 
-  _retryLoad = () => {
+  private loadAttachments = () => {
     this.props.onAttachmentViewChange(this.props.selectedAttachmentView)
   }
 
-  _getEntityType = (): EntityType => {
+  private loadBots = () => {
+    if (this.props.featuredBots.length === 0 && !this.props.loadedAllBots) {
+      this.props.onLoadMoreBots()
+    }
+  }
+
+  private getEntityType = (): EntityType => {
     if (this.props.teamname && this.props.channelname) {
       return this.props.smallTeam ? 'small team' : 'channel'
     }
     return 'adhoc'
   }
 
-  _isSelected = (s: Panel) => {
+  private isSelected = (s: Panel) => {
     return s === this.props.selectedTab
   }
 
-  _getTabs = (entityType: EntityType) => {
+  private getTabs = (entityType: EntityType) => {
     const res: Array<React.ReactNode> = []
     if (entityType !== 'adhoc') {
       res.push(
         <Kb.Box2 key="members" style={styles.tabTextContainer} direction="horizontal">
-          <TabText
-            selected={this._isSelected('members')}
-            text={`Members (${this.props.participants.length})`}
-          />
+          <TabText selected={this.isSelected('members')} text="Members" />
         </Kb.Box2>
       )
     }
     res.push(
       <Kb.Box2 key="attachments" style={styles.tabTextContainer} direction="horizontal">
-        <TabText selected={this._isSelected('attachments')} text="Attachments" />
+        <TabText selected={this.isSelected('attachments')} text="Attachments" />
       </Kb.Box2>
     )
+    if (flags.botUI) {
+      res.push(
+        <Kb.Box2 key="bots" style={styles.tabTextContainer} direction="horizontal">
+          <TabText selected={this.isSelected('bots')} text="Bots" />
+        </Kb.Box2>
+      )
+    }
     if (!this.props.isPreview) {
       res.push(
         <Kb.Box2 key="settings" style={styles.tabTextContainer} direction="horizontal">
-          <TabText selected={this._isSelected('settings')} text="Settings" />
+          <TabText selected={this.isSelected('settings')} text="Settings" />
         </Kb.Box2>
       )
     }
@@ -169,12 +214,22 @@ class _InfoPanel extends React.Component<InfoPanelProps> {
     return res
   }
 
-  _onSelectTab = (tab: React.ReactNode) => {
+  private onSelectTab = (tab: React.ReactNode) => {
+    // @ts-ignore TODO avoid using key on a node
+    if (tab.key === 'attachments') {
+      this.loadAttachments()
+    }
+
+    // @ts-ignore TODO avoid using key on a node
+    if (tab.key === 'bots') {
+      this.loadBots()
+    }
+
     // @ts-ignore TODO avoid using key on a node
     this.props.onSelectTab(tab.key)
   }
-  _renderHeader = () => {
-    const entityType = this._getEntityType()
+  private renderHeader = () => {
+    const entityType = this.getEntityType()
     const header = (
       <Kb.Box2 direction="vertical" gap="tiny" gapStart={true} fullWidth={true}>
         {entityType === 'small team' || entityType === 'channel' ? (
@@ -199,17 +254,17 @@ class _InfoPanel extends React.Component<InfoPanelProps> {
     )
     return header
   }
-  _headerSection = (): Section => {
+  private headerSection = (): Section => {
     return {
       data: ['header'],
-      renderItem: this._renderHeader,
+      renderItem: this.renderHeader,
       renderSectionHeader: () => {
         return null
       },
     }
   }
 
-  _renderAttachmentViewSelector = () => {
+  private renderAttachmentViewSelector = () => {
     return (
       <AttachmentTypeSelector
         selectedView={this.props.selectedAttachmentView}
@@ -217,49 +272,62 @@ class _InfoPanel extends React.Component<InfoPanelProps> {
       />
     )
   }
-  _attachmentViewSelectorSection = (): Section => {
+  private attachmentViewSelectorSection = (): Section => {
     return {
       data: ['avselector'],
-      renderItem: this._renderAttachmentViewSelector,
+      renderItem: this.renderAttachmentViewSelector,
       renderSectionHeader: () => {
         return null
       },
     }
   }
 
-  _renderTabs = () => {
-    const tabs = this._getTabs(this._getEntityType())
-    const selected = tabs.find((tab: any) => tab && this._isSelected(tab.key)) || null
+  private renderTabs = () => {
+    const tabs = this.getTabs(this.getEntityType())
+    const selected = tabs.find((tab: any) => tab && this.isSelected(tab.key)) || null
     return (
       <Kb.Box2 direction="horizontal" fullWidth={true}>
         <Kb.Tabs
           tabs={tabs}
           selected={selected}
-          onSelect={this._onSelectTab}
+          onSelect={this.onSelectTab}
           style={styles.tabContainerStyle}
           tabStyle={styles.tabStyle}
         />
       </Kb.Box2>
     )
   }
-  _tabsSection = (): Section => {
+  private tabsSection = (): Section => {
     return {
       data: ['tabs'],
       renderItem: () => null,
-      renderSectionHeader: this._renderTabs,
+      renderSectionHeader: this.renderTabs,
     }
   }
 
-  _renderSectionHeader = ({section}) => {
+  private renderSectionHeader = ({section}: any) => {
     return section.renderSectionHeader({section})
   }
 
   render() {
-    const entityType = this._getEntityType()
+    const entityType = this.getEntityType()
     let sections: Array<unknown> = []
-    let tabsSection = this._tabsSection()
-    sections.push(this._headerSection())
-    let itemSizeEstimator
+    const tabsSection = this.tabsSection()
+    sections.push(this.headerSection())
+    let itemSizeEstimator: (() => number) | undefined
+    if (!this.props.selectedConversationIDKey) {
+      // if we dont have a valid conversation ID, just render a spinner
+      return (
+        <Kb.Box2
+          direction="vertical"
+          style={Styles.collapseStyles([styles.container, {alignItems: 'center'}])}
+          fullWidth={true}
+          centerChildren={true}
+        >
+          <Kb.ProgressIndicator type="Large" />
+        </Kb.Box2>
+      )
+    }
     switch (this.props.selectedTab) {
       case 'settings':
         tabsSection.renderItem = () => {
@@ -289,20 +357,31 @@ class _InfoPanel extends React.Component<InfoPanelProps> {
             return 56
           }
         }
+        if (this.props.showAuditingBanner) {
+          tabsSection.data.push(auditingBannerItem)
+        }
         tabsSection.data = tabsSection.data.concat(this.props.participants)
         tabsSection.renderItem = ({item}) => {
-          if (!item.username) {
+          if (item === auditingBannerItem) {
+            return (
+              <Kb.Banner color="grey" small={true}>
+                Auditing team members...
+              </Kb.Banner>
+            )
+          } else if (!item.username) {
             return null
+          } else {
+            return (
+              <Participant
+                botAlias={item.botAlias}
+                fullname={item.fullname}
+                isAdmin={item.isAdmin}
+                isOwner={item.isOwner}
+                username={item.username}
+                onShowProfile={this.props.onShowProfile}
+              />
+            )
           }
-          return (
-            <Participant
-              fullname={item.fullname}
-              isAdmin={item.isAdmin}
-              isOwner={item.isOwner}
-              username={item.username}
-              onShowProfile={this.props.onShowProfile}
-            />
-          )
         }
         sections.push(tabsSection)
         break
@@ -313,13 +392,13 @@ class _InfoPanel extends React.Component<InfoPanelProps> {
               return 80
             }
           }
-          let attachmentSections
+          let attachmentSections: unknown
           switch (this.props.selectedAttachmentView) {
             case RPCChatTypes.GalleryItemTyp.media:
               attachmentSections = new MediaView().getSections(
                 this.props.media.thumbs,
                 this.props.media.onLoadMore,
-                this._retryLoad,
+                this.loadAttachments,
                 this.props.media.status
               )
               break
@@ -327,7 +406,7 @@ class _InfoPanel extends React.Component<InfoPanelProps> {
               attachmentSections = new DocView().getSections(
                 this.props.docs.docs,
                 this.props.docs.onLoadMore,
-                this._retryLoad,
+                this.loadAttachments,
                 this.props.docs.status
               )
               break
@@ -335,24 +414,97 @@ class _InfoPanel extends React.Component<InfoPanelProps> {
               attachmentSections = new LinkView().getSections(
                 this.props.links.links,
                 this.props.links.onLoadMore,
-                this._retryLoad,
+                this.loadAttachments,
                 this.props.links.status
               )
               break
           }
           sections.push(tabsSection)
-          sections.push(this._attachmentViewSelectorSection())
+          sections.push(this.attachmentViewSelectorSection())
           sections = sections.concat(attachmentSections)
         }
         break
+      case 'bots':
+        if (!Styles.isMobile) {
+          itemSizeEstimator = () => {
+            return 56
+          }
+        }
+
+        if (this.props.canManageBots) {
+          tabsSection.data.push(addBotButton)
+        }
+        if (this.props.installedBots.length > 0) {
+          tabsSection.data.push(inThisChannelHeader)
+        }
+        tabsSection.data = tabsSection.data.concat(this.props.installedBots)
+        tabsSection.data.push(featuredBotsHeader)
+        if (this.props.featuredBots.length > 0) {
+          tabsSection.data = tabsSection.data.concat(this.props.featuredBots)
+        }
+        if (!this.props.loadedAllBots && this.props.featuredBots.length > 0) {
+          tabsSection.data.push(loadMoreBotsButton)
+        }
+        if (this.props.loadingBots) {
+          tabsSection.data.push(featuredBotSpinner)
+        }
+        tabsSection.renderItem = ({item}) => {
+          if (item === addBotButton) {
+            return (
+              <Kb.Button
+                mode="Primary"
+                type="Default"
+                label="Add a bot"
+                style={styles.addBot}
+                onClick={this.props.onBotAdd}
+              />
+            )
+          }
+          if (item === inThisChannelHeader) {
+            const text = this.props.teamname ? 'Installed in this team' : 'In this conversation'
+            return (
+              <Kb.Text type="Header" style={styles.botHeaders}>
+                {text}
+              </Kb.Text>
+            )
+          }
+          if (item === featuredBotsHeader) {
+            return (
+              <Kb.Text type="Header" style={styles.botHeaders}>
+                Featured
+              </Kb.Text>
+            )
+          }
+          if (item === featuredBotSpinner) {
+            return <Kb.ProgressIndicator type="Large" />
+          }
+          if (item === loadMoreBotsButton) {
+            return (
+              <Kb.Button
+                label="Load more"
+                mode="Secondary"
+                type="Default"
+                style={styles.addBot}
+                onClick={() => this.props.onLoadMoreBots()}
+              />
+            )
+          }
+          if (!item.botUsername) {
+            return null
+          } else {
+            return <Bot {...item} onClick={this.props.onBotSelect} />
+          }
+        }
+        sections.push(tabsSection)
+        break
     }
     return (
-      <Kb.Box2 direction="vertical" style={styles.container} fullWidth={true}>
+      <Kb.Box2 direction="vertical" style={styles.container} fullWidth={true} fullHeight={true}>
         <Kb.SectionList
           itemSizeEstimator={itemSizeEstimator}
           stickySectionHeadersEnabled={true}
           keyboardShouldPersistTaps="handled"
-          renderSectionHeader={this._renderSectionHeader}
+          renderSectionHeader={this.renderSectionHeader}
           sections={sections}
         />
       </Kb.Box2>
@@ -363,9 +515,21 @@ class _InfoPanel extends React.Component<InfoPanelProps> {
 const styles = Styles.styleSheetCreate(
   () =>
     ({
+      addBot: {
+        marginBottom: Styles.globalMargins.xtiny,
+        marginLeft: Styles.globalMargins.small,
+        marginRight: Styles.globalMargins.small,
+        marginTop: Styles.globalMargins.small,
+      },
       attachmentsLoading: {
         height: Styles.globalMargins.small,
         width: Styles.globalMargins.small,
+      },
+      botHeaders: {
+        marginBottom: Styles.globalMargins.tiny,
+        marginLeft: Styles.globalMargins.small,
+        marginRight: Styles.globalMargins.small,
+        marginTop: Styles.globalMargins.tiny,
       },
       container: Styles.platformStyles({
         common: {alignItems: 'stretch', flex: 1, paddingBottom: Styles.globalMargins.tiny},
@@ -374,16 +538,28 @@ const styles = Styles.styleSheetCreate(
           borderLeft: `1px solid ${Styles.globalColors.black_10}`,
         },
       }),
-      tabContainerStyle: {
-        backgroundColor: Styles.globalColors.white,
-      },
+      tabContainerStyle: Styles.platformStyles({
+        common: {
+          backgroundColor: Styles.globalColors.white,
+        },
+        // TODO: this is less than ideal
+        isElectron: {
+          overflowX: 'scroll',
+          overflowY: 'hidden',
+        },
+      }),
       tabStyle: {
         paddingLeft: Styles.globalMargins.xsmall,
         paddingRight: Styles.globalMargins.xsmall,
       },
-      tabTextContainer: {
-        justifyContent: 'center',
-      },
+      tabTextContainer: Styles.platformStyles({
+        common: {
+          justifyContent: 'center',
+        },
+        isElectron: {
+          whiteSpace: 'nowrap',
+        },
+      }),
       tabTextSelected: {color: Styles.globalColors.black},
     } as const)
 )

@@ -23,6 +23,10 @@
       "name": "TeamMemberOutReset",
       "fields": [
         {
+          "type": "TeamID",
+          "name": "teamID"
+        },
+        {
           "type": "string",
           "name": "teamname"
         },
@@ -151,9 +155,9 @@
         {
           "type": {
             "type": "array",
-            "items": "string"
+            "items": "TeamID"
           },
-          "name": "newTeamNames"
+          "name": "newTeams"
         },
         {
           "type": {
@@ -165,7 +169,7 @@
         {
           "type": {
             "type": "array",
-            "items": "string"
+            "items": "TeamID"
           },
           "name": "newTeamAccessRequests"
         },

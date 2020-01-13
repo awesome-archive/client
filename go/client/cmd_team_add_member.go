@@ -18,6 +18,7 @@ type CmdTeamAddMember struct {
 	libkb.Contextified
 	Team                 string
 	Email                string
+	Phone                string
 	Username             string
 	Role                 keybase1.TeamRole
 	BotSettings          *keybase1.TeamBotSettings
@@ -42,9 +43,12 @@ func newCmdTeamAddMember(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli
 				Usage: "email address to invite",
 			},
 			cli.StringFlag{
-				Name: "r, role",
-				// TODO HOTPOT-599 add bot roles
-				Usage: "team role (owner, admin, writer, reader) [required]",
+				Name:  "p, phone",
+				Usage: "phone number to invite",
+			},
+			cli.StringFlag{
+				Name:  "r, role",
+				Usage: "team role (owner, admin, writer, reader, bot, restrictedbot) [required]",
 			},
 			cli.BoolFlag{
 				Name:  "s, skip-chat-message",
@@ -54,10 +58,7 @@ func newCmdTeamAddMember(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli
 		Description: teamAddMemberDoc,
 	}
 
-	// TODO HOTPOT-599 expose publicly
-	if g.Env.GetRunMode() == libkb.DevelRunMode || libkb.IsKeybaseAdmin(g.GetMyUID()) {
-		cmd.Flags = append(cmd.Flags, botSettingsFlags...)
-	}
+	cmd.Flags = append(cmd.Flags, botSettingsFlags...)
 	return cmd
 }
 
@@ -82,6 +83,11 @@ func (c *CmdTeamAddMember) ParseArgv(ctx *cli.Context) error {
 		if !libkb.CheckEmail.F(c.Email) {
 			return errors.New("invalid email address")
 		}
+		return nil
+	}
+
+	c.Phone = ctx.String("phone")
+	if len(c.Phone) > 0 {
 		return nil
 	}
 
@@ -110,9 +116,15 @@ func (c *CmdTeamAddMember) Run() error {
 		return err
 	}
 
+	teamID, err := cli.GetTeamID(context.Background(), c.Team)
+	if err != nil {
+		return err
+	}
+
 	arg := keybase1.TeamAddMemberArg{
-		Name:                 c.Team,
+		TeamID:               teamID,
 		Email:                c.Email,
+		Phone:                c.Phone,
 		Username:             c.Username,
 		Role:                 c.Role,
 		BotSettings:          c.BotSettings,
@@ -127,6 +139,11 @@ func (c *CmdTeamAddMember) Run() error {
 	dui := c.G().UI.GetDumbOutputUI()
 	if !res.Invited {
 		// TeamAddMember resulted in the user added to the team
+		if c.Email != "" {
+			dui.Printf("%s matched the Keybase username %s.\n", c.Email, res.User.Username)
+		} else if c.Phone != "" {
+			dui.Printf("%s matched the Keybase username %s.\n", c.Phone, res.User.Username)
+		}
 		if res.ChatSending {
 			// The chat message may still be in flight or fail.
 			dui.Printf("Success! A keybase chat message has been sent to %s. To skip this, use `-s` or `--skip-chat-message`\n", res.User.Username)
@@ -141,6 +158,12 @@ func (c *CmdTeamAddMember) Run() error {
 	if c.Email != "" {
 		// email invitation
 		dui.Printf("Pending! Email sent to %s with signup instructions. When they join you will be notified.\n", c.Email)
+		return nil
+	}
+
+	if c.Phone != "" {
+		// phone invitation
+		dui.Printf("Pending! When %s joins Keybase and proves their phone number, they will be added to the team automatically.\n", c.Phone)
 		return nil
 	}
 
@@ -178,4 +201,8 @@ Add a user via social assertion:
 Add a user via email:
 
     keybase team add-member acme --email=alice@mail.com --role=reader
+
+Add a user via phone:
+
+    keybase team add-member acme --phone=18581234567 --role=reader
 `

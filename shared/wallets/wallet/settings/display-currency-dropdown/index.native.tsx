@@ -1,12 +1,11 @@
 import * as React from 'react'
-import * as I from 'immutable'
 import * as Kb from '../../../../common-adapters'
 import * as Types from '../../../../constants/types/wallets'
 import * as Styles from '../../../../styles'
 import {Props} from '.'
 
-const makePickerItems = (currencies: I.List<Types.Currency>) =>
-  currencies.map(c => ({label: c.description, value: c.code})).toArray()
+const makePickerItems = (currencies: Array<Types.Currency>) =>
+  currencies.map(c => ({label: c.description, value: c.code}))
 
 const Prompt = () => (
   <Kb.Box2 direction="vertical" fullWidth={true} style={styles.promptContainer}>
@@ -62,6 +61,7 @@ const DisplayCurrencyDropdown = (props: Props) => {
             <Kb.ProgressIndicator type="Small" style={styles.progressIndicator} />
           )
         }
+        style={styles.dropdown}
         toggleOpen={toggleShowingMenu}
       />
       <Kb.FloatingPicker
@@ -81,6 +81,7 @@ const DisplayCurrencyDropdown = (props: Props) => {
 }
 
 const styles = Styles.styleSheetCreate(() => ({
+  dropdown: {width: '100%'},
   progressIndicator: {
     height: 22,
     width: 22,

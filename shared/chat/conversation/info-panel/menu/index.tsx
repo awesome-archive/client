@@ -2,11 +2,15 @@ import * as React from 'react'
 import * as Kb from '../../../../common-adapters'
 import * as Styles from '../../../../styles'
 import * as ChatTypes from '../../../../constants/types/chat2'
+import * as TeamTypes from '../../../../constants/types/teams'
 import {Avatars, TeamAvatar} from '../../../avatars'
+import {TeamSubscriberMountOnly} from '../../../../teams/subscriber'
 
 export type ConvProps = {
   fullname: string
   teamType: ChatTypes.TeamType
+  teamname: string
+  teamID: TeamTypes.TeamID
   ignored: boolean
   muted: boolean
   participants: Array<string>
@@ -16,16 +20,15 @@ export type Props = {
   attachTo?: () => React.Component<any> | null
   badgeSubscribe: boolean
   canAddPeople: boolean
-  convProps: ConvProps | null
+  convProps?: ConvProps
   isSmallTeam: boolean
   manageChannelsSubtitle: string
   manageChannelsTitle: string
   memberCount: number
   teamname?: string
   visible: boolean
-  hasCanPerform: boolean
-  loadOperations: () => void
   onAddPeople: () => void
+  onBlockConv: () => void
   onHidden: () => void
   onInvite: () => void
   onLeaveTeam: () => void
@@ -58,10 +61,11 @@ const AdhocHeader = (props: AdhocHeaderProps) => (
         commaColor={Styles.globalColors.black_50}
         inline={false}
         skipSelf={props.participants.length > 1}
-        containerStyle={styles.maybeLongText}
+        containerStyle={Styles.collapseStyles([styles.maybeLongText, styles.adhocUsernames])}
         type="BodyBig"
         underline={false}
         usernames={props.participants}
+        onUsernameClicked="profile"
       />
       {!!props.fullname && <Kb.Text type="BodySmall">{props.fullname}</Kb.Text>}
     </Kb.Box2>
@@ -72,13 +76,14 @@ type TeamHeaderProps = {
   isMuted: boolean
   memberCount: number
   teamname: string
+  onViewTeam: () => void
 }
 const TeamHeader = (props: TeamHeaderProps) => {
   return (
     <Kb.Box2 direction="vertical" gap="tiny" gapStart={false} gapEnd={true} style={styles.headerContainer}>
       <TeamAvatar teamname={props.teamname} isMuted={props.isMuted} isSelected={false} isHovered={false} />
       <Kb.Box2 direction="vertical" centerChildren={true}>
-        <Kb.Text type="BodySemibold" style={styles.maybeLongText}>
+        <Kb.Text type="BodySemibold" style={styles.maybeLongText} onClick={props.onViewTeam}>
           {props.teamname}
         </Kb.Text>
         <Kb.Text type="BodySmall">{`${props.memberCount} member${
@@ -90,55 +95,62 @@ const TeamHeader = (props: TeamHeaderProps) => {
 }
 
 class InfoPanelMenu extends React.Component<Props> {
-  componentDidUpdate(prevProps: Props) {
-    if (this.props.hasCanPerform && this.props.visible !== prevProps.visible) {
-      this.props.loadOperations()
-    }
-  }
-
   render() {
     const props = this.props
     const addPeopleItems = [
       {
+        icon: 'iconfont-mention',
         onClick: props.onAddPeople,
         style: {borderTopWidth: 0},
         subTitle: 'Keybase, Twitter, etc.',
         title: 'Add someone by username',
       },
       {
+        icon: 'iconfont-contact-book',
         onClick: props.onInvite,
         title: Styles.isMobile ? 'Add someone from address book' : 'Add someone by email',
       },
     ]
     const channelItem = props.isSmallTeam
       ? {
+          icon: 'iconfont-hash',
           onClick: props.onManageChannels,
           subTitle: props.manageChannelsSubtitle,
           title: props.manageChannelsTitle,
         }
       : {
+          icon: 'iconfont-hash',
+          isBadged: props.badgeSubscribe,
           onClick: props.onManageChannels,
           title: props.manageChannelsTitle,
-          view: (
-            <Kb.Box style={Styles.globalStyles.flexBoxRow}>
-              <Kb.Text style={styles.text} type={Styles.isMobile ? 'BodyBig' : 'Body'}>
-                {props.manageChannelsTitle}
-              </Kb.Text>
-              {props.badgeSubscribe && <Kb.Box style={styles.badge} />}
-            </Kb.Box>
-          ),
         }
 
-    const isAdhoc = !!(props.convProps && props.convProps.teamType === 'adhoc')
-    const adhocItems = [this.hideItem(), this.muteItem()]
-    const teamItems = [
-      ...(props.canAddPeople ? addPeopleItems : []),
-      {onClick: props.onViewTeam, style: {borderTopWidth: 0}, title: 'View team'},
-      this.hideItem(),
-      this.muteItem(),
-      channelItem,
-      {danger: true, onClick: props.onLeaveTeam, title: 'Leave team'},
-    ].filter(item => item !== null)
+    const isAdhoc =
+      (props.isSmallTeam && !props.convProps) || !!(props.convProps && props.convProps.teamType === 'adhoc')
+    const items: Kb.MenuItems = (isAdhoc
+      ? [
+          this.hideItem(),
+          this.muteItem(),
+          {danger: true, icon: 'iconfont-block-user', onClick: props.onBlockConv, title: 'Block'},
+        ]
+      : [
+          ...(props.canAddPeople ? addPeopleItems : []),
+          {
+            icon: 'iconfont-people',
+            onClick: props.onViewTeam,
+            style: {borderTopWidth: 0},
+            title: 'View team',
+          },
+          this.hideItem(),
+          this.muteItem(),
+          channelItem,
+          {danger: true, icon: 'iconfont-leave', onClick: props.onLeaveTeam, title: 'Leave team'},
+          {danger: true, icon: 'iconfont-remove', onClick: props.onBlockConv, title: 'Block team'},
+        ]
+    ).reduce<Kb.MenuItems>((arr, i) => {
+      i && arr.push(i as Kb.MenuItem)
+      return arr
+    }, [])
 
     const header = {
       title: 'header',
@@ -156,20 +168,24 @@ class InfoPanelMenu extends React.Component<Props> {
             }
             teamname={props.teamname}
             memberCount={props.memberCount}
+            onViewTeam={props.onViewTeam}
           />
         ) : null,
     }
 
     return (
-      <Kb.FloatingMenu
-        attachTo={props.attachTo}
-        visible={props.visible}
-        items={isAdhoc ? adhocItems : teamItems}
-        header={header}
-        onHidden={props.onHidden}
-        position="bottom left"
-        closeOnSelect={true}
-      />
+      <>
+        {props.visible && <TeamSubscriberMountOnly />}
+        <Kb.FloatingMenu
+          attachTo={props.attachTo}
+          visible={props.visible}
+          items={items}
+          header={header}
+          onHidden={props.onHidden}
+          position="bottom left"
+          closeOnSelect={true}
+        />
+      </>
     )
   }
 
@@ -180,9 +196,15 @@ class InfoPanelMenu extends React.Component<Props> {
     const convProps = this.props.convProps
     if (convProps.teamType === 'adhoc' || convProps.teamType === 'small') {
       if (convProps.ignored) {
-        return {onClick: this.props.onUnhideConv, style: {borderTopWidth: 0}, title: 'Unhide conversation'}
+        return {
+          icon: 'iconfont-unhide',
+          onClick: this.props.onUnhideConv,
+          style: {borderTopWidth: 0},
+          title: 'Unhide conversation',
+        }
       } else {
         return {
+          icon: 'iconfont-hide',
           onClick: this.props.onHideConv,
           style: {borderTopWidth: 0},
           subTitle: 'Until next message',
@@ -201,18 +223,9 @@ class InfoPanelMenu extends React.Component<Props> {
     const convProps = this.props.convProps
     const title = `${convProps.muted ? 'Unmute' : 'Mute all'} notifications`
     return {
+      icon: 'iconfont-shh',
       onClick: () => this.props.onMuteConv(!convProps.muted),
       title,
-      view: (
-        <Kb.Box style={styles.muteAction}>
-          <Kb.Text style={styles.text} type={Styles.isMobile ? 'BodyBig' : 'Body'}>
-            {title}
-          </Kb.Text>
-          {!convProps.muted && (
-            <Kb.Icon color={Styles.globalColors.black_20} style={styles.icon} type="iconfont-shh" />
-          )}
-        </Kb.Box>
-      ),
     }
   }
 }
@@ -220,6 +233,9 @@ class InfoPanelMenu extends React.Component<Props> {
 const styles = Styles.styleSheetCreate(
   () =>
     ({
+      adhocUsernames: {
+        justifyContent: 'center',
+      },
       badge: Styles.platformStyles({
         common: {
           backgroundColor: Styles.globalColors.blue,
@@ -254,9 +270,6 @@ const styles = Styles.styleSheetCreate(
         },
         isMobile: {paddingBottom: 24, paddingTop: 40},
       }),
-      icon: {
-        marginLeft: Styles.globalMargins.tiny,
-      },
       maybeLongText: Styles.platformStyles({
         common: {
           ...Styles.padding(0, Styles.globalMargins.tiny),

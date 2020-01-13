@@ -152,6 +152,7 @@ func (l *LevelDb) Opts() *opt.Options {
 		OpenFilesCacheCapacity: l.G().Env.GetLevelDBNumFiles(),
 		Filter:                 filter.NewBloomFilter(10),
 		CompactionTableSize:    10 * opt.MiB,
+		WriteBuffer:            12 * opt.MiB,
 	}
 }
 
@@ -296,10 +297,6 @@ func (l *LevelDb) isCorrupt(err error) bool {
 	if strings.Contains(err.Error(), "corrupt") {
 		return true
 	}
-	// if our db is in a bad state with too many open files also nuke
-	if strings.Contains(strings.ToLower(err.Error()), "too many open files") {
-		return true
-	}
 	return false
 }
 
@@ -386,27 +383,29 @@ func (l *LevelDb) OpenTransaction() (LocalDbTransaction, error) {
 }
 
 func (l *LevelDb) KeysWithPrefixes(prefixes ...[]byte) (DBKeySet, error) {
-	m := make(map[DbKey]bool)
-
-	l.Lock()
-	defer l.Unlock()
-
-	opts := &opt.ReadOptions{DontFillCache: true}
-	for _, prefix := range prefixes {
-		iter := l.db.NewIterator(util.BytesPrefix(prefix), opts)
-		for iter.Next() {
-			_, dbKey, err := DbKeyParse(string(iter.Key()))
-			if err != nil {
-				iter.Release()
-				return m, err
+	m := make(map[DbKey]struct{})
+	err := l.doWhileOpenAndNukeIfCorrupted(func() error {
+		opts := &opt.ReadOptions{DontFillCache: true}
+		for _, prefix := range prefixes {
+			iter := l.db.NewIterator(util.BytesPrefix(prefix), opts)
+			for iter.Next() {
+				_, dbKey, err := DbKeyParse(string(iter.Key()))
+				if err != nil {
+					iter.Release()
+					return err
+				}
+				m[dbKey] = struct{}{}
 			}
-			m[dbKey] = true
+			iter.Release()
+			err := iter.Error()
+			if err != nil {
+				return nil
+			}
 		}
-		iter.Release()
-		err := iter.Error()
-		if err != nil {
-			return nil, nil
-		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return m, nil

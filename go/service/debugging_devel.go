@@ -17,7 +17,7 @@ import (
 	chatwallet "github.com/keybase/client/go/chat/wallet"
 	"github.com/keybase/client/go/engine"
 	"github.com/keybase/client/go/libkb"
-	keybase1 "github.com/keybase/client/go/protocol/keybase1"
+	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/protocol/stellar1"
 	"github.com/keybase/client/go/teams"
 	"github.com/keybase/stellarnet"
@@ -26,10 +26,9 @@ import (
 	"golang.org/x/net/context"
 )
 
-func (t *DebuggingHandler) Script(ctx context.Context, arg keybase1.ScriptArg) (res string, err error) {
+func (t *DebuggingHandler) scriptExtras(ctx context.Context, arg keybase1.ScriptArg) (res string, err error) {
 	ctx = libkb.WithLogTag(ctx, "DG")
 	m := libkb.NewMetaContext(ctx, t.G())
-	defer m.TraceTimed(fmt.Sprintf("Script(%s)", arg.Script), func() error { return err })()
 	args := arg.Args
 	log := func(format string, args ...interface{}) {
 		t.G().Log.CInfof(ctx, format, args...)
@@ -100,8 +99,9 @@ func (t *DebuggingHandler) Script(ctx context.Context, arg keybase1.ScriptArg) (
 			return eldestSeqnos[i] < eldestSeqnos[j]
 		})
 		obj := struct {
-			Seqnos []keybase1.Seqno `json:"seqnos"`
-		}{eldestSeqnos}
+			EldestSeqno keybase1.Seqno   `json:"current_eldest"`
+			Seqnos      []keybase1.Seqno `json:"seqnos"`
+		}{upak.ToUserVersion().EldestSeqno, eldestSeqnos}
 		bs, err := json.Marshal(obj)
 		if err != nil {
 			return "", err

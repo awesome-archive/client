@@ -24,12 +24,8 @@ class Input extends Component<Props, State> {
     end: number | null
   } | null = null
 
-  // TODO: Remove once we can use HOCTimers.
   _timeoutIds: Array<NodeJS.Timeout>
 
-  // We define _setTimeout instead of using HOCTimers since we'd need
-  // to use React.forwardRef with HOCTimers, and it doesn't seem to
-  // work with React Native yet.
   _setTimeout = (f, n) => {
     const id = setTimeout(f, n)
     this._timeoutIds.push(id)
@@ -44,11 +40,9 @@ class Input extends Component<Props, State> {
       height: null,
     }
 
-    // TODO: Remove once we can use HOCTimers.
     this._timeoutIds = []
   }
 
-  // TODO: Remove once we can use HOCTimers.
   componentWillUnmount = () => {
     this._timeoutIds.forEach(clearTimeout)
   }
@@ -302,6 +296,7 @@ class Input extends Component<Props, State> {
       autoCorrect: Object.prototype.hasOwnProperty.call(this.props, 'autoCorrect') && this.props.autoCorrect,
       autoFocus: this.props.autoFocus,
       editable: Object.prototype.hasOwnProperty.call(this.props, 'editable') ? this.props.editable : true,
+      keyboardAppearance: Styles.isIOS ? (Styles.isDarkMode() ? 'dark' : 'light') : undefined,
       keyboardType,
       onBlur: this._onBlur,
       onChangeText: this._onChangeText,
@@ -310,6 +305,7 @@ class Input extends Component<Props, State> {
       onSelectionChange: this._onSelectionChange,
       onSubmitEditing: this.props.onEnterKeyDown,
       placeholder: this.props.hintText,
+      placeholderTextColor: Styles.globalColors.black_40,
       ref: this._input,
       returnKeyType: this.props.returnKeyType,
       secureTextEntry: this.props.type === 'password',
@@ -317,7 +313,7 @@ class Input extends Component<Props, State> {
       textContentType: this.props.textContentType,
       underlineColorAndroid: 'transparent',
       ...(this.props.maxLength ? {maxLength: this.props.maxLength} : null),
-    }
+    } as const
 
     if (!this.props.uncontrolled) {
       // @ts-ignore it's ok to add this

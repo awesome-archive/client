@@ -28,6 +28,10 @@ module.exports = (storybookBaseConfig, configType) => {
       path.join(__dirname, '/../util/__mocks__/typed-connect.tsx')
     ),
     new webpack.NormalModuleReplacementPlugin(
+      /safe-navigation/,
+      path.join(__dirname, '/../__mocks__/safe-navigation.tsx')
+    ),
+    new webpack.NormalModuleReplacementPlugin(
       /^electron$/,
       path.join(__dirname, '/../__mocks__/electron.js')
     ),
@@ -65,6 +69,11 @@ module.exports = (storybookBaseConfig, configType) => {
     },
     {
       test: [/emoji-datasource.*\.(gif|png)$/, /\.ttf$/],
+      use: [fileLoaderRule],
+    },
+    {
+      include: path.resolve(__dirname, '../images/releases'),
+      test: [/.*\.png$/],
       use: [fileLoaderRule],
     },
     {

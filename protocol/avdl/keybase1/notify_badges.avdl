@@ -6,6 +6,7 @@ protocol NotifyBadges {
   @typedef("bytes")  record ChatConversationID {}
 
   record TeamMemberOutReset {
+    TeamID teamID;
     string teamname;
     string username;
     UID uid;
@@ -43,9 +44,9 @@ protocol NotifyBadges {
     array<DeviceID> revokedDevices;
     array<BadgeConversationInfo> conversations;
     array<string> newGitRepoGlobalUniqueIDs;
-    array<string> newTeamNames;
+    array<TeamID> newTeams;
     array<DeletedTeamInfo> deletedTeams;
-    array<string> newTeamAccessRequests;
+    array<TeamID> newTeamAccessRequests;
     array<TeamMemberOutReset> teamsWithResetUsers;
     array<WalletAccountInfo> unreadWalletAccounts;
     ResetState resetState;

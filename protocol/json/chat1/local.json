@@ -347,6 +347,17 @@
           "name": "addee"
         },
         {
+          "type": "keybase1.TeamRole",
+          "name": "role"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "string"
+          },
+          "name": "bulkAdds"
+        },
+        {
           "type": {
             "type": "array",
             "items": "string"
@@ -413,6 +424,10 @@
         {
           "type": "keybase1.TeamInviteCategory",
           "name": "inviteType"
+        },
+        {
+          "type": "keybase1.TeamRole",
+          "name": "role"
         }
       ]
     },
@@ -949,7 +964,8 @@
         "TOOMANYATTEMPTS_6",
         "ALREADY_DELETED_7",
         "UPLOADFAILED_8",
-        "RESTRICTEDBOT_9"
+        "RESTRICTEDBOT_9",
+        "MINWRITER_10"
       ]
     },
     {
@@ -1531,6 +1547,10 @@
             "MessageUnboxed"
           ],
           "name": "replyTo"
+        },
+        {
+          "type": "string",
+          "name": "botUsername"
         }
       ]
     },
@@ -1603,12 +1623,19 @@
           "name": "isEphemeral"
         },
         {
-          "type": "boolean",
-          "name": "isEphemeralExpired"
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "explodedBy"
         },
         {
           "type": "gregor1.Time",
           "name": "etime"
+        },
+        {
+          "type": "string",
+          "name": "botUsername"
         }
       ]
     },
@@ -1623,6 +1650,46 @@
         {
           "type": "boolean",
           "name": "hidden"
+        }
+      ]
+    },
+    {
+      "type": "enum",
+      "name": "JourneycardType",
+      "symbols": [
+        "WELCOME_0",
+        "POPULAR_CHANNELS_1",
+        "ADD_PEOPLE_2",
+        "CREATE_CHANNELS_3",
+        "MSG_ATTENTION_4",
+        "UNUSED_5",
+        "CHANNEL_INACTIVE_6",
+        "MSG_NO_ANSWER_7"
+      ]
+    },
+    {
+      "type": "record",
+      "name": "MessageUnboxedJourneycard",
+      "fields": [
+        {
+          "type": "MessageID",
+          "name": "prevID"
+        },
+        {
+          "type": "int",
+          "name": "ordinal"
+        },
+        {
+          "type": "JourneycardType",
+          "name": "cardType"
+        },
+        {
+          "type": "MessageID",
+          "name": "highlightMsgID"
+        },
+        {
+          "type": "boolean",
+          "name": "openTeam"
         }
       ]
     },
@@ -1661,6 +1728,13 @@
             "def": false
           },
           "body": "MessageUnboxedPlaceholder"
+        },
+        {
+          "label": {
+            "name": "JOURNEYCARD",
+            "def": false
+          },
+          "body": "MessageUnboxedJourneycard"
         }
       ]
     },
@@ -1692,6 +1766,10 @@
         {
           "type": "string",
           "name": "username"
+        },
+        {
+          "type": "boolean",
+          "name": "inConvName"
         },
         {
           "type": [
@@ -1771,6 +1849,10 @@
         {
           "type": "keybase1.TLFVisibility",
           "name": "visibility"
+        },
+        {
+          "type": "boolean",
+          "name": "isDefaultConv"
         },
         {
           "type": "ConversationStatus",
@@ -2028,6 +2110,14 @@
         {
           "type": "ConversationCommandGroups",
           "name": "botCommands"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "string",
+            "keys": "string"
+          },
+          "name": "botAliases"
         }
       ]
     },
@@ -2352,13 +2442,6 @@
           "name": "conversations"
         },
         {
-          "type": [
-            null,
-            "Pagination"
-          ],
-          "name": "pagination"
-        },
-        {
           "type": "boolean",
           "name": "offline"
         },
@@ -2390,13 +2473,6 @@
           "name": "conversations"
         },
         {
-          "type": [
-            null,
-            "Pagination"
-          ],
-          "name": "pagination"
-        },
-        {
           "type": "boolean",
           "name": "offline"
         },
@@ -2414,6 +2490,14 @@
           },
           "name": "identifyFailures"
         }
+      ]
+    },
+    {
+      "type": "enum",
+      "name": "InboxLayoutReselectMode",
+      "symbols": [
+        "DEFAULT_0",
+        "FORCE_1"
       ]
     },
     {
@@ -2810,7 +2894,7 @@
       "fields": [
         {
           "type": "string",
-          "name": "filename"
+          "name": "filePath"
         },
         {
           "type": {
@@ -3536,6 +3620,38 @@
           "name": "rateLimits"
         }
       ]
+    },
+    {
+      "type": "record",
+      "name": "LocalMtimeUpdate",
+      "fields": [
+        {
+          "type": "ConversationID",
+          "name": "convID"
+        },
+        {
+          "type": "gregor1.Time",
+          "name": "mtime"
+        }
+      ]
+    },
+    {
+      "type": "enum",
+      "name": "SnippetDecoration",
+      "symbols": [
+        "NONE_0",
+        "PENDING_MESSAGE_1",
+        "FAILED_PENDING_MESSAGE_2",
+        "EXPLODING_MESSAGE_3",
+        "EXPLODED_MESSAGE_4",
+        "AUDIO_ATTACHMENT_5",
+        "VIDEO_ATTACHMENT_6",
+        "PHOTO_ATTACHMENT_7",
+        "FILE_ATTACHMENT_8",
+        "STELLAR_RECEIVED_9",
+        "STELLAR_SENT_10",
+        "PINNED_MESSAGE_11"
+      ]
     }
   ],
   "messages": {
@@ -3548,33 +3664,6 @@
         {
           "name": "reason",
           "type": "GetThreadReason"
-        },
-        {
-          "name": "query",
-          "type": [
-            null,
-            "GetThreadQuery"
-          ]
-        },
-        {
-          "name": "pagination",
-          "type": [
-            null,
-            "Pagination"
-          ]
-        },
-        {
-          "name": "identifyBehavior",
-          "type": "keybase1.TLFIdentifyBehavior"
-        }
-      ],
-      "response": "GetThreadLocalRes"
-    },
-    "getCachedThread": {
-      "request": [
-        {
-          "name": "conversationID",
-          "type": "ConversationID"
         },
         {
           "name": "query",
@@ -3671,13 +3760,6 @@
           ]
         },
         {
-          "name": "pagination",
-          "type": [
-            null,
-            "Pagination"
-          ]
-        },
-        {
           "name": "identifyBehavior",
           "type": "keybase1.TLFIdentifyBehavior"
         }
@@ -3694,18 +3776,40 @@
           ]
         },
         {
-          "name": "pagination",
-          "type": [
-            null,
-            "Pagination"
-          ]
-        },
-        {
           "name": "identifyBehavior",
           "type": "keybase1.TLFIdentifyBehavior"
         }
       ],
       "response": "GetInboxAndUnboxUILocalRes"
+    },
+    "requestInboxLayout": {
+      "request": [
+        {
+          "name": "reselectMode",
+          "type": "InboxLayoutReselectMode"
+        }
+      ],
+      "response": null
+    },
+    "requestInboxUnbox": {
+      "request": [
+        {
+          "name": "convIDs",
+          "type": {
+            "type": "array",
+            "items": "ConversationID"
+          }
+        }
+      ],
+      "response": null
+    },
+    "requestInboxSmallIncrease": {
+      "request": [],
+      "response": null
+    },
+    "requestInboxSmallReset": {
+      "request": [],
+      "response": null
     },
     "getInboxNonblockLocal": {
       "request": [
@@ -3729,13 +3833,6 @@
           "type": [
             null,
             "GetInboxLocalQuery"
-          ]
-        },
-        {
-          "name": "pagination",
-          "type": [
-            null,
-            "Pagination"
           ]
         },
         {
@@ -4379,8 +4476,8 @@
           "type": "MessageID"
         },
         {
-          "name": "filename",
-          "type": "string"
+          "name": "downloadToCache",
+          "type": "boolean"
         },
         {
           "name": "preview",
@@ -4392,6 +4489,20 @@
         }
       ],
       "response": "DownloadFileAttachmentLocalRes",
+      "lint": "ignore"
+    },
+    "ConfigureFileAttachmentDownloadLocal": {
+      "request": [
+        {
+          "name": "cacheDirOverride",
+          "type": "string"
+        },
+        {
+          "name": "downloadDirOverride",
+          "type": "string"
+        }
+      ],
+      "response": null,
       "lint": "ignore"
     },
     "makePreview": {
@@ -4407,6 +4518,22 @@
         {
           "name": "outboxID",
           "type": "OutboxID"
+        }
+      ],
+      "response": "MakePreviewRes"
+    },
+    "makeAudioPreview": {
+      "request": [
+        {
+          "name": "amps",
+          "type": {
+            "type": "array",
+            "items": "double"
+          }
+        },
+        {
+          "name": "duration",
+          "type": "int"
         }
       ],
       "response": "MakePreviewRes"
@@ -4440,6 +4567,15 @@
         }
       ],
       "response": "string"
+    },
+    "cancelUploadTempFile": {
+      "request": [
+        {
+          "name": "outboxID",
+          "type": "OutboxID"
+        }
+      ],
+      "response": null
     },
     "CancelPost": {
       "request": [
@@ -4480,7 +4616,10 @@
         },
         {
           "name": "msgID",
-          "type": "MessageID"
+          "type": [
+            null,
+            "MessageID"
+          ]
         }
       ],
       "response": "MarkAsReadLocalRes"
@@ -4520,6 +4659,15 @@
         }
       ],
       "response": "FindConversationsLocalRes"
+    },
+    "findGeneralConvFromTeamID": {
+      "request": [
+        {
+          "name": "teamID",
+          "type": "keybase1.TeamID"
+        }
+      ],
+      "response": "InboxUIItem"
     },
     "updateTyping": {
       "request": [
@@ -5032,6 +5180,15 @@
       ],
       "response": "ListBotCommandsLocalRes"
     },
+    "listPublicBotCommandsLocal": {
+      "request": [
+        {
+          "name": "username",
+          "type": "string"
+        }
+      ],
+      "response": "ListBotCommandsLocalRes"
+    },
     "clearBotCommandsLocal": {
       "request": [],
       "response": "ClearBotCommandsLocalRes"
@@ -5070,8 +5227,8 @@
     "addBotMember": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
@@ -5087,14 +5244,6 @@
         {
           "name": "role",
           "type": "keybase1.TeamRole"
-        },
-        {
-          "name": "membersType",
-          "type": "ConversationMembersType"
-        },
-        {
-          "name": "tlfPublic",
-          "type": "boolean"
         }
       ],
       "response": null
@@ -5102,8 +5251,8 @@
     "editBotMember": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
@@ -5119,14 +5268,6 @@
         {
           "name": "role",
           "type": "keybase1.TeamRole"
-        },
-        {
-          "name": "membersType",
-          "type": "ConversationMembersType"
-        },
-        {
-          "name": "tlfPublic",
-          "type": "boolean"
         }
       ],
       "response": null
@@ -5134,20 +5275,12 @@
     "removeBotMember": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
           "type": "string"
-        },
-        {
-          "name": "membersType",
-          "type": "ConversationMembersType"
-        },
-        {
-          "name": "tlfPublic",
-          "type": "boolean"
         }
       ],
       "response": null
@@ -5155,8 +5288,8 @@
     "setBotMemberSettings": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
@@ -5165,14 +5298,6 @@
         {
           "name": "botSettings",
           "type": "keybase1.TeamBotSettings"
-        },
-        {
-          "name": "membersType",
-          "type": "ConversationMembersType"
-        },
-        {
-          "name": "tlfPublic",
-          "type": "boolean"
         }
       ],
       "response": null
@@ -5180,11 +5305,33 @@
     "getBotMemberSettings": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
+          "type": "string"
+        }
+      ],
+      "response": "keybase1.TeamBotSettings"
+    },
+    "getTeamRoleInConversation": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "username",
+          "type": "string"
+        }
+      ],
+      "response": "keybase1.TeamRole"
+    },
+    "teamIDFromTLFName": {
+      "request": [
+        {
+          "name": "tlfName",
           "type": "string"
         },
         {
@@ -5196,7 +5343,20 @@
           "type": "boolean"
         }
       ],
-      "response": "keybase1.TeamBotSettings"
+      "response": "keybase1.TeamID"
+    },
+    "dismissJourneycard": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "cardType",
+          "type": "JourneycardType"
+        }
+      ],
+      "response": null
     }
   },
   "namespace": "chat.1"

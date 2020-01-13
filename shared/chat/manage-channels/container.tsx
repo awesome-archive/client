@@ -6,52 +6,67 @@ import * as React from 'react'
 import * as RouteTreeGen from '../../actions/route-tree-gen'
 import * as TeamsGen from '../../actions/teams-gen'
 import ManageChannels, {RowProps} from '.'
-import {ChannelMembershipState} from '../../constants/types/teams'
+import * as Types from '../../constants/types/teams'
 import {anyWaiting} from '../../constants/waiting'
 import {formatTimeRelativeToNow} from '../../util/timestamp'
-import {getChannelsWaitingKey, getCanPerform, getTeamChannelInfos, hasCanPerform} from '../../constants/teams'
-import {isEqual} from 'lodash-es'
+import * as TeamsConstants from '../../constants/teams'
+import isEqual from 'lodash/isEqual'
+import {makeInsertMatcher} from '../../util/string'
+import {memoize} from '../../util/memoize'
 
-type OwnProps = Container.RouteProps<{teamname: string}>
+type OwnProps = Container.RouteProps<{teamID: Types.TeamID}>
+
+const getChannels = memoize(
+  (channelInfos: Map<string, Types.ChannelInfo>, searchText: string, teamSize: number) =>
+    [...channelInfos.entries()]
+      .map(([convID, info]) => ({
+        convID,
+        description: info.description,
+        hasAllMembers: info.numParticipants === teamSize,
+        mtimeHuman: formatTimeRelativeToNow(info.mtime),
+        name: info.channelname,
+        numParticipants: info.numParticipants,
+        selected: info.memberStatus === RPCChatTypes.ConversationMemberStatus.active,
+      }))
+      .filter(conv => {
+        if (!searchText) {
+          return true // no search text means show all
+        }
+        return (
+          // match channel name for search as subsequence (like the identity modal)
+          // match channel desc by strict substring (less noise in results)
+          conv.name.match(makeInsertMatcher(searchText)) ||
+          conv.description.match(new RegExp(searchText, 'i'))
+        )
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+)
 
 const mapStateToProps = (state: Container.TypedState, ownProps: OwnProps) => {
-  const teamname = Container.getRouteProps(ownProps, 'teamname', '')
-  const waitingKey = getChannelsWaitingKey(teamname)
+  const teamID = Container.getRouteProps(ownProps, 'teamID', '')
+  const waitingKey = TeamsConstants.getChannelsWaitingKey(teamID)
   const waitingForGet = anyWaiting(state, waitingKey)
-  const channelInfos = getTeamChannelInfos(state, teamname)
-  const yourOperations = getCanPerform(state, teamname)
-  // We can get here without loading team operations
-  // if we manage channels on mobile without loading the conversation first
-  const _hasOperations = hasCanPerform(state, teamname)
+  const channelInfos = TeamsConstants.getTeamChannelInfos(state, teamID)
+  const yourOperations = TeamsConstants.getCanPerformByID(state, teamID)
+  const teamname = TeamsConstants.getTeamNameFromID(state, teamID) || ''
 
   const canEditChannels =
     yourOperations.editChannelDescription || yourOperations.renameChannel || yourOperations.deleteChannel
   const canCreateChannels = yourOperations.createChannel
 
-  const generalCh = channelInfos.find(i => i.channelname === 'general')
+  const generalCh = [...channelInfos.values()].find(i => i.channelname === 'general')
   const teamSize = generalCh ? generalCh.numParticipants : 0
 
-  const channels = channelInfos
-    .map((info, convID) => ({
-      convID,
-      description: info.description,
-      hasAllMembers: info.numParticipants === teamSize,
-      mtimeHuman: formatTimeRelativeToNow(info.mtime),
-      name: info.channelname,
-      numParticipants: info.numParticipants,
-      selected: info.memberStatus === RPCChatTypes.ConversationMemberStatus.active,
-    }))
-    .valueSeq()
-    .toArray()
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const searchText = state.chat2.channelSearchText
+  const isFiltered = !!searchText
 
   const selectedChatID = state.chat2.selectedConversation
 
   return {
-    _hasOperations,
     canCreateChannels,
     canEditChannels,
-    channels,
+    channels: getChannels(channelInfos, searchText, teamSize),
+    isFiltered,
     selectedChatID,
     teamname,
     waitingForGet,
@@ -60,59 +75,62 @@ const mapStateToProps = (state: Container.TypedState, ownProps: OwnProps) => {
 }
 
 const mapDispatchToProps = (dispatch: Container.TypedDispatch, ownProps: OwnProps) => {
-  const teamname = Container.getRouteProps(ownProps, 'teamname', '')
+  const teamID = Container.getRouteProps(ownProps, 'teamID', Types.noTeamID)
   return {
-    _loadChannels: () => dispatch(TeamsGen.createGetChannels({teamname})),
-    _loadOperations: () => dispatch(TeamsGen.createGetTeamOperations({teamname})),
+    _loadChannels: () => dispatch(TeamsGen.createGetChannels({teamID})),
     _onView: (
-      oldChannelState: ChannelMembershipState,
-      nextChannelState: ChannelMembershipState,
+      oldChannelState: Types.ChannelMembershipState,
+      nextChannelState: Types.ChannelMembershipState,
+      teamname: string,
       channelname: string
     ) => {
       dispatch(
         TeamsGen.createSaveChannelMembership({
           newChannelState: nextChannelState,
           oldChannelState,
-          teamname,
+          teamID,
         })
       )
       dispatch(RouteTreeGen.createNavigateUp())
       dispatch(Chat2Gen.createPreviewConversation({channelname, reason: 'manageView', teamname}))
     },
     _saveSubscriptions: (
-      oldChannelState: ChannelMembershipState,
-      nextChannelState: ChannelMembershipState,
+      oldChannelState: Types.ChannelMembershipState,
+      nextChannelState: Types.ChannelMembershipState,
       selectedChatID: ChatTypes.ConversationIDKey
     ) => {
       dispatch(
         TeamsGen.createSaveChannelMembership({
           newChannelState: nextChannelState,
           oldChannelState,
-          teamname,
+          teamID,
         })
       )
       if (selectedChatID in nextChannelState && !nextChannelState[selectedChatID]) {
-        dispatch(
-          Container.isMobile
-            ? RouteTreeGen.createNavigateUp()
-            : Chat2Gen.createNavigateToInbox({avoidConversationID: selectedChatID, findNewConversation: true})
-        )
+        dispatch(Container.isMobile ? RouteTreeGen.createNavigateUp() : Chat2Gen.createNavigateToInbox())
       } else {
         dispatch(RouteTreeGen.createNavigateUp())
       }
     },
-    onBack: () => dispatch(RouteTreeGen.createNavigateUp()),
-    onClose: () => dispatch(RouteTreeGen.createNavigateUp()),
+    onBack: () => {
+      dispatch(RouteTreeGen.createNavigateUp())
+      dispatch(Chat2Gen.createSetChannelSearchText({text: ''}))
+    },
+    onChangeSearch: (text: string) => dispatch(Chat2Gen.createSetChannelSearchText({text})),
+    onClose: () => {
+      dispatch(RouteTreeGen.createNavigateUp())
+      dispatch(Chat2Gen.createSetChannelSearchText({text: ''}))
+    },
     onCreate: () =>
       dispatch(
         RouteTreeGen.createNavigateAppend({
-          path: [{props: {teamname}, selected: 'chatCreateChannel'}],
+          path: [{props: {teamID}, selected: 'chatCreateChannel'}],
         })
       ),
     onEdit: (conversationIDKey: ChatTypes.ConversationIDKey) =>
       dispatch(
         RouteTreeGen.createNavigateAppend({
-          path: [{props: {conversationIDKey, teamname}, selected: 'chatEditChannel'}],
+          path: [{props: {conversationIDKey, teamID}, selected: 'chatEditChannel'}],
         })
       ),
   }
@@ -121,22 +139,23 @@ const mapDispatchToProps = (dispatch: Container.TypedDispatch, ownProps: OwnProp
 type Props = {
   onBack?: () => void
   selectedChatID: ChatTypes.ConversationIDKey
-  _hasOperations: () => void
   _loadChannels: () => void
-  _loadOperations: () => void
   _onView: (
-    oldChannelState: ChannelMembershipState,
-    nextChannelState: ChannelMembershipState,
+    oldChannelState: Types.ChannelMembershipState,
+    nextChannelState: Types.ChannelMembershipState,
+    teamname: string,
     channelname: string
   ) => void
   _saveSubscriptions: (
-    oldChannelState: ChannelMembershipState,
-    nextChannelState: ChannelMembershipState,
+    oldChannelState: Types.ChannelMembershipState,
+    nextChannelState: Types.ChannelMembershipState,
     selectedChatID: ChatTypes.ConversationIDKey
   ) => void
   canCreateChannels: boolean
   canEditChannels: boolean
   channels: Array<RowProps & {convID: ChatTypes.ConversationIDKey}>
+  isFiltered: boolean
+  onChangeSearch: (text: string) => void
   onClose: () => void
   onCreate: () => void
   onEdit: (convID: ChatTypes.ConversationIDKey) => void
@@ -146,16 +165,7 @@ type Props = {
 }
 
 const Wrapper = (p: Props) => {
-  const {
-    _hasOperations,
-    _loadOperations,
-    _loadChannels,
-    _onView,
-    _saveSubscriptions,
-    channels,
-    selectedChatID,
-    ...rest
-  } = p
+  const {_loadChannels, _onView, _saveSubscriptions, channels, selectedChatID, teamname, ...rest} = p
   const oldChannelState = React.useMemo(
     () =>
       channels.reduce<{[key: string]: boolean}>((acc, c) => {
@@ -165,13 +175,15 @@ const Wrapper = (p: Props) => {
     [channels]
   )
 
-  const [nextChannelState, setNextChannelState] = React.useState<ChannelMembershipState>(oldChannelState)
+  const [nextChannelState, setNextChannelState] = React.useState<Types.ChannelMembershipState>(
+    oldChannelState
+  )
 
   const onClickChannel = React.useCallback(
     (channelname: string) => {
-      _onView(oldChannelState, nextChannelState, channelname)
+      _onView(oldChannelState, nextChannelState, teamname, channelname)
     },
-    [_onView, oldChannelState, nextChannelState]
+    [_onView, oldChannelState, nextChannelState, teamname]
   )
 
   const onSaveSubscriptions = React.useCallback(() => {
@@ -192,7 +204,6 @@ const Wrapper = (p: Props) => {
 
   React.useEffect(() => {
     _loadChannels()
-    !_hasOperations && _loadOperations()
     // eslint-disable-next-line
   }, [])
 
@@ -213,11 +224,13 @@ const Wrapper = (p: Props) => {
       onBack={rest.onBack}
       waitingKey={rest.waitingKey}
       waitingForGet={rest.waitingForGet}
-      teamname={rest.teamname}
+      teamname={teamname}
       onEdit={rest.onEdit}
+      onChangeSearch={rest.onChangeSearch}
       onClose={rest.onClose}
       onCreate={rest.onCreate}
       canEditChannels={rest.canEditChannels}
+      isFiltered={rest.isFiltered}
       canCreateChannels={rest.canCreateChannels}
       channels={channels}
       nextChannelState={nextChannelState}
@@ -229,10 +242,7 @@ const Wrapper = (p: Props) => {
   )
 }
 
-const C = Container.connect(mapStateToProps, mapDispatchToProps, (s, d, _: OwnProps) => ({
+export default Container.connect(mapStateToProps, mapDispatchToProps, (s, d, _: OwnProps) => ({
   ...s,
   ...d,
 }))(Wrapper)
-
-// TODO fix this broken type
-export default C as any

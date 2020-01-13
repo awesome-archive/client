@@ -2,6 +2,7 @@ import React, {PureComponent} from 'react'
 import * as Kb from '../../../../common-adapters'
 import * as Styles from '../../../../styles'
 import * as RowSizes from '../sizes'
+import * as RPCChatTypes from '../../../../constants/types/rpc-chat-gen'
 
 type Props = {
   isSelected: boolean
@@ -12,21 +13,11 @@ type Props = {
   hasUnread: boolean
   hasBadge: boolean
   hasDraft: boolean
+  snippetDecoration: RPCChatTypes.SnippetDecoration
   onSelectConversation: () => void
 }
 
-type State = {
-  isHovered: boolean
-}
-
-class BigTeamChannel extends PureComponent<Props, State> {
-  state = {
-    isHovered: false,
-  }
-
-  _onMouseLeave = () => this.setState({isHovered: false})
-  _onMouseOver = () => this.setState({isHovered: true})
-
+class BigTeamChannel extends PureComponent<Props> {
   render() {
     return (
       <Kb.ClickableBox onClick={this.props.onSelectConversation} style={styles.container}>
@@ -39,32 +30,45 @@ class BigTeamChannel extends PureComponent<Props, State> {
               styles.channelBackground,
               this.props.isSelected && styles.selectedChannelBackground,
             ])}
-            onMouseLeave={this._onMouseLeave}
-            onMouseOver={this._onMouseOver}
           >
             <Kb.Text
               lineClamp={1}
-              type={this.props.isSelected ? 'BodySemibold' : 'Body'}
+              type="Body"
               style={Styles.collapseStyles([
-                styles.channelText,
-                this.props.isError
-                  ? styles.textError
-                  : this.props.isSelected
-                  ? this.props.hasUnread
-                    ? styles.textSelectedBold
-                    : styles.textSelected
-                  : this.props.hasUnread
-                  ? styles.textPlainBold
-                  : styles.textPlain,
+                styles.channelHash,
+                this.props.isSelected && styles.channelHashSelected,
               ])}
             >
-              #{this.props.channelname}
+              #{' '}
+              <Kb.Text
+                type={this.props.isSelected ? 'BodySemibold' : 'Body'}
+                style={Styles.collapseStyles([
+                  styles.channelText,
+                  this.props.isError
+                    ? styles.textError
+                    : this.props.isSelected
+                    ? this.props.hasUnread
+                      ? styles.textSelectedBold
+                      : styles.textSelected
+                    : this.props.hasUnread
+                    ? styles.textPlainBold
+                    : styles.textPlain,
+                ])}
+              >
+                {this.props.channelname}
+              </Kb.Text>
             </Kb.Text>
-            {this.props.isMuted && (
-              <MutedIcon isHovered={this.state.isHovered} isSelected={this.props.isSelected} />
-            )}
-            {this.props.hasDraft && <DraftIcon isSelected={this.props.isSelected} />}
-            {this.props.hasBadge && <UnreadIcon />}
+            {this.props.isMuted && <MutedIcon isSelected={this.props.isSelected} />}
+            <Kb.Box style={styles.iconContainer}>
+              {this.props.hasDraft && <DraftIcon isSelected={this.props.isSelected} />}
+              {
+                <OutboxIcon
+                  isSelected={this.props.isSelected}
+                  snippetDecoration={this.props.snippetDecoration}
+                />
+              }
+              {this.props.hasBadge && <UnreadIcon />}
+            </Kb.Box>
           </Kb.Box2>
         </Kb.Box>
       </Kb.ClickableBox>
@@ -72,38 +76,46 @@ class BigTeamChannel extends PureComponent<Props, State> {
   }
 }
 
-const MutedIcon = ({isHovered, isSelected}) => (
+const MutedIcon = ({isSelected}) => (
   <Kb.Icon
-    type={
-      Styles.isMobile
-        ? isSelected
-          ? 'icon-shh-active-26-21'
-          : 'icon-shh-26-21'
-        : isSelected
-        ? 'icon-shh-active-19-16'
-        : isHovered
-        ? 'icon-shh-hover-19-16'
-        : 'icon-shh-19-16'
-    }
-    style={mutedStyle}
+    color={isSelected ? Styles.globalColors.white : Styles.globalColors.black_20}
+    style={styles.muted}
+    type={Styles.isMobile ? (isSelected ? 'icon-shh-active-26-21' : 'icon-shh-26-21') : 'iconfont-shh'}
   />
 )
 
-const mutedStyle = {
-  marginLeft: Styles.globalMargins.xtiny,
-}
-
-const UnreadIcon = () => (
-  <Kb.Box style={styles.unreadContainer}>
-    <Kb.Box style={styles.unread} />
-  </Kb.Box>
-)
+const UnreadIcon = () => <Kb.Box style={styles.unread} />
 
 const DraftIcon = ({isSelected}) => (
-  <Kb.Box style={styles.unreadContainer}>
-    <Kb.Icon type="iconfont-edit" color={isSelected ? Styles.globalColors.white : undefined} />
-  </Kb.Box>
+  <Kb.Icon
+    type="iconfont-edit"
+    style={styles.icon}
+    color={isSelected ? Styles.globalColors.white : undefined}
+  />
 )
+
+const OutboxIcon = ({isSelected, snippetDecoration}) => {
+  switch (snippetDecoration) {
+    case RPCChatTypes.SnippetDecoration.pendingMessage:
+      return (
+        <Kb.Icon
+          style={styles.icon}
+          type={'iconfont-hourglass'}
+          color={isSelected ? Styles.globalColors.white : Styles.globalColors.black_20}
+        />
+      )
+    case RPCChatTypes.SnippetDecoration.failedPendingMessage:
+      return (
+        <Kb.Icon
+          style={styles.icon}
+          type={'iconfont-exclamation'}
+          color={isSelected ? Styles.globalColors.white : Styles.globalColors.red}
+        />
+      )
+    default:
+      return null
+  }
+}
 
 const styles = Styles.styleSheetCreate(() => ({
   channelBackground: Styles.platformStyles({
@@ -111,24 +123,42 @@ const styles = Styles.styleSheetCreate(() => ({
       ...Styles.globalStyles.flexBoxRow,
       alignItems: 'center',
       marginLeft: Styles.globalMargins.large,
-      paddingLeft: Styles.globalMargins.tiny,
       paddingRight: Styles.globalMargins.tiny,
     },
     isElectron: {
       borderBottomLeftRadius: 3,
       borderTopLeftRadius: 3,
+      paddingLeft: Styles.globalMargins.tiny,
     },
     isMobile: {
       ...Styles.globalStyles.fillAbsolute,
       flex: 1,
+      paddingLeft: Styles.globalMargins.small,
     },
   }),
+  channelHash: {
+    color: Styles.globalColors.black_20,
+  },
+  channelHashSelected: {
+    color: Styles.globalColors.white_60,
+  },
   channelText: Styles.platformStyles({
     isElectron: {
       wordBreak: 'break-all',
     },
   }),
   container: {flexShrink: 0, height: RowSizes.bigRowHeight},
+  icon: {margin: 3},
+  iconContainer: {
+    ...Styles.globalStyles.flexBoxRow,
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  muted: {
+    marginLeft: Styles.globalMargins.xtiny,
+  },
   rowContainer: Styles.platformStyles({
     common: {
       ...Styles.globalStyles.flexBoxRow,
@@ -151,7 +181,7 @@ const styles = Styles.styleSheetCreate(() => ({
   }),
   textPlainBold: Styles.platformStyles({
     common: {
-      color: Styles.globalColors.black,
+      color: Styles.globalColors.blackOrWhite,
       ...Styles.globalStyles.fontBold,
     },
     isMobile: {backgroundColor: Styles.globalColors.fastBlank},
@@ -169,13 +199,6 @@ const styles = Styles.styleSheetCreate(() => ({
     flexShrink: 0,
     height: 8,
     width: 8,
-  },
-  unreadContainer: {
-    ...Styles.globalStyles.flexBoxRow,
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    flex: 1,
-    justifyContent: 'flex-end',
   },
 }))
 

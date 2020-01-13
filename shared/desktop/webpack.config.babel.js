@@ -29,7 +29,7 @@ const config = (_, {mode}) => {
         ignore: [/\.(native|ios|android)\.(ts|js)x?$/],
         plugins: [...(isHot && !nodeThread ? ['react-hot-loader/babel'] : [])],
         presets: [
-          ['@babel/preset-env', {debug: false, modules: false, targets: {electron: '5.0.7'}}],
+          ['@babel/preset-env', {debug: false, modules: false, targets: {electron: '7.1.4'}}],
           '@babel/preset-typescript',
         ],
       },
@@ -64,6 +64,11 @@ const config = (_, {mode}) => {
       {
         include: path.resolve(__dirname, '../images/install'),
         test: [/.*\.(gif|png)$/],
+        use: [fileLoaderRule],
+      },
+      {
+        include: path.resolve(__dirname, '../images/releases'),
+        test: [/.*\.(png)$/],
         use: [fileLoaderRule],
       },
       {
@@ -114,6 +119,7 @@ const config = (_, {mode}) => {
       plugins: [
         new webpack.DefinePlugin(defines), // Inject some defines
         new webpack.IgnorePlugin(/^\.\/locale$/, /moment$/), // Skip a bunch of crap moment pulls in
+        new webpack.IgnorePlugin(/^lodash$/), // Disallow entire lodash
       ],
       resolve: {
         ...(isHot
@@ -150,6 +156,9 @@ const config = (_, {mode}) => {
                       inline: 2,
                       warnings: false,
                     },
+                    keep_fnames: true,
+                    keep_classnames: true,
+                    mangle: false,
                     output: {
                       comments: false,
                     },

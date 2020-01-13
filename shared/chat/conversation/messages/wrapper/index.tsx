@@ -3,6 +3,7 @@ import * as React from 'react'
 import * as Styles from '../../../../styles'
 import * as Types from '../../../../constants/types/chat2'
 import * as Constants from '../../../../constants/chat2'
+import SystemCreateTeam from '../system-create-team/container'
 import SystemAddedToTeam from '../system-added-to-team/container'
 import SystemChangeRetention from '../system-change-retention/container'
 import SystemGitPush from '../system-git-push/container'
@@ -13,6 +14,7 @@ import SystemSBSResolved from '../system-sbs-resolve/container'
 import SystemSimpleToComplex from '../system-simple-to-complex/container'
 import SystemText from '../system-text/container'
 import SystemUsersAddedToConv from '../system-users-added-to-conv/container'
+import SystemChangeAvatar from '../system-change-avatar'
 import SetDescription from '../set-description/container'
 import Pin from '../pin'
 import SetChannelname from '../set-channelname/container'
@@ -31,6 +33,7 @@ import SendIndicator from './send-indicator'
 import UnfurlList from './unfurl/unfurl-list/container'
 import UnfurlPromptList from './unfurl/prompt-list/container'
 import CoinFlip from '../coinflip/container'
+import TeamJourney from '../cards/team-journey/container'
 import {dismiss as dismissKeyboard} from '../../../../util/keyboard'
 import {formatTimeForChat} from '../../../../util/timestamp'
 
@@ -42,6 +45,8 @@ import {formatTimeForChat} from '../../../../util/timestamp'
 export type Props = {
   authorIsAdmin?: boolean
   authorIsOwner?: boolean
+  authorIsBot?: boolean
+  botAlias: string
   centeredOrdinal: Types.CenterOrdinalHighlightMode
   conversationIDKey: Types.ConversationIDKey
   decorate: boolean
@@ -67,6 +72,7 @@ export type Props = {
   shouldShowPopup: boolean
   showCrowns: boolean
   showSendIndicator: boolean
+  youAreAuthor: boolean
 }
 
 type State = {
@@ -76,7 +82,7 @@ type State = {
 }
 
 class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, State> {
-  _mounted = false
+  private mounted = false
   state = {
     disableCenteredHighlight: false,
     showMenuButton: false,
@@ -84,17 +90,17 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
   }
 
   componentDidMount() {
-    this._mounted = true
-    this._updateHighlightMode()
+    this.mounted = true
+    this.updateHighlightMode()
   }
 
   componentWillUnmount() {
-    this._mounted = false
+    this.mounted = false
   }
 
   componentDidUpdate(prevProps: Props) {
     if (this.props.centeredOrdinal !== prevProps.centeredOrdinal) {
-      this._updateHighlightMode()
+      this.updateHighlightMode()
     }
     if (this.props.measure) {
       const changed =
@@ -105,12 +111,12 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       }
     }
   }
-  _updateHighlightMode = () => {
+  private updateHighlightMode = () => {
     switch (this.props.centeredOrdinal) {
       case 'flash':
         this.setState({disableCenteredHighlight: false})
         setTimeout(() => {
-          if (this._mounted) {
+          if (this.mounted) {
             this.setState({disableCenteredHighlight: true})
           }
         }, 2000)
@@ -120,22 +126,43 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
         break
     }
   }
-  _showCenteredHighlight = () => {
-    return !this.state.disableCenteredHighlight && this.props.centeredOrdinal !== 'none'
-  }
-  _onMouseOver = () => this.setState(o => (o.showMenuButton ? null : {showMenuButton: true}))
-  _setShowingPicker = (showingPicker: boolean) =>
+  private showCenteredHighlight = () =>
+    !this.state.disableCenteredHighlight && this.props.centeredOrdinal !== 'none'
+  private onMouseOver = () => this.setState(o => (o.showMenuButton ? null : {showMenuButton: true}))
+  private setShowingPicker = (showingPicker: boolean) =>
     this.setState(s => (s.showingPicker === showingPicker ? null : {showingPicker}))
-  _dismissKeyboard = () => dismissKeyboard()
-  _orangeLine = () =>
-    this.props.orangeLineAbove && <Kb.Box2 key="orangeLine" direction="vertical" style={styles.orangeLine} />
-  _onAuthorClick = () => this.props.onAuthorClick()
-  _isExploding = () =>
+  private dismissKeyboard = () => dismissKeyboard()
+  private orangeLine = () =>
+    this.props.orangeLineAbove && (
+      <Kb.Box2
+        key="orangeLine"
+        direction="vertical"
+        style={Styles.collapseStyles([
+          styles.orangeLine,
+          !this.props.showUsername && styles.orangeLineCompensationLeft,
+        ])}
+      />
+    )
+  private onAuthorClick = () => this.props.onAuthorClick()
+  private isExploding = () =>
     (this.props.message.type === 'text' || this.props.message.type === 'attachment') &&
     this.props.message.exploding
 
-  _authorAndContent = children => {
+  private authorAndContent = (children: React.ReactNode) => {
     let result
+    const username = (
+      <Kb.ConnectedUsernames
+        colorBroken={true}
+        colorFollowing={true}
+        colorYou={true}
+        onUsernameClicked={this.onAuthorClick}
+        style={Styles.collapseStyles([
+          this.showCenteredHighlight() && this.props.youAreAuthor && styles.usernameHighlighted,
+        ])}
+        type="BodySmallBold"
+        usernames={[this.props.showUsername]}
+      />
+    )
     if (this.props.showUsername) {
       result = (
         <React.Fragment key="authorAndContent">
@@ -144,18 +171,23 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
               size={32}
               username={this.props.showUsername}
               skipBackground={true}
-              onClick={this._onAuthorClick}
+              onClick={this.onAuthorClick}
               style={styles.avatar}
             />
             <Kb.Box2 direction="horizontal" gap="xtiny" fullWidth={true} style={styles.usernameCrown}>
-              <Kb.ConnectedUsernames
-                colorBroken={true}
-                colorFollowing={true}
-                colorYou={true}
-                type="BodySmallBold"
-                usernames={[this.props.showUsername]}
-                onUsernameClicked={this._onAuthorClick}
-              />
+              {this.props.botAlias ? (
+                <Kb.Box2 direction="horizontal">
+                  <Kb.Text type="BodySmallBold" style={{color: Styles.globalColors.black}}>
+                    {this.props.botAlias} [
+                  </Kb.Text>
+                  {username}
+                  <Kb.Text type="BodySmallBold" style={{color: Styles.globalColors.black}}>
+                    ]
+                  </Kb.Text>
+                </Kb.Box2>
+              ) : (
+                username
+              )}
               {this.props.showCrowns && (this.props.authorIsOwner || this.props.authorIsAdmin) && (
                 <Kb.WithTooltip tooltip={this.props.authorIsOwner ? 'Owner' : 'Admin'}>
                   <Kb.Icon
@@ -167,7 +199,16 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
                   />
                 </Kb.WithTooltip>
               )}
-              <Kb.Text type="BodyTiny" style={styles.timestamp}>
+              {this.props.authorIsBot && (
+                <Kb.Icon fontSize={16} color={Styles.globalColors.black_35} type="iconfont-nav-2-robot" />
+              )}
+              <Kb.Text
+                type="BodyTiny"
+                style={Styles.collapseStyles([
+                  styles.timestamp,
+                  this.showCenteredHighlight() && styles.timestampHighlighted,
+                ])}
+              >
                 {formatTimeForChat(this.props.message.timestamp)}
               </Kb.Text>
             </Kb.Box2>
@@ -192,18 +233,31 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
     )
   }
 
-  _isEdited = () =>
-    // @ts-ignore
+  private isEdited = () =>
     this.props.message.hasBeenEdited && (
-      <Kb.Text key="isEdited" type="BodyTiny" style={styles.edited}>
+      <Kb.Text
+        key="isEdited"
+        type="BodyTiny"
+        style={Styles.collapseStyles([
+          styles.edited,
+          this.showCenteredHighlight() && styles.editedHighlighted,
+        ])}
+      >
         EDITED
       </Kb.Text>
     )
 
-  _isFailed = () =>
-    !!this.props.failureDescription && (
+  private isFailed = () =>
+    // hide error messages if the exploding message already exploded
+    !!this.props.failureDescription &&
+    !(this.isExploding() && this.props.exploded) && (
       <Kb.Text key="isFailed" type="BodySmall">
-        <Kb.Text type="BodySmall" style={styles.fail}>
+        <Kb.Text type="BodySmall" style={this.isExploding() ? styles.failExploding : styles.fail}>
+          {this.isExploding() && (
+            <>
+              <Kb.Icon fontSize={16} boxStyle={styles.failExplodingIcon} type="iconfont-block" />{' '}
+            </>
+          )}
           {this.props.failureDescription}.{' '}
         </Kb.Text>
         {!!this.props.onCancel && (
@@ -227,7 +281,7 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       </Kb.Text>
     )
 
-  _unfurlPrompts = () =>
+  private unfurlPrompts = () =>
     this.props.hasUnfurlPrompts && (
       <UnfurlPromptList
         key="UnfurlPromptList"
@@ -236,11 +290,10 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       />
     )
 
-  _unfurlList = () =>
-    // @ts-ignore
+  private unfurlList = () =>
+    this.props.message.type === 'text' &&
     this.props.message.unfurls &&
-    // @ts-ignore
-    !this.props.message.unfurls.isEmpty() && (
+    !!this.props.message.unfurls.size && (
       <UnfurlList
         key="UnfurlList"
         conversationIDKey={this.props.conversationIDKey}
@@ -249,7 +302,7 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       />
     )
 
-  _coinFlip = () => {
+  private coinFlip = () => {
     const message = this.props.message
     return (
       message.type === 'text' &&
@@ -258,6 +311,7 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
           key="CoinFlip"
           conversationIDKey={this.props.conversationIDKey}
           flipGameID={message.flipGameID}
+          measure={this.props.measure}
           isSendError={!!message.errorReason}
           text={message.text}
         />
@@ -265,12 +319,11 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
     )
   }
 
-  _shouldShowReactionsRow = () =>
-    // @ts-ignore
-    (this.props.message.reactions && !this.props.message.reactions.isEmpty()) || this.props.isPendingPayment
+  private hasReactions = () =>
+    (!!this.props.message.reactions && !!this.props.message.reactions.size) || this.props.isPendingPayment
 
-  _reactionsRow = () =>
-    this._shouldShowReactionsRow() && (
+  private reactionsRow = () =>
+    this.hasReactions() && (
       <ReactionsRow
         key="ReactionsRow"
         btnClassName="WrapperMessage-emojiButton"
@@ -280,7 +333,9 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       />
     )
 
-  _popup = () =>
+  private getKeyedBot = () => this.props.message.type === 'text' && this.props.message.botUsername
+
+  private popup = () =>
     (this.props.message.type === 'text' ||
       this.props.message.type === 'attachment' ||
       this.props.message.type === 'sendPayment' ||
@@ -309,22 +364,20 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       />
     )
 
-  _containerProps = () => {
+  private containerProps = () => {
     if (Styles.isMobile) {
       const props = {
         style: Styles.collapseStyles([
           styles.container,
+          this.showCenteredHighlight() && styles.centeredOrdinal,
           !this.props.showUsername && styles.containerNoUsername,
-          !this._isExploding() && styles.containerNoExploding, // extra right padding to line up with infopane / input icons
-          this.props.isJoinLeave && styles.containerJoinLeave,
-          this._showCenteredHighlight() && styles.centeredOrdinal,
         ]),
       }
       return this.props.decorate
         ? {
             ...props,
             onLongPress: this.props.toggleShowingMenu,
-            onPress: this._dismissKeyboard,
+            onPress: this.dismissKeyboard,
             onSwipeLeft: this.props.onSwipeLeft,
             underlayColor: Styles.globalColors.blueLighter3,
           }
@@ -333,8 +386,8 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       return {
         className: Styles.classNames(
           {
-            'WrapperMessage-author': this.props.showUsername,
-            'WrapperMessage-centered': this._showCenteredHighlight(),
+            'WrapperMessage-author': this.props.showUsername || this.props.message.type === 'journeycard',
+            'WrapperMessage-centered': this.showCenteredHighlight(),
             'WrapperMessage-decorated': this.props.decorate,
             'WrapperMessage-hoverColor': !this.props.isPendingPayment,
             'WrapperMessage-noOverflow': this.props.isPendingPayment,
@@ -344,15 +397,14 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
           'WrapperMessage-hoverBox'
         ),
         onContextMenu: this.props.toggleShowingMenu,
-        onMouseOver: this._onMouseOver,
+        onMouseOver: this.onMouseOver,
         // attach popups to the message itself
         ref: this.props.setAttachmentRef,
-        style: Styles.collapseStyles([this.props.isJoinLeave && styles.containerJoinLeave]),
       }
     }
   }
 
-  _sendIndicator = () => {
+  private sendIndicator = () => {
     if (!this.props.showSendIndicator) {
       return null
     }
@@ -372,13 +424,14 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
     )
   }
 
-  _cachedMenuStyles = {}
-  _menuAreaStyle = (exploded, exploding) => {
+  private cachedMenuStyles = new Map<string, Styles.StylesCrossPlatform>()
+  private menuAreaStyle = (exploded: boolean, exploding: boolean) => {
     const iconSizes = [
-      this.props.isRevoked ? 16 : 0, // revoked
-      this.props.showCoinsIcon ? 16 : 0, // coin stack
+      this.props.isRevoked ? 24 : 0, // revoked
+      this.props.showCoinsIcon ? 24 : 0, // coin stack
       exploded || Styles.isMobile ? 0 : 16, // ... menu
       exploding ? (Styles.isMobile ? 57 : 46) : 0, // exploding
+      this.getKeyedBot() && !this.props.authorIsBot ? 24 : 0,
     ].filter(Boolean)
     const padding = Styles.globalMargins.tiny
     const width =
@@ -386,17 +439,20 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
 
     const key = `${width}:${this.props.showUsername ? 1 : 0}:${exploding ? 1 : 0}:${exploded ? 1 : 0}`
 
-    if (!this._cachedMenuStyles[key]) {
-      this._cachedMenuStyles[key] = Styles.collapseStyles([
-        styles.menuButtons,
-        !exploded && {width},
-        !!this.props.showUsername && styles.menuButtonsWithAuthor,
-      ])
+    if (!this.cachedMenuStyles.has(key)) {
+      this.cachedMenuStyles.set(
+        key,
+        Styles.collapseStyles([
+          styles.menuButtons,
+          !exploded && {width},
+          !!this.props.showUsername && styles.menuButtonsWithAuthor,
+        ])
+      )
     }
-    return this._cachedMenuStyles[key]
+    return this.cachedMenuStyles.get(key)
   }
 
-  _messageAndButtons = () => {
+  private messageAndButtons = () => {
     const showMenuButton = !Styles.isMobile && this.state.showMenuButton
     const message = this.props.message
     let child: React.ReactNode = null
@@ -406,7 +462,7 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       case 'text':
         exploded = message.exploded
         explodedBy = message.explodedBy
-        child = <TextMessage key="text" message={message} />
+        child = <TextMessage isHighlighted={this.showCenteredHighlight()} key="text" message={message} />
         break
       case 'attachment':
         exploded = message.exploded
@@ -432,13 +488,25 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
         child = <SystemInviteAccepted key="systemInviteAccepted" message={message} />
         break
       case 'systemSBSResolved':
-        child = <SystemSBSResolved key="systemSbsResolved" message={message} />
+        if (this.props.youAreAuthor) {
+          child = <SystemSBSResolved key="systemSbsResolved" message={message} />
+        } else {
+          child = (
+            <SystemJoined
+              key="systemJoined"
+              message={{...message, joiners: [message.prover], leavers: [], type: 'systemJoined'}}
+            />
+          )
+        }
         break
       case 'systemSimpleToComplex':
         child = <SystemSimpleToComplex key="systemSimpleToComplex" message={message} />
         break
       case 'systemGitPush':
         child = <SystemGitPush key="systemGitPush" message={message} />
+        break
+      case 'systemCreateTeam':
+        child = <SystemCreateTeam key="systemCreateTeam" message={message} />
         break
       case 'systemAddedToTeam':
         child = <SystemAddedToTeam key="systemAddedToTeam" message={message} />
@@ -458,6 +526,9 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       case 'systemLeft':
         child = <SystemLeft key="systemLeft" message={message} />
         break
+      case 'systemChangeAvatar':
+        child = <SystemChangeAvatar key="systemChangeAvatar" message={message} />
+        break
       case 'setDescription':
         child = <SetDescription key="setDescription" message={message} />
         break
@@ -475,7 +546,7 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
         return null
     }
 
-    const exploding = this._isExploding()
+    const exploding = this.isExploding()
     const maybeExplodedChild = exploding ? (
       <ExplodingHeightRetainer
         explodedBy={explodedBy}
@@ -499,28 +570,39 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       return (
         <Kb.Box2 key="messageAndButtons" direction="horizontal" fullWidth={true}>
           {maybeExplodedChild}
-          <Kb.Box2 direction="horizontal" style={this._menuAreaStyle(exploded, exploding)}>
+          <Kb.Box2 direction="horizontal" style={this.menuAreaStyle(exploded, exploding)}>
             {exploding && (
               <ExplodingMeta
                 conversationIDKey={this.props.conversationIDKey}
+                isParentHighlighted={this.showCenteredHighlight()}
                 onClick={this.props.toggleShowingMenu}
                 ordinal={message.ordinal}
               />
             )}
             {this.props.isRevoked && (
               <Kb.Icon
-                type="iconfont-exclamation"
-                color={Styles.globalColors.blue}
-                fontSize={14}
-                style={styles.marginLeftTiny}
+                type="iconfont-rip"
+                style={styles.paddingLeftTiny}
+                color={Styles.globalColors.black_20}
               />
             )}
             {this.props.showCoinsIcon && (
-              <Kb.Icon type="icon-stellar-coins-stacked-16" style={styles.marginLeftTiny} />
+              <Kb.Icon type="icon-stellar-coins-stacked-16" style={styles.paddingLeftTiny} />
+            )}
+            {this.getKeyedBot() && !this.props.authorIsBot && (
+              <Kb.WithTooltip tooltip={`Encrypted for @${this.getKeyedBot()}`}>
+                <Kb.Icon
+                  fontSize={16}
+                  color={Styles.globalColors.black_35}
+                  type="iconfont-nav-2-robot"
+                  onClick={() => null}
+                  style={styles.paddingLeftTiny}
+                />
+              </Kb.WithTooltip>
             )}
             {showMenuButton ? (
               <Kb.Box className="WrapperMessage-buttons">
-                {!this._shouldShowReactionsRow() &&
+                {!this.hasReactions() &&
                   Constants.isDecoratedMessage(this.props.message) &&
                   !this.props.showingMenu && (
                     <EmojiRow
@@ -528,7 +610,7 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
                         'WrapperMessage-emojiRow': !this.props.isLastInThread,
                       })}
                       conversationIDKey={this.props.conversationIDKey}
-                      onShowingEmojiPicker={this._setShowingPicker}
+                      onShowingEmojiPicker={this.setShowingPicker}
                       ordinal={message.ordinal}
                       style={Styles.collapseStyles([
                         styles.emojiRow,
@@ -557,9 +639,10 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
       return (
         <Kb.Box2 key="messageAndButtons" direction="horizontal" fullWidth={true}>
           {maybeExplodedChild}
-          <Kb.Box2 direction="horizontal" style={this._menuAreaStyle(exploded, exploding)}>
+          <Kb.Box2 direction="horizontal" style={this.menuAreaStyle(exploded, exploding)}>
             <ExplodingMeta
               conversationIDKey={this.props.conversationIDKey}
+              isParentHighlighted={this.showCenteredHighlight()}
               onClick={this.props.toggleShowingMenu}
               ordinal={message.ordinal}
             />
@@ -578,22 +661,26 @@ class _WrapperMessage extends React.Component<Props & Kb.OverlayParentProps, Sta
     return (
       <>
         <LongPressable
-          {...this._containerProps()}
+          {...this.containerProps()}
           children={[
-            this._authorAndContent([
-              this._messageAndButtons(),
-              this._isEdited(),
-              this._isFailed(),
-              this._unfurlPrompts(),
-              this._unfurlList(),
-              this._coinFlip(),
-              this._reactionsRow(),
-            ]),
-            this._sendIndicator(),
-            this._orangeLine(),
+            this.props.message.type === 'journeycard' ? (
+              <TeamJourney key="journey" message={this.props.message} />
+            ) : (
+              this.authorAndContent([
+                this.messageAndButtons(),
+                this.isEdited(),
+                this.isFailed(),
+                this.unfurlPrompts(),
+                this.unfurlList(),
+                this.coinFlip(),
+                this.reactionsRow(),
+              ])
+            ),
+            this.orangeLine(),
+            this.sendIndicator(),
           ]}
         />
-        {this._popup()}
+        {this.popup()}
       </>
     )
   }
@@ -614,21 +701,11 @@ const styles = Styles.styleSheetCreate(
         isMobile: {marginTop: 8},
       }),
       avatar: Styles.platformStyles({
-        isElectron: {
-          marginLeft: Styles.globalMargins.small,
-        },
+        isElectron: {marginLeft: Styles.globalMargins.small},
         isMobile: {marginLeft: Styles.globalMargins.tiny},
       }),
-      centeredOrdinal: {
-        backgroundColor: Styles.globalColors.yellow,
-      },
+      centeredOrdinal: {backgroundColor: Styles.globalColors.yellowOrYellowAlt},
       container: Styles.platformStyles({isMobile: {overflow: 'hidden'}}),
-      containerJoinLeave: Styles.platformStyles({
-        isMobile: {
-          paddingLeft: Styles.globalMargins.tiny,
-        },
-      }),
-      containerNoExploding: Styles.platformStyles({isMobile: {paddingRight: Styles.globalMargins.tiny}}),
       containerNoUsername: Styles.platformStyles({
         isMobile: {
           paddingBottom: 3,
@@ -662,6 +739,7 @@ const styles = Styles.styleSheetCreate(
         },
       }),
       edited: {color: Styles.globalColors.black_20},
+      editedHighlighted: {color: Styles.globalColors.black_20OrBlack},
       ellipsis: {marginLeft: Styles.globalMargins.tiny},
       emojiRow: Styles.platformStyles({
         isElectron: {
@@ -697,9 +775,15 @@ const styles = Styles.styleSheetCreate(
         },
       }),
       fail: {color: Styles.globalColors.redDark},
+      failExploding: {color: Styles.globalColors.black_50},
+      failExplodingIcon: Styles.platformStyles({
+        isElectron: {
+          display: 'inline-block',
+          verticalAlign: 'middle',
+        },
+      }),
       failUnderline: {color: Styles.globalColors.redDark, textDecorationLine: 'underline'},
       fast,
-      marginLeftTiny: {marginLeft: Styles.globalMargins.tiny},
       menuButtons: Styles.platformStyles({
         common: {
           alignSelf: 'flex-start',
@@ -711,9 +795,7 @@ const styles = Styles.styleSheetCreate(
         isMobile: {height: 21},
       }),
       menuButtonsWithAuthor: {marginTop: -16},
-      messagePopupContainer: {
-        marginRight: Styles.globalMargins.small,
-      },
+      messagePopupContainer: {marginRight: Styles.globalMargins.small},
       orangeLine: {
         // don't push down content due to orange line
         backgroundColor: Styles.globalColors.orange,
@@ -722,20 +804,28 @@ const styles = Styles.styleSheetCreate(
         left: 0,
         position: 'absolute',
         right: 0,
-        top: Styles.isMobile ? 1 : 0, // mobile needs some breathing room for some reason
+        top: 0,
       },
+      orangeLineCompensationLeft: Styles.platformStyles({
+        isMobile: {
+          left: -Styles.globalMargins.mediumLarge, // compensate for containerNoUsername's padding
+        },
+      }),
+      paddingLeftTiny: {paddingLeft: Styles.globalMargins.tiny},
       send: Styles.platformStyles({
         common: {position: 'absolute'},
         isElectron: {
           pointerEvents: 'none',
-          right: 12,
+          right: 8,
+          top: 2,
         },
-        isMobile: {right: 0},
+        isMobile: {
+          right: 0,
+          top: -8,
+        },
       }),
-      timestamp: Styles.platformStyles({
-        common: {paddingLeft: Styles.globalMargins.xtiny},
-        isElectron: {lineHeight: 19},
-      }),
+      timestamp: Styles.platformStyles({isElectron: {lineHeight: 19}}),
+      timestampHighlighted: {color: Styles.globalColors.black_50OrBlack_40},
       usernameCrown: Styles.platformStyles({
         isElectron: {
           alignItems: 'baseline',
@@ -744,6 +834,7 @@ const styles = Styles.styleSheetCreate(
         },
         isMobile: {alignItems: 'center'},
       }),
+      usernameHighlighted: {color: Styles.globalColors.blackOrBlack},
     } as const)
 )
 

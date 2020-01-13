@@ -4,12 +4,11 @@ import * as Constants from '../../../constants/fs'
 import * as Styles from '../../../styles'
 import * as Kb from '../../../common-adapters'
 import {Props as HeaderHocProps} from '../../../common-adapters/header-hoc/types'
-import {withProps} from 'recompose'
 import Rows from '../rows/rows-container'
 import Root from '../root'
 import * as FsCommon from '../../common'
 import * as RowCommon from '../rows/common'
-import NavHeaderTitle from '../../nav-header/title-container'
+import NavHeaderTitle from '../../nav-header/title'
 
 type Props = {
   index: number
@@ -37,7 +36,7 @@ const DesktopHeaders = (props: Props) => (
       <Kb.Text type="Header" style={{flexShrink: 0}}>
         Move or Copy “
       </Kb.Text>
-      <FsCommon.PathItemIcon size={16} path={Types.pathConcat(props.parentPath, props.targetName)} />
+      <FsCommon.ItemIcon size={16} path={Types.pathConcat(props.parentPath, props.targetName)} />
       <FsCommon.Filename type="Header" filename={props.targetName} />
       <Kb.Text type="Header" style={{flexShrink: 0}}>
         ”
@@ -117,8 +116,10 @@ const DestinationPicker = (props: Props) => {
 }
 
 const HighOrderDestinationPickerDesktop = Kb.HeaderOrPopup(DestinationPicker)
-const HighOrderDestinationPickerMobile = withProps(
-  (props: Props & HeaderHocProps): Partial<HeaderHocProps> => ({
+
+const PickerMobile = Kb.HeaderHoc(DestinationPicker)
+const HighOrderDestinationPickerMobile = (props: Props & HeaderHocProps) => {
+  const otherProps = {
     customComponent: (
       <Kb.Box2 direction="horizontal" fullWidth={true}>
         <Kb.ClickableBox style={styles.mobileHeaderButton} onClick={props.onCancel || undefined}>
@@ -126,7 +127,7 @@ const HighOrderDestinationPickerMobile = withProps(
         </Kb.ClickableBox>
         <Kb.Box2 direction="vertical" centerChildren={true} style={styles.mobileHeaderContent}>
           <Kb.Box2 direction="horizontal" centerChildren={true} gap="xtiny">
-            <FsCommon.PathItemIcon size={12} path={Types.pathConcat(props.parentPath, props.targetName)} />
+            <FsCommon.ItemIcon size={16} path={Types.pathConcat(props.parentPath, props.targetName)} />
             <FsCommon.Filename type="BodySmallSemibold" filename={props.targetName} />
           </Kb.Box2>
           <Kb.Text type="Header" lineClamp={1}>
@@ -136,11 +137,12 @@ const HighOrderDestinationPickerMobile = withProps(
       </Kb.Box2>
     ) as React.ReactNode,
     headerStyle: {paddingRight: 0} as Styles.StylesCrossPlatform,
-    onCancel: null, // unset this to avoid onCancel button from HeaderHoc
-  })
-)(Kb.HeaderHoc(DestinationPicker))
+    onCancel: undefined, // unset this to avoid onCancel button from HeaderHoc
+  }
+  return <PickerMobile {...props} {...otherProps} />
+}
 
-export default (Styles.isMobile ? HighOrderDestinationPickerMobile : HighOrderDestinationPickerDesktop)
+export default Styles.isMobile ? HighOrderDestinationPickerMobile : HighOrderDestinationPickerDesktop
 
 const styles = Styles.styleSheetCreate(
   () =>

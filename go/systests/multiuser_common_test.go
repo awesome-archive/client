@@ -159,6 +159,8 @@ type usernameLoginUI struct {
 	username string
 }
 
+var _ libkb.LoginUI = (*usernameLoginUI)(nil)
+
 func (s usernameLoginUI) GetEmailOrUsername(contextOld.Context, int) (string, error) {
 	return s.username, nil
 }
@@ -171,8 +173,8 @@ func (s usernameLoginUI) DisplayPaperKeyPhrase(contextOld.Context, keybase1.Disp
 func (s usernameLoginUI) DisplayPrimaryPaperKey(contextOld.Context, keybase1.DisplayPrimaryPaperKeyArg) error {
 	return nil
 }
-func (s usernameLoginUI) PromptResetAccount(_ context.Context, arg keybase1.PromptResetAccountArg) (bool, error) {
-	return false, nil
+func (s usernameLoginUI) PromptResetAccount(_ context.Context, arg keybase1.PromptResetAccountArg) (keybase1.ResetPromptResponse, error) {
+	return keybase1.ResetPromptResponse_NOTHING, nil
 }
 func (s usernameLoginUI) DisplayResetProgress(_ context.Context, arg keybase1.DisplayResetProgressArg) error {
 	return nil
@@ -182,6 +184,12 @@ func (s usernameLoginUI) ExplainDeviceRecovery(_ context.Context, arg keybase1.E
 }
 func (s usernameLoginUI) PromptPassphraseRecovery(_ context.Context, arg keybase1.PromptPassphraseRecoveryArg) (bool, error) {
 	return false, nil
+}
+func (s usernameLoginUI) ChooseDeviceToRecoverWith(_ context.Context, arg keybase1.ChooseDeviceToRecoverWithArg) (keybase1.DeviceID, error) {
+	return "", nil
+}
+func (s usernameLoginUI) DisplayResetMessage(_ context.Context, arg keybase1.DisplayResetMessageArg) error {
+	return nil
 }
 
 func (d *smuDeviceWrapper) popClone() *libkb.TestContext {
@@ -386,7 +394,28 @@ func (u *smuUser) registerForNotifications() {
 	}
 }
 
+func (u *smuUser) waitForNewlyAddedToTeamByID(teamID keybase1.TeamID) {
+	u.ctx.t.Logf("waiting for newly added to team %s", teamID)
+
+	// process 10 team rotations or 10s worth of time
+	for i := 0; i < 10; i++ {
+		select {
+		case tid := <-u.notifications.newlyAddedToTeam:
+			u.ctx.t.Logf("team newly added notification received: %v", tid)
+			if tid.Eq(teamID) {
+				u.ctx.t.Logf("notification matched!")
+				return
+			}
+			u.ctx.t.Logf("ignoring newly added message (expected teamID = %q)", teamID)
+		case <-time.After(1 * time.Second * libkb.CITimeMultiplier(u.getPrimaryGlobalContext())):
+		}
+	}
+	u.ctx.t.Fatalf("timed out waiting for team newly added %s", teamID)
+}
+
 func (u *smuUser) waitForTeamAbandoned(teamID keybase1.TeamID) {
+	u.ctx.t.Logf("waiting for team abandoned %s", teamID)
+
 	// process 10 team rotations or 10s worth of time
 	for i := 0; i < 10; i++ {
 		select {
@@ -478,7 +507,7 @@ func (u *smuUser) createTeam2(readers, writers, admins, owners []*smuUser) smuTe
 	for i, list := range lists {
 		for _, u2 := range list {
 			_, err = cli.TeamAddMember(context.TODO(), keybase1.TeamAddMemberArg{
-				Name:     name,
+				TeamID:   x.TeamID,
 				Username: u2.username,
 				Role:     roles[i],
 			})
@@ -516,7 +545,7 @@ func (u *smuUser) loadTeam(teamname string, admin bool) *teams.Team {
 func (u *smuUser) addTeamMember(team smuTeam, member *smuUser, role keybase1.TeamRole) {
 	cli := u.getTeamsClient()
 	_, err := cli.TeamAddMember(context.TODO(), keybase1.TeamAddMemberArg{
-		Name:     team.name,
+		TeamID:   team.ID,
 		Username: member.username,
 		Role:     role,
 	})
@@ -761,6 +790,24 @@ func (u *smuUser) readChatsWithDevice(team smuTeam, dev *smuDeviceWrapper, nMess
 	messages, err := u.readChatsWithErrorAndDevice(team, dev, nMessages)
 	t := u.ctx.t
 	require.NoError(t, err)
+
+	// Filter out journeycards
+	originalLen := len(messages)
+	n := 0 // https://github.com/golang/go/wiki/SliceTricks#filter-in-place
+	for _, msg := range messages {
+		if !msg.IsJourneycard() {
+			messages[n] = msg
+			n++
+		}
+	}
+	messages = messages[:n]
+	if originalLen < len(messages) {
+		t.Logf("filtered out %v journeycard messages", originalLen-len(messages))
+	}
+
+	if len(messages) != nMessages {
+		t.Logf("messages: %v", chat1.MessageUnboxedDebugLines(messages))
+	}
 	require.Len(t, messages, nMessages)
 	for i, msg := range messages {
 		require.Equal(t, msg.Valid().MessageBody.Text().Body, fmt.Sprintf("%d", len(messages)-i-1))

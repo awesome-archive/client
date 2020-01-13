@@ -86,6 +86,10 @@ func (d *ChatAPIVersionHandler) handleV1(ctx context.Context, c Call, w io.Write
 		return d.handler.GetResetConvMembersV1(ctx, c, w)
 	case methodAddResetConvMember:
 		return d.handler.AddResetConvMemberV1(ctx, c, w)
+	case methodGetDeviceInfo:
+		return d.handler.GetDeviceInfoV1(ctx, c, w)
+	case methodListMembers:
+		return d.handler.ListMembersV1(ctx, c, w)
 	default:
 		return ErrInvalidMethod{name: c.Method, version: 1}
 	}

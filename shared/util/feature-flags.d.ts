@@ -1,22 +1,20 @@
 export type FeatureFlags = {
   admin: boolean
-  airdrop: boolean
+  audioAttachments: boolean
+  botUI: boolean
   chatIndexProfilingEnabled: boolean
-  conflictResolution: boolean
-  darkMode: boolean
+  connectThrashCheck: boolean
+  cryptoTab: boolean
   dbCleanEnabled: boolean
   fastAccountSwitch: boolean
   foldersInProfileTab: boolean
-  kbfsOfflineMode: boolean
+  lagRadar: boolean
   moveOrCopy: boolean
   newTeamBuildingForChatAllowMakeTeam: boolean
   outOfDateBanner: boolean
-  plansEnabled: boolean
   proofProviders: boolean
-  resetPipeline: boolean
   stellarExternalPartners: boolean
-  lagRadar: boolean
-  wonderland: boolean
+  userBlocking: boolean
 }
 
 declare const ff: FeatureFlags

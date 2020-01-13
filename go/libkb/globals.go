@@ -1,4 +1,4 @@
-// Copyright 2015 Keybase, Inc. All rights reserved. Use of
+/// Copyright 2015 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
 //
@@ -53,22 +53,23 @@ type GlobalContext struct {
 	SKBKeyringMu     *sync.Mutex           // Protects all attempts to mutate the SKBKeyringFile
 	Keyrings         *Keyrings             // Gpg Keychains holding keys
 	perUserKeyringMu *sync.Mutex
-	perUserKeyring   *PerUserKeyring      // Keyring holding per user keys
-	API              API                  // How to make a REST call to the server
-	Resolver         Resolver             // cache of resolve results
-	LocalDb          *JSONLocalDb         // Local DB for cache
-	LocalChatDb      *JSONLocalDb         // Local DB for cache
-	MerkleClient     *MerkleClient        // client for querying server's merkle sig tree
-	XAPI             ExternalAPI          // for contacting Twitter, Github, etc.
-	Output           io.Writer            // where 'Stdout'-style output goes
-	DNSNSFetcher     DNSNameServerFetcher // The mobile apps potentially pass an implementor of this interface which is used to grab currently configured DNS name servers
-	MobileNetState   *MobileNetState      // The kind of network connection for the currently running instance of the app
-	MobileAppState   *MobileAppState      // The state of focus for the currently running instance of the app
-	DesktopAppState  *DesktopAppState     // The state of focus for the currently running instance of the app
-	ChatHelper       ChatHelper           // conveniently send chat messages
-	RPCCanceler      *RPCCanceler         // register live RPCs so they can be cancelleed en masse
-	IdentifyDispatch *IdentifyDispatch    // get notified of identify successes
-	Identify3State   *Identify3State      // keep track of Identify3 sessions
+	perUserKeyring   *PerUserKeyring       // Keyring holding per user keys
+	API              API                   // How to make a REST call to the server
+	Resolver         Resolver              // cache of resolve results
+	LocalDb          *JSONLocalDb          // Local DB for cache
+	LocalChatDb      *JSONLocalDb          // Local DB for cache
+	MerkleClient     MerkleClientInterface // client for querying server's merkle sig tree
+	XAPI             ExternalAPI           // for contacting Twitter, Github, etc.
+	Output           io.Writer             // where 'Stdout'-style output goes
+	DNSNSFetcher     DNSNameServerFetcher  // The mobile apps potentially pass an implementor of this interface which is used to grab currently configured DNS name servers
+	MobileNetState   *MobileNetState       // The kind of network connection for the currently running instance of the app
+	MobileAppState   *MobileAppState       // The state of focus for the currently running instance of the app
+	DesktopAppState  *DesktopAppState      // The state of focus for the currently running instance of the app
+	ChatHelper       ChatHelper            // conveniently send chat messages
+	RPCCanceler      *RPCCanceler          // register live RPCs so they can be cancelleed en masse
+	IdentifyDispatch *IdentifyDispatch     // get notified of identify successes
+	Identify3State   *Identify3State       // keep track of Identify3 sessions
+	vidMu            *sync.Mutex           // protect VID
 
 	cacheMu                *sync.RWMutex   // protects all caches
 	ProofCache             *ProofCache     // where to cache proof results
@@ -79,6 +80,7 @@ type GlobalContext struct {
 	teamLoader             TeamLoader      // Play back teams for id/name properties
 	fastTeamLoader         FastTeamLoader  // Play back team in "fast" mode for keys and names only
 	hiddenTeamChainManager HiddenTeamChainManager
+	TeamRoleMapManager     TeamRoleMapManager
 	IDLocktab              *LockTable
 	loadUserLockTab        *LockTable
 	teamAuditor            TeamAuditor
@@ -99,6 +101,7 @@ type GlobalContext struct {
 	paramProofStore        MerkleStore        // a cache and fetcher for param proofs
 	externalURLStore       MerkleStore        // a cache and fetcher for external urls
 	PayloadCache           *PayloadCache      // cache of ChainLink payload json wrappers
+	kvRevisionCache        KVRevisionCacher   // cache of revisions for verifying key-value store results
 	Pegboard               *Pegboard
 
 	GpgClient        *GpgCLI        // A standard GPG-client (optional)
@@ -121,6 +124,7 @@ type GlobalContext struct {
 	UIRouter           UIRouter                  // How to route UIs
 	proofServices      ExternalServicesCollector // All known external services
 	UIDMapper          UIDMapper                 // maps from UID to Usernames
+	ServiceMapper      ServiceSummaryMapper      // handles and caches batch requests for service summaries
 	ExitCode           keybase1.ExitCode         // Value to return to OS on Exit()
 	RateLimits         *RateLimits               // tracks the last time certain actions were taken
 	clockMu            *sync.Mutex               // protects Clock
@@ -165,6 +169,8 @@ type GlobalContext struct {
 	SyncedContactList SyncedContactListProvider
 
 	GUIConfig *JSONFile
+
+	avatarLoader AvatarLoaderSource
 }
 
 type GlobalTestOptions struct {
@@ -178,7 +184,6 @@ func (g *GlobalContext) GetVDebugLog() *VDebugLog                      { return 
 func (g *GlobalContext) GetAPI() API                                   { return g.API }
 func (g *GlobalContext) GetExternalAPI() ExternalAPI                   { return g.XAPI }
 func (g *GlobalContext) GetServerURI() (string, error)                 { return g.Env.GetServerURI() }
-func (g *GlobalContext) GetMerkleClient() *MerkleClient                { return g.MerkleClient }
 func (g *GlobalContext) GetEnv() *Env                                  { return g.Env }
 func (g *GlobalContext) GetDNSNameServerFetcher() DNSNameServerFetcher { return g.DNSNSFetcher }
 func (g *GlobalContext) GetKVStore() KVStorer                          { return g.LocalDb }
@@ -187,6 +192,7 @@ func (g *GlobalContext) GetEKLib() EKLib                               { return 
 func (g *GlobalContext) GetTeambotBotKeyer() TeambotBotKeyer           { return g.teambotBotKeyer }
 func (g *GlobalContext) GetTeambotMemberKeyer() TeambotMemberKeyer     { return g.teambotMemberKeyer }
 func (g *GlobalContext) GetProofServices() ExternalServicesCollector   { return g.proofServices }
+func (g *GlobalContext) GetAvatarLoader() AvatarLoaderSource           { return g.avatarLoader }
 
 type LogGetter func() logger.Logger
 
@@ -198,6 +204,7 @@ func NewGlobalContext() *GlobalContext {
 		VDL:                NewVDebugLog(log),
 		SKBKeyringMu:       new(sync.Mutex),
 		perUserKeyringMu:   new(sync.Mutex),
+		vidMu:              new(sync.Mutex),
 		cacheMu:            new(sync.RWMutex),
 		socketWrapperMu:    new(sync.RWMutex),
 		shutdownOnce:       new(sync.Once),
@@ -252,6 +259,7 @@ func (g *GlobalContext) Init() *GlobalContext {
 	g.teamLoader = newNullTeamLoader(g)
 	g.fastTeamLoader = newNullFastTeamLoader()
 	g.hiddenTeamChainManager = newNullHiddenTeamChainManager()
+	g.TeamRoleMapManager = newNullTeamRoleMapManager()
 	g.teamAuditor = newNullTeamAuditor()
 	g.teamBoxAuditor = newNullTeamBoxAuditor()
 	g.stellar = newNullStellar(g)
@@ -285,6 +293,10 @@ func (g *GlobalContext) SetUIDMapper(u UIDMapper) {
 	g.UIDMapper = u
 }
 
+func (g *GlobalContext) SetServiceSummaryMapper(u ServiceSummaryMapper) {
+	g.ServiceMapper = u
+}
+
 func (g *GlobalContext) SetUIRouter(u UIRouter) {
 	g.UIRouter = u
 }
@@ -297,98 +309,15 @@ func (g *GlobalContext) SetUPAKLoader(u UPAKLoader) {
 	g.upakLoader = u
 }
 
+func (g *GlobalContext) SetAvatarLoader(a AvatarLoaderSource) {
+	g.avatarLoader = a
+}
+
 // simulateServiceRestart simulates what happens when a service restarts for the
 // purposes of testing.
 func (g *GlobalContext) simulateServiceRestart() {
 	defer g.switchUserMu.Acquire(NewMetaContext(context.TODO(), g), "simulateServiceRestart")()
 	_ = g.ActiveDevice.Clear()
-}
-
-func (g *GlobalContext) Logout(ctx context.Context) (err error) {
-	mctx := NewMetaContext(ctx, g).WithLogTag("LOGOUT")
-	defer mctx.Trace("GlobalContext#Logout", func() error { return err })()
-	return g.LogoutCurrentUserWithSecretKill(mctx, true /* killSecrets */)
-}
-
-func (g *GlobalContext) ClearStateForSwitchUsers(mctx MetaContext) (err error) {
-	return g.LogoutCurrentUserWithSecretKill(mctx, false /* killSecrets */)
-}
-
-func (g *GlobalContext) logoutSecretStore(mctx MetaContext, username NormalizedUsername, killSecrets bool) {
-	g.secretStoreMu.Lock()
-	defer g.secretStoreMu.Unlock()
-
-	if g.secretStore == nil || username.IsNil() {
-		return
-	}
-
-	if !killSecrets {
-		g.switchedUsers[username] = true
-		return
-	}
-
-	if err := g.secretStore.ClearSecret(mctx, username); err != nil {
-		mctx.Debug("clear stored secret error: %s", err)
-		return
-	}
-
-	// If this user had previously switched into his account and wound up in the
-	// g.switchedUsers map (see just above), then now it's fine to delete them,
-	// since they are deleted from the secret store successfully.
-	delete(g.switchedUsers, username)
-}
-
-func (g *GlobalContext) LogoutCurrentUserWithSecretKill(mctx MetaContext, killSecrets bool) error {
-	return g.LogoutUsernameWithSecretKill(mctx, mctx.ActiveDevice().Username(mctx), killSecrets)
-}
-
-func (g *GlobalContext) LogoutUsernameWithSecretKill(mctx MetaContext, username NormalizedUsername, killSecrets bool) (err error) {
-
-	defer g.switchUserMu.Acquire(mctx, "Logout")()
-
-	mctx.Debug("GlobalContext#logoutWithSecretKill: after switchUserMu acquisition (username: %s, secretKill: %v)", username, killSecrets)
-
-	err = g.ActiveDevice.Clear()
-	if err != nil {
-		return err
-	}
-
-	g.LocalSigchainGuard().Clear(mctx.Ctx(), "Logout")
-
-	mctx.Debug("+ GlobalContext#logoutWithSecretKill: calling logout hooks")
-	g.CallLogoutHooks(mctx)
-	mctx.Debug("- GlobalContext#logoutWithSecretKill: called logout hooks")
-
-	g.ClearPerUserKeyring()
-
-	// NB: This will acquire and release the cacheMu lock, so we have to make
-	// sure nothing holding a cacheMu ever looks for the switchUserMu lock.
-	g.FlushCaches()
-
-	g.logoutSecretStore(mctx, username, killSecrets)
-
-	// reload config to clear anything in memory
-	if err := g.ConfigReload(); err != nil {
-		mctx.Debug("Logout ConfigReload error: %s", err)
-	}
-
-	// send logout notification
-	g.NotifyRouter.HandleLogout(mctx.Ctx())
-
-	g.FeatureFlags.Clear()
-
-	g.IdentifyDispatch.OnLogout()
-
-	g.Identify3State.OnLogout()
-
-	err = g.GetUPAKLoader().OnLogout()
-	if err != nil {
-		return err
-	}
-
-	g.Pegboard.OnLogout(mctx)
-
-	return nil
 }
 
 // ConfigureLogging should be given non-nil Usage if called by the main
@@ -663,6 +592,7 @@ func (g *GlobalContext) FlushCaches() {
 	g.cacheMu.Lock()
 	defer g.cacheMu.Unlock()
 	g.configureMemCachesLocked(true)
+	g.TeamRoleMapManager.FlushCache()
 }
 
 func (g *GlobalContext) configureDiskCachesLocked() error {
@@ -705,6 +635,18 @@ func (g *GlobalContext) GetHiddenTeamChainManager() HiddenTeamChainManager {
 	g.cacheMu.RLock()
 	defer g.cacheMu.RUnlock()
 	return g.hiddenTeamChainManager
+}
+
+func (g *GlobalContext) GetTeamRoleMapManager() TeamRoleMapManager {
+	g.cacheMu.RLock()
+	defer g.cacheMu.RUnlock()
+	return g.TeamRoleMapManager
+}
+
+func (g *GlobalContext) SetTeamRoleMapManager(r TeamRoleMapManager) {
+	g.cacheMu.Lock()
+	defer g.cacheMu.Unlock()
+	g.TeamRoleMapManager = r
 }
 
 func (g *GlobalContext) SetHiddenTeamChainManager(h HiddenTeamChainManager) {
@@ -777,6 +719,18 @@ func (g *GlobalContext) SetImplicitTeamCacher(l MemLRUer) {
 	g.cacheMu.RLock()
 	defer g.cacheMu.RUnlock()
 	g.iteamCacher = l
+}
+
+func (g *GlobalContext) GetKVRevisionCache() KVRevisionCacher {
+	g.cacheMu.RLock()
+	defer g.cacheMu.RUnlock()
+	return g.kvRevisionCache
+}
+
+func (g *GlobalContext) SetKVRevisionCache(kvr KVRevisionCacher) {
+	g.cacheMu.RLock()
+	defer g.cacheMu.RUnlock()
+	g.kvRevisionCache = kvr
 }
 
 func (g *GlobalContext) GetFullSelfer() FullSelfer {
@@ -853,9 +807,11 @@ func (g *GlobalContext) Shutdown(mctx MetaContext) error {
 			g.Resolver.Shutdown(NewMetaContextBackground(g))
 		}
 
+		g.Log.Debug("executing %d shutdown hooks; errCount=%d", len(g.ShutdownHooks), epick.Count())
 		for _, hook := range g.ShutdownHooks {
 			epick.Push(hook(mctx))
 		}
+		g.Log.Debug("executed shutdown hooks; errCount=%d", epick.Count())
 
 		// shutdown the databases after the shutdown hooks run, we may want to
 		// flush memory caches to disk during shutdown.
@@ -872,7 +828,7 @@ func (g *GlobalContext) Shutdown(mctx MetaContext) error {
 
 		err = epick.Error()
 
-		g.Log.Debug("exiting shutdown code=%d; err=%v", g.ExitCode, err)
+		g.Log.Debug("exiting shutdown code=%d; errCount=%d; firstErr=%v", g.ExitCode, epick.Count(), err)
 	})
 
 	// Make a little bit of a statement if we wind up here a second time
@@ -1141,6 +1097,7 @@ func (g *GlobalContext) GetLogf() logger.Loggerf {
 func (g *GlobalContext) AddLoginHook(hook LoginHook) {
 	g.hookMu.Lock()
 	defer g.hookMu.Unlock()
+	g.Log.Debug("AddLoginHook: %T", hook)
 	g.loginHooks = append(g.loginHooks, hook)
 }
 
@@ -1150,20 +1107,33 @@ func (g *GlobalContext) CallLoginHooks(mctx MetaContext) {
 	// Trigger the creation of a per-user-keyring
 	_, _ = g.GetPerUserKeyring(mctx.Ctx())
 
+	mctx.Debug("CallLoginHooks: running UPAK#LoginAs")
 	err := g.GetUPAKLoader().LoginAs(mctx.CurrentUID())
 	if err != nil {
 		mctx.Warning("LoginAs error: %+v", err)
 	}
 
 	// Do so outside the lock below
+	mctx.Debug("CallLoginHooks: running FullSelfer#OnLogin")
 	err = g.GetFullSelfer().OnLogin(mctx)
 	if err != nil {
 		mctx.Warning("OnLogin full self error: %+v", err)
 	}
 
+	mctx.Debug("CallLoginHooks: recording login in secretstore")
+	err = RecordLoginTime(mctx, g.Env.GetUsername())
+	if err != nil {
+		mctx.Warning("OnLogin RecordLogin error: %+v", err)
+	}
+
+	mctx.Debug("CallLoginHooks: running registered login hooks")
 	g.hookMu.RLock()
 	defer g.hookMu.RUnlock()
 	for _, h := range g.loginHooks {
+		mctx.Debug("CallLoginHooks: will call login hook for %T", h)
+	}
+	for _, h := range g.loginHooks {
+		mctx.Debug("CallLoginHooks: calling login hook for %T", h)
 		if err := h.OnLogin(mctx); err != nil {
 			mctx.Warning("OnLogin hook error: %s", err)
 		}
@@ -1254,48 +1224,6 @@ func (g *GlobalContext) NewRPCLogFactory() *RPCLogFactory {
 	return &RPCLogFactory{Contextified: NewContextified(g)}
 }
 
-// LogoutSelfCheck checks with the API server to see if this uid+device pair should
-// logout.
-func (g *GlobalContext) LogoutSelfCheck(ctx context.Context) error {
-	mctx := NewMetaContext(ctx, g)
-	uid := g.ActiveDevice.UID()
-	if uid.IsNil() {
-		mctx.Debug("LogoutSelfCheck: no uid")
-		return nil
-	}
-	deviceID := g.ActiveDevice.DeviceID()
-	if deviceID.IsNil() {
-		mctx.Debug("LogoutSelfCheck: no device id")
-		return nil
-	}
-
-	arg := APIArg{
-		Endpoint: "selfcheck",
-		Args: HTTPArgs{
-			"uid":       S{Val: uid.String()},
-			"device_id": S{Val: deviceID.String()},
-		},
-		SessionType: APISessionTypeREQUIRED,
-	}
-	res, err := g.API.Post(mctx, arg)
-	if err != nil {
-		return err
-	}
-
-	logout, err := res.Body.AtKey("logout").GetBool()
-	if err != nil {
-		return err
-	}
-
-	mctx.Debug("LogoutSelfCheck: should log out? %v", logout)
-	if logout {
-		mctx.Debug("LogoutSelfCheck: logging out...")
-		return g.Logout(mctx.Ctx())
-	}
-
-	return nil
-}
-
 func (g *GlobalContext) MakeAssertionContext(mctx MetaContext) AssertionContext {
 	g.cacheMu.Lock()
 	defer g.cacheMu.Unlock()
@@ -1333,6 +1261,18 @@ func (g *GlobalContext) SetTeamLoader(l TeamLoader) {
 	g.cacheMu.Lock()
 	defer g.cacheMu.Unlock()
 	g.teamLoader = l
+}
+
+func (g *GlobalContext) SetMerkleClient(m MerkleClientInterface) {
+	g.cacheMu.Lock()
+	defer g.cacheMu.Unlock()
+	g.MerkleClient = m
+}
+
+func (g *GlobalContext) GetMerkleClient() MerkleClientInterface {
+	g.cacheMu.Lock()
+	defer g.cacheMu.Unlock()
+	return g.MerkleClient
 }
 
 func (g *GlobalContext) SetFastTeamLoader(l FastTeamLoader) {
@@ -1390,6 +1330,7 @@ func (g *GlobalContext) LoadUserByUID(uid keybase1.UID) (*User, error) {
 
 func (g *GlobalContext) BustLocalUserCache(ctx context.Context, u keybase1.UID) {
 	g.GetUPAKLoader().Invalidate(ctx, u)
+	_ = g.CardCache().Delete(u)
 	_ = g.GetFullSelfer().HandleUserChanged(u)
 }
 

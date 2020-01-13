@@ -74,7 +74,7 @@
   AppearanceRootView *rootView = [[AppearanceRootView alloc] initWithBridge:bridge
                                                    moduleName:@"Keybase"
                                             initialProperties:nil];
-  rootView.backgroundColor = [[UIColor alloc] initWithRed:1.0f green:1.0f blue:1.0f alpha:1];
+  rootView.backgroundColor = [[UIColor alloc] initWithRed:71/255.0f green:139/255.f blue:1.0f alpha:1];
 
   self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
   UIViewController *rootViewController = [UIViewController new];
@@ -86,7 +86,7 @@
   self.resignImageView = [[UIImageView alloc] initWithFrame:self.window.bounds];
   self.resignImageView.contentMode = UIViewContentModeCenter;
   self.resignImageView.alpha = 0;
-  self.resignImageView.backgroundColor = [UIColor whiteColor];
+  self.resignImageView.backgroundColor = rootView.backgroundColor;
   [self.resignImageView setImage:[UIImage imageNamed:@"LaunchImage"]];
   [self.window addSubview:self.resignImageView];
 
@@ -128,16 +128,13 @@
 {
   [RCTPushNotificationManager didRegisterForRemoteNotificationsWithDeviceToken:deviceToken];
 }
-// Required for the registrationError event.
-- (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error
-{
-  [RCTPushNotificationManager didFailToRegisterForRemoteNotificationsWithError:error];
-}
+
 // Required for the notification event.
 - (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)notification
 {
   [RCTPushNotificationManager didReceiveRemoteNotification:notification];
 }
+
 // Require for handling silent notifications
 - (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)notification fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
   NSString* type = notification[@"type"];
@@ -158,7 +155,7 @@
       // This always tries to unbox the notification and adds a plaintext
       // notification if displayPlaintext is set.
       KeybaseHandleBackgroundNotification(convID, body, @"", sender, membersType, displayPlaintext,
-            messageID, pushID, badgeCount, unixTime, soundName, pusher, &err);
+            messageID, pushID, badgeCount, unixTime, soundName, pusher, false, &err);
       if (err != nil) {
         NSLog(@"Failed to handle in engine: %@", err);
       }
@@ -171,7 +168,7 @@
       NSString* convID = notification[@"convID"];
       int messageID = [notification[@"msgID"] intValue];
       KeybaseHandleBackgroundNotification(convID, body, @"", sender, membersType, displayPlaintext,
-                                          messageID, @"", badgeCount, unixTime, soundName, nil, &err);
+                                          messageID, @"", badgeCount, unixTime, soundName, nil, false, &err);
       if (err != nil) {
         NSLog(@"Failed to handle in engine: %@", err);
       }
@@ -185,13 +182,16 @@
     completionHandler(UIBackgroundFetchResultNewData);
   }
 }
-
+// Required for the registrationError event.
+- (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error
+{
+  [RCTPushNotificationManager didFailToRegisterForRemoteNotificationsWithError:error];
+}
 // Required for the localNotification event.
 - (void)application:(UIApplication *)application didReceiveLocalNotification:(UILocalNotification *)notification
 {
   [RCTPushNotificationManager didReceiveLocalNotification:notification];
 }
-
 - (void)applicationWillTerminate:(UIApplication *)application {
   self.window.rootViewController.view.hidden = YES;
   KeybaseAppWillExit([[PushNotifier alloc] init]);

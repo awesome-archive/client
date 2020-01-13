@@ -1,27 +1,18 @@
-export type StatResult = {
-  readonly size: number
-  readonly lastModified: number
-}
-
-export type WriteStream = {
+type WriteStream = {
   readonly write: (arg0: any) => Promise<void>
   readonly close: () => void
 }
 
-export type Encoding = 'utf8' | 'ascii' | 'base64'
+type Encoding = 'utf8' | 'ascii' | 'base64'
 
 export declare const downloadFolder: string
-export declare function tmpDir(): string
-export declare function tmpFile(suffix: string): string
-export declare function downloadFilePath(filename: string): Promise<string>
-export declare function downloadFilePathNoSearch(filename: string): string
-export declare function copy(from: string, to: string): Promise<boolean>
-export declare function exists(filename: string): Promise<boolean>
-export declare function stat(filename: string): Promise<StatResult>
+/** TODO deprecate
+ */
 export declare function writeStream(
   filepath: string,
   encoding: Encoding,
   append?: boolean
 ): Promise<WriteStream>
-export declare function unlink(filepath: string): Promise<void>
+/** TODO deprecated
+ */
 export declare function readFile(filepath: string, encoding: Encoding): Promise<any>

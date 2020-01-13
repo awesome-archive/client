@@ -1,16 +1,18 @@
 /* eslint-env jest */
 import TeamBuilding, {SearchResult, SearchRecSection} from '../index'
 import {sortAndSplitRecommendations} from '../container'
-import {userResultHeight} from '../user-result'
+import {userResultHeight} from '../search-result/common-result'
 import {SectionDivider} from '../../common-adapters/index'
 
 describe('team building list', () => {
   it('calculates list offsets properly', () => {
     const testSearchResult: SearchResult = {
+      contact: false,
       displayLabel: '',
       followingState: 'NotFollowing',
       inTeam: false,
       isPreExistingTeamMember: false,
+      isYou: false,
       prettyName: '',
       services: {},
       userId: '',
@@ -138,6 +140,7 @@ describe('team building list', () => {
       followingState: 'NotFollowing' as const,
       inTeam: false,
       isPreExistingTeamMember: false,
+      isYou: false,
       key: '',
       prettyName: '',
       services: {},
@@ -159,7 +162,11 @@ describe('team building list', () => {
       ['தமிழ்', 'T'],
       ['తెలుగు', 'T'],
     ])
-    const sections = sortAndSplitRecommendations(tests.map(t => t.result), false) || []
+    const sections =
+      sortAndSplitRecommendations(
+        tests.map(t => t.result),
+        false
+      ) || []
     const sectionMap = {}
     for (const s of sections) {
       sectionMap[s.label] = s.data

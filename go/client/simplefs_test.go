@@ -189,11 +189,6 @@ func (s SimpleFSMock) SimpleFSSyncStatus(ctx context.Context, filter keybase1.Li
 	return keybase1.FSSyncStatus{}, nil
 }
 
-// SimpleFSGetHTTPAddressAndToken implements the SimpleFSInterface.
-func (s SimpleFSMock) SimpleFSGetHTTPAddressAndToken(ctx context.Context) (keybase1.SimpleFSGetHTTPAddressAndTokenResponse, error) {
-	return keybase1.SimpleFSGetHTTPAddressAndTokenResponse{}, nil
-}
-
 // SimpleFSUserEditHistory implements the SimpleFSInterface.
 func (s SimpleFSMock) SimpleFSUserEditHistory(ctx context.Context) (
 	res []keybase1.FSFolderEditHistory, err error) {
@@ -246,6 +241,13 @@ func (s SimpleFSMock) SimpleFSGetTeamQuotaUsage(
 	return keybase1.SimpleFSQuotaUsage{}, nil
 }
 
+// SimpleFSGetFolder implements the SimpleFSInterface.
+func (s SimpleFSMock) SimpleFSGetFolder(
+	_ context.Context, _ keybase1.KBFSPath) (
+	res keybase1.FolderWithFavFlags, err error) {
+	return res, nil
+}
+
 // SimpleFSFolderSyncConfigAndStatus implements the SimpleFSInterface.
 func (s SimpleFSMock) SimpleFSFolderSyncConfigAndStatus(
 	_ context.Context, _ keybase1.Path) (
@@ -265,10 +267,10 @@ func (s SimpleFSMock) SimpleFSSyncConfigAndStatus(
 	return keybase1.SyncConfigAndStatusRes{}, nil
 }
 
-// SimpleFSAreWeConnectedToMDServer implements the SimpleFSInterface.
-func (s SimpleFSMock) SimpleFSAreWeConnectedToMDServer(
-	_ context.Context) (bool, error) {
-	return true, nil
+// SimpleFSGetOnlineStatus implements the SimpleFSInterface.
+func (s SimpleFSMock) SimpleFSGetOnlineStatus(
+	_ context.Context) (keybase1.KbfsOnlineStatus, error) {
+	return keybase1.KbfsOnlineStatus_ONLINE, nil
 }
 
 // SimpleFSCheckReachability implements the SimpleFSInterface.
@@ -352,6 +354,24 @@ func (s SimpleFSMock) SimpleFSGetDownloadInfo(
 
 func (s SimpleFSMock) SimpleFSConfigureDownload(
 	ctx context.Context, arg keybase1.SimpleFSConfigureDownloadArg) (err error) {
+	return nil
+}
+
+func (s SimpleFSMock) SimpleFSGetGUIFileContext(ctx context.Context,
+	path keybase1.KBFSPath) (resource keybase1.GUIFileContext, err error) {
+	return keybase1.GUIFileContext{}, nil
+}
+
+func (s SimpleFSMock) SimpleFSGetFilesTabBadge(_ context.Context) (
+	keybase1.FilesTabBadge, error) {
+	return keybase1.FilesTabBadge_NONE, nil
+}
+
+func (s SimpleFSMock) SimpleFSUserIn(_ context.Context, _ string) error {
+	return nil
+}
+
+func (s SimpleFSMock) SimpleFSUserOut(_ context.Context, _ string) error {
 	return nil
 }
 

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/keybase/client/go/chat/globals"
@@ -41,17 +42,31 @@ func newBasicSupersedesTransform(g *globals.Context, opts basicSupersedesTransfo
 // This is only relevant for ephemeralMessages that are deleted since we want
 // these to show up in the gui as "explode now"
 func (t *basicSupersedesTransform) transformDelete(msg chat1.MessageUnboxed, superMsg chat1.MessageUnboxed) *chat1.MessageUnboxed {
-	mvalid := msg.Valid()
-	if !mvalid.IsEphemeral() {
+	if !msg.IsEphemeral() {
 		return nil
 	}
-	explodedBy := superMsg.Valid().SenderUsername
-	mvalid.ClientHeader.EphemeralMetadata.ExplodedBy = &explodedBy
-	newMsg := chat1.NewMessageUnboxedWithValid(mvalid)
-	return &newMsg
+	if msg.IsValid() {
+		mvalid := msg.Valid()
+		explodedBy := superMsg.Valid().SenderUsername
+		mvalid.ClientHeader.EphemeralMetadata.ExplodedBy = &explodedBy
+		newMsg := chat1.NewMessageUnboxedWithValid(mvalid)
+		return &newMsg
+	} else if msg.IsError() {
+		// Transform an erred exploding message if it was exploded
+		merr := msg.Error()
+		explodedBy := superMsg.Valid().SenderUsername
+		merr.ExplodedBy = &explodedBy
+		newMsg := chat1.NewMessageUnboxedWithError(merr)
+		return &newMsg
+	}
+	return nil
 }
 
 func (t *basicSupersedesTransform) transformEdit(msg chat1.MessageUnboxed, superMsg chat1.MessageUnboxed) *chat1.MessageUnboxed {
+	if !msg.IsValid() {
+		return nil
+	}
+
 	mvalid := msg.Valid()
 	var payments []chat1.TextPayment
 	var replyTo *chat1.MessageID
@@ -70,11 +85,15 @@ func (t *basicSupersedesTransform) transformEdit(msg chat1.MessageUnboxed, super
 	mvalid.ChannelNameMentions = superMsg.Valid().ChannelNameMentions
 	mvalid.SenderDeviceName = superMsg.Valid().SenderDeviceName
 	mvalid.SenderDeviceType = superMsg.Valid().SenderDeviceType
+	mvalid.ServerHeader.SupersededBy = superMsg.GetMessageID()
 	newMsg := chat1.NewMessageUnboxedWithValid(mvalid)
 	return &newMsg
 }
 
 func (t *basicSupersedesTransform) transformAttachment(msg chat1.MessageUnboxed, superMsg chat1.MessageUnboxed) *chat1.MessageUnboxed {
+	if !msg.IsValid() {
+		return nil
+	}
 	mvalid := msg.Valid()
 	uploaded := superMsg.Valid().MessageBody.Attachmentuploaded()
 	attachment := chat1.MessageAttachment{
@@ -87,11 +106,15 @@ func (t *basicSupersedesTransform) transformAttachment(msg chat1.MessageUnboxed,
 		attachment.Preview = &uploaded.Previews[0]
 	}
 	mvalid.MessageBody = chat1.NewMessageBodyWithAttachment(attachment)
+	mvalid.ServerHeader.SupersededBy = superMsg.GetMessageID()
 	newMsg := chat1.NewMessageUnboxedWithValid(mvalid)
 	return &newMsg
 }
 
 func (t *basicSupersedesTransform) transformReaction(msg chat1.MessageUnboxed, superMsg chat1.MessageUnboxed) *chat1.MessageUnboxed {
+	if !msg.IsValid() {
+		return nil
+	}
 	if superMsg.Valid().MessageBody.IsNil() {
 		return &msg
 	}
@@ -119,6 +142,9 @@ func (t *basicSupersedesTransform) transformReaction(msg chat1.MessageUnboxed, s
 }
 
 func (t *basicSupersedesTransform) transformUnfurl(msg chat1.MessageUnboxed, superMsg chat1.MessageUnboxed) *chat1.MessageUnboxed {
+	if !msg.IsValid() {
+		return nil
+	}
 	if superMsg.Valid().MessageBody.IsNil() {
 		return &msg
 	}
@@ -129,21 +155,24 @@ func (t *basicSupersedesTransform) transformUnfurl(msg chat1.MessageUnboxed, sup
 }
 
 func (t *basicSupersedesTransform) transform(ctx context.Context, msg chat1.MessageUnboxed,
-	superMsgs []chat1.MessageUnboxed) *chat1.MessageUnboxed {
+	superMsgs []chat1.MessageUnboxed) (newMsg *chat1.MessageUnboxed, isDelete bool) {
 
-	newMsg := &msg
+	newMsg = &msg
 	for _, superMsg := range superMsgs {
 		if !superMsg.IsValidFull() {
 			continue
 		} else if newMsg == nil {
-			return nil
+			return nil, true
 		}
 
 		switch superMsg.GetMessageType() {
 		case chat1.MessageType_DELETE:
 			newMsg = t.transformDelete(*newMsg, superMsg)
+			if newMsg == nil {
+				return nil, true
+			}
 		case chat1.MessageType_DELETEHISTORY:
-			return nil
+			return nil, true
 		case chat1.MessageType_EDIT:
 			newMsg = t.transformEdit(*newMsg, superMsg)
 		case chat1.MessageType_ATTACHMENTUPLOADED:
@@ -157,7 +186,7 @@ func (t *basicSupersedesTransform) transform(ctx context.Context, msg chat1.Mess
 		t.Debug(ctx, "transformed: original:%v super:%v -> %v",
 			newMsg.DebugString(), superMsg.DebugString(), newMsg.DebugString())
 	}
-	return newMsg
+	return newMsg, false
 }
 
 func (t *basicSupersedesTransform) SetMessagesFunc(f getMessagesFunc) {
@@ -165,26 +194,56 @@ func (t *basicSupersedesTransform) SetMessagesFunc(f getMessagesFunc) {
 }
 
 func (t *basicSupersedesTransform) Run(ctx context.Context,
-	conv types.UnboxConversationInfo, uid gregor1.UID, originalMsgs []chat1.MessageUnboxed) (res []chat1.MessageUnboxed, err error) {
+	conv types.UnboxConversationInfo, uid gregor1.UID, originalMsgs []chat1.MessageUnboxed) (newMsgs []chat1.MessageUnboxed, err error) {
 	defer t.Trace(ctx, func() error { return err }, fmt.Sprintf("Run(%s)", conv.GetConvID()))()
-
-	// MessageIDs that supersede
-	var superMsgIDs []chat1.MessageID
+	originalMsgsMap := make(map[chat1.MessageID]chat1.MessageUnboxed, len(originalMsgs))
+	for _, msg := range originalMsgs {
+		originalMsgsMap[msg.GetMessageID()] = msg
+	}
 	// Map from a MessageID to the message that supersedes it It's possible
 	// that a message can be 'superseded' my multiple messages, by multiple
 	// reactions.
 	smap := make(map[chat1.MessageID][]chat1.MessageUnboxed)
 
 	// Collect all superseder messages for messages in the current thread view
+	superMsgsMap := make(map[chat1.MessageID]chat1.MessageUnboxed)
+	superMsgIDsMap := make(map[chat1.MessageID]bool)
 	for _, msg := range originalMsgs {
 		if msg.IsValid() {
 			supersededBy := msg.Valid().ServerHeader.SupersededBy
 			if supersededBy > 0 {
-				superMsgIDs = append(superMsgIDs, supersededBy)
+				if msg, ok := originalMsgsMap[supersededBy]; ok {
+					superMsgsMap[supersededBy] = msg
+				} else {
+					superMsgIDsMap[supersededBy] = true
+				}
 			}
-			superMsgIDs = append(superMsgIDs, msg.Valid().ServerHeader.ReactionIDs...)
-			superMsgIDs = append(superMsgIDs, msg.Valid().ServerHeader.UnfurlIDs...)
+			for _, reactID := range msg.Valid().ServerHeader.ReactionIDs {
+				if msg, ok := originalMsgsMap[reactID]; ok {
+					superMsgsMap[reactID] = msg
+				} else {
+					superMsgIDsMap[reactID] = true
+				}
+			}
+			for _, unfurlID := range msg.Valid().ServerHeader.UnfurlIDs {
+				if msg, ok := originalMsgsMap[unfurlID]; ok {
+					superMsgsMap[unfurlID] = msg
+				} else {
+					superMsgIDsMap[unfurlID] = true
+				}
+			}
+			supersedes, err := utils.GetSupersedes(msg)
+			if err != nil {
+				continue
+			}
+			if len(supersedes) > 0 {
+				superMsgsMap[msg.GetMessageID()] = msg
+			}
 		}
+	}
+	superMsgIDs := make([]chat1.MessageID, 0, len(superMsgIDsMap))
+	for superMsgID := range superMsgIDsMap {
+		superMsgIDs = append(superMsgIDs, superMsgID)
 	}
 
 	// Get superseding messages
@@ -196,54 +255,61 @@ func (t *basicSupersedesTransform) Run(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-		for _, m := range msgs {
-			if m.IsValid() {
-				supersedes, err := utils.GetSupersedes(m)
-				if err != nil {
-					continue
-				}
-				for _, super := range supersedes {
-					supers, ok := smap[super]
-					if !ok {
-						supers = []chat1.MessageUnboxed{}
-					}
-					supers = append(supers, m)
-					smap[super] = supers
-				}
-
-				delh, err := m.Valid().AsDeleteHistory()
-				if err == nil {
-					if delh.Upto > deleteHistoryUpto {
-						t.Debug(ctx, "found delete history: id: %v", m.GetMessageID())
-						deleteHistoryUpto = delh.Upto
-					}
+		for _, msg := range msgs {
+			superMsgsMap[msg.GetMessageID()] = msg
+		}
+	}
+	for _, m := range superMsgsMap {
+		if m.IsValid() {
+			supersedes, err := utils.GetSupersedes(m)
+			if err != nil {
+				continue
+			}
+			for _, super := range supersedes {
+				smap[super] = append(smap[super], m)
+			}
+			delh, err := m.Valid().AsDeleteHistory()
+			if err == nil {
+				if delh.Upto > deleteHistoryUpto {
+					t.Debug(ctx, "found delete history: id: %v", m.GetMessageID())
+					deleteHistoryUpto = delh.Upto
 				}
 			}
 		}
 	}
-
+	// Sort all the super lists
+	for _, supers := range smap {
+		sort.Slice(supers, func(i, j int) bool {
+			return supers[i].GetMessageID() < supers[j].GetMessageID()
+		})
+	}
 	// Run through all messages and transform superseded messages into final state
-	var newMsgs []chat1.MessageUnboxed
 	xformDelete := func(msgID chat1.MessageID) {
 		if t.opts.UseDeletePlaceholders {
 			newMsgs = append(newMsgs, utils.CreateHiddenPlaceholder(msgID))
 		}
 	}
 	for i, msg := range originalMsgs {
-		if msg.IsValid() {
+		if msg.IsValid() || msg.IsError() {
 			newMsg := &originalMsgs[i]
 			// If the message is superseded, then transform it and add that
+			var isDelete bool
 			if superMsgs, ok := smap[msg.GetMessageID()]; ok {
-				newMsg = t.transform(ctx, msg, superMsgs)
+				newMsg, isDelete = t.transform(ctx, msg, superMsgs)
 			}
 			if newMsg == nil {
-				// Transform might return nil in case of a delete.
-				t.Debug(ctx, "skipping: %d because it was deleted", msg.GetMessageID())
-				xformDelete(msg.GetMessageID())
+				if isDelete {
+					// Transform might return nil in case of a delete.
+					t.Debug(ctx, "skipping: %d because it was deleted by a delete", msg.GetMessageID())
+					xformDelete(msg.GetMessageID())
+				} else { // just use the original message
+					newMsgs = append(newMsgs, msg)
+				}
 				continue
 			}
 			if newMsg.GetMessageID() < deleteHistoryUpto &&
 				chat1.IsDeletableByDeleteHistory(newMsg.GetMessageType()) {
+				t.Debug(ctx, "skipping: %d because it was deleted by delete history", msg.GetMessageID())
 				xformDelete(msg.GetMessageID())
 				continue
 			}
@@ -252,12 +318,8 @@ func (t *basicSupersedesTransform) Run(ctx context.Context,
 				// locally but not superseded by anything.  Could have been
 				// deleted by a delete-history, retention expunge, or was an
 				// exploding message.
-				mvalid := newMsg.Valid()
-				if !mvalid.IsEphemeral() || mvalid.HideExplosion(conv.GetMaxDeletedUpTo(), time.Now()) {
-					btyp, _ := mvalid.MessageBody.MessageType()
-					t.Debug(ctx, "skipping: %d because not valid full: typ: %v bodymatch: %v btyp: %v",
-						msg.GetMessageID(), msg.GetMessageType(),
-						mvalid.MessageBody.IsType(msg.GetMessageType()), btyp)
+				if newMsg.IsValid() && (!newMsg.IsEphemeral() || newMsg.HideExplosion(conv.GetMaxDeletedUpTo(), time.Now())) {
+					t.Debug(ctx, "skipping: %d because it was deleted or a long exploded ephemeral message", msg.GetMessageID())
 					xformDelete(msg.GetMessageID())
 					continue
 				}

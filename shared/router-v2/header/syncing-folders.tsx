@@ -17,7 +17,7 @@ type Props = {
 
 const SyncingFolders = (props: Props) =>
   props.show && props.progress !== 1.0 ? (
-    <Kb.WithTooltip tooltip={props.tooltip}>
+    <Kb.WithTooltip tooltip={props.tooltip} containerStyle={{alignSelf: 'center'}}>
       <Kb.Box2 direction="horizontal" alignItems="center">
         <PieSlice degrees={props.progress * 360} animated={true} negative={props.negative} />
         <Kb.Text type="BodyTiny" negative={props.negative} style={{marginLeft: 5}}>
@@ -29,7 +29,7 @@ const SyncingFolders = (props: Props) =>
 
 const mapStateToProps = state => ({
   _syncingFoldersProgress: state.fs.overallSyncStatus.syncingFoldersProgress,
-  online: state.fs.kbfsDaemonStatus.onlineStatus === Types.KbfsDaemonOnlineStatus.Online,
+  online: state.fs.kbfsDaemonStatus.onlineStatus !== Types.KbfsDaemonOnlineStatus.Offline,
 })
 
 const mapDispatchToProps = () => ({})

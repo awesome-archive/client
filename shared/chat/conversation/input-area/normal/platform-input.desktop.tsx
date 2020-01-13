@@ -13,6 +13,7 @@ import {PlatformInputPropsInternal} from './platform-input'
 import Typing from './typing/container'
 import AddSuggestors from '../suggestors'
 import {BotCommandUpdateStatus} from './shared'
+import {indefiniteArticle} from '../../../../util/string'
 
 type State = {
   emojiPickerOpen: boolean
@@ -138,7 +139,7 @@ class _PlatformInput extends React.Component<PlatformInputPropsInternal, State> 
     }
   }
 
-  _pickerOnClick = emoji => {
+  _pickerOnClick = (emoji: any) => {
     this._insertEmoji(emoji.colons)
     this._emojiPickerToggle()
   }
@@ -175,9 +176,9 @@ class _PlatformInput extends React.Component<PlatformInputPropsInternal, State> 
     } else if (this.props.isEditing) {
       hintText = 'Edit your message'
     } else if (this.props.cannotWrite) {
-      hintText = `You must be at least ${'aeiou'.includes(this.props.minWriterRole[0]) ? 'an' : 'a'} ${
+      hintText = `You must be at least ${indefiniteArticle(this.props.minWriterRole)} ${
         this.props.minWriterRole
-      } to post`
+      } to post.`
     }
 
     return (
@@ -205,7 +206,7 @@ class _PlatformInput extends React.Component<PlatformInputPropsInternal, State> 
               },
             ])}
           >
-            {!this.props.isEditing && (
+            {!this.props.isEditing && !this.props.cannotWrite && (
               <HoverBox
                 className={Styles.classNames({expanded: this.props.showingMenu})}
                 onClick={this._toggleShowingMenu}
@@ -250,12 +251,7 @@ class _PlatformInput extends React.Component<PlatformInputPropsInternal, State> 
             <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.inputBox}>
               <Kb.PlainInput
                 className="mousetrap"
-                disabled={
-                  // Auto generated from flowToTs. Please clean me!
-                  this.props.cannotWrite !== null && this.props.cannotWrite !== undefined
-                    ? this.props.cannotWrite
-                    : false
-                }
+                disabled={this.props.cannotWrite ?? false}
                 autoFocus={false}
                 ref={this._inputSetRef}
                 placeholder={hintText}
@@ -284,17 +280,14 @@ class _PlatformInput extends React.Component<PlatformInputPropsInternal, State> 
             )}
             {!this.props.cannotWrite && (
               <>
+                <Kb.Icon onClick={this.props.onGiphyToggle} style={styles.icon} type="iconfont-gif" />
                 <Kb.Icon
                   color={this.state.emojiPickerOpen ? Styles.globalColors.black : null}
                   onClick={this._emojiPickerToggle}
-                  style={Kb.iconCastPlatformStyles(styles.icon)}
+                  style={styles.icon}
                   type="iconfont-emoji"
                 />
-                <Kb.Icon
-                  onClick={this._filePickerOpen}
-                  style={Kb.iconCastPlatformStyles(styles.icon)}
-                  type="iconfont-attachment"
-                />
+                <Kb.Icon onClick={this._filePickerOpen} style={styles.icon} type="iconfont-attachment" />
               </>
             )}
           </Kb.Box>
@@ -317,7 +310,13 @@ class _PlatformInput extends React.Component<PlatformInputPropsInternal, State> 
 }
 const PlatformInput = AddSuggestors(_PlatformInput)
 
-const EmojiPicker = ({emojiPickerToggle, onClick}) => (
+const EmojiPicker = ({
+  emojiPickerToggle,
+  onClick,
+}: {
+  emojiPickerToggle: () => void
+  onClick: (c: any) => void
+}) => (
   <Kb.Box>
     <Kb.Box style={styles.emojiPickerContainerWrapper} onClick={emojiPickerToggle} />
     <Kb.Box style={styles.emojiPickerRelative}>
@@ -362,7 +361,7 @@ const styles = Styles.styleSheetCreate(
         common: {
           ...Styles.globalStyles.flexBoxColumn,
           alignSelf: 'stretch',
-          backgroundColor: Styles.globalColors.blackOrWhite,
+          backgroundColor: Styles.globalColors.blackOrBlack,
           borderRadius: 2,
           justifyContent: 'center',
           margin: 2,
@@ -375,7 +374,7 @@ const styles = Styles.styleSheetCreate(
         },
       }),
       cancelEditingText: {
-        color: Styles.globalColors.whiteOrBlack,
+        color: Styles.globalColors.whiteOrWhite,
       },
       container: {
         ...Styles.globalStyles.flexBoxColumn,
@@ -438,17 +437,23 @@ const styles = Styles.styleSheetCreate(
         marginRight: Styles.globalMargins.tiny,
         position: 'relative',
       },
-      input: {
-        backgroundColor: Styles.globalColors.transparent,
-        height: 21,
-        minHeight: 21,
-      },
+      input: Styles.platformStyles({
+        isElectron: {
+          backgroundColor: Styles.globalColors.transparent,
+          height: 22,
+          // Line height change is so that emojis (unicode characters inside
+          // textarea) are not clipped at the top. This change is accompanied by
+          // a change in padding to offset the increased line height
+          lineHeight: 22,
+          minHeight: 22,
+        },
+      }),
       inputBox: {
         flex: 1,
-        paddingBottom: Styles.globalMargins.xxtiny,
+        paddingBottom: Styles.globalMargins.xtiny,
         paddingLeft: 6,
         paddingRight: 6,
-        paddingTop: Styles.globalMargins.tiny,
+        paddingTop: Styles.globalMargins.tiny - 2,
         textAlign: 'left',
       },
       inputEditing: {

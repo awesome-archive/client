@@ -8,9 +8,14 @@ import (
 	context "golang.org/x/net/context"
 )
 
-func (s *Storage) GetAllPurgeInfo(ctx context.Context, uid gregor1.UID) (allPurgeInfo map[string]chat1.EphemeralPurgeInfo, err error) {
+func (s *Storage) GetAllPurgeInfo(ctx context.Context, uid gregor1.UID) (allPurgeInfo []chat1.EphemeralPurgeInfo, err error) {
 	defer s.Trace(ctx, func() error { return err }, "GetAllPurgeInfo")()
 	return s.ephemeralTracker.getAllPurgeInfo(ctx, uid)
+}
+
+func (s *Storage) GetPurgeInfo(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID) (info chat1.EphemeralPurgeInfo, err error) {
+	defer s.Trace(ctx, func() error { return err }, "AllPurgeInfo")()
+	return s.ephemeralTracker.getPurgeInfo(ctx, uid, convID)
 }
 
 // For a given conversation, purge all ephemeral messages from
@@ -26,7 +31,7 @@ func (s *Storage) EphemeralPurge(ctx context.Context, convID chat1.ConversationI
 	}
 
 	// Fetch secret key
-	key, ierr := GetSecretBoxKey(ctx, s.G().ExternalG(), DefaultSecretUI)
+	key, ierr := GetSecretBoxKey(ctx, s.G().ExternalG())
 	if ierr != nil {
 		return nil, nil, MiscError{Msg: "unable to get secret key: " + ierr.Error()}
 	}
@@ -142,10 +147,12 @@ func (s *Storage) ephemeralPurgeHelper(ctx context.Context, convID chat1.Convers
 	}
 
 	// queue asset deletions in the background
-	s.assetDeleter.DeleteAssets(ctx, uid, convID, allAssets)
+	if s.assetDeleter != nil {
+		s.assetDeleter.DeleteAssets(ctx, uid, convID, allAssets)
+	}
 	// queue search index update in the background
 	go func() {
-		err := s.G().Indexer.Remove(ctx, convID, uid, allPurged)
+		err := s.G().Indexer.Remove(ctx, convID, allPurged)
 		if err != nil {
 			s.Debug(ctx, "Error removing from indexer: %+v", err)
 		}

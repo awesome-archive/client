@@ -136,6 +136,21 @@ func createAndSignupFakeUser(prefix string, g *libkb.GlobalContext, skipPaper bo
 	return fu, nil
 }
 
+func GetContactSettings(tc libkb.TestContext, u *FakeUser) (ret keybase1.ContactSettings) {
+	m := libkb.NewMetaContextForTest(tc)
+	ret, err := libkb.GetContactSettings(m)
+	require.NoError(tc.T, err)
+	tc.T.Logf("Got contact settings for user %s", u.Username)
+	return ret
+}
+
+func SetContactSettings(tc libkb.TestContext, u *FakeUser, arg keybase1.ContactSettings) {
+	m := libkb.NewMetaContextForTest(tc)
+	err := libkb.SetContactSettings(m, arg)
+	require.NoError(tc.T, err)
+	tc.T.Logf("Set contact settings for user %s", u.Username)
+}
+
 // copied from engine/common_test.go
 func ResetAccount(tc libkb.TestContext, u *FakeUser) {
 	m := libkb.NewMetaContextForTest(tc)
@@ -155,7 +170,8 @@ func DeleteAccount(tc libkb.TestContext, u *FakeUser) {
 
 // copied from engine/common_test.go
 func Logout(tc libkb.TestContext) {
-	if err := tc.G.Logout(context.TODO()); err != nil {
+	mctx := libkb.NewMetaContextForTest(tc)
+	if err := mctx.LogoutKillSecrets(); err != nil {
 		tc.T.Fatalf("logout error: %s", err)
 	}
 }
@@ -176,10 +192,10 @@ func RotatePaper(tc libkb.TestContext, u *FakeUser) {
 	user, err := libkb.LoadUser(arg)
 	require.NoError(tc.T, err)
 
-	activeDevices := []*libkb.Device{}
+	activeDevices := make([]*libkb.Device, 0)
 	for _, device := range user.GetComputedKeyFamily().GetAllDevices() {
 		if device.Status != nil && *device.Status == libkb.DeviceStatusActive {
-			activeDevices = append(activeDevices, device)
+			activeDevices = append(activeDevices, device.Device)
 		}
 	}
 

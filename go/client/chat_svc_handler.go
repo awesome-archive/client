@@ -48,6 +48,8 @@ type ChatServiceHandler interface {
 	UnpinV1(context.Context, unpinOptionsV1) Reply
 	GetResetConvMembersV1(context.Context) Reply
 	AddResetConvMemberV1(context.Context, addResetConvMemberOptionsV1) Reply
+	GetDeviceInfoV1(context.Context, getDeviceInfoOptionsV1) Reply
+	ListMembersV1(context.Context, listMembersOptionsV1) Reply
 }
 
 // chatServiceHandler implements ChatServiceHandler.
@@ -63,40 +65,10 @@ func newChatServiceHandler(g *libkb.GlobalContext) *chatServiceHandler {
 	}
 }
 
-func (c *chatServiceHandler) exportUIConv(ctx context.Context, uiconv chat1.InboxUIItem) (convSummary chat1.ConvSummary) {
-	convSummary.Id = uiconv.ConvID
-	convSummary.Unread = uiconv.ReadMsgID < uiconv.MaxVisibleMsgID
-	convSummary.ActiveAt = uiconv.Time.UnixSeconds()
-	convSummary.ActiveAtMs = uiconv.Time.UnixMilliseconds()
-	convSummary.FinalizeInfo = uiconv.FinalizeInfo
-	convSummary.MemberStatus = strings.ToLower(uiconv.MemberStatus.String())
-	for _, super := range uiconv.Supersedes {
-		convSummary.Supersedes = append(convSummary.Supersedes,
-			super.ConversationID.String())
-	}
-	for _, super := range uiconv.SupersededBy {
-		convSummary.SupersededBy = append(convSummary.SupersededBy,
-			super.ConversationID.String())
-	}
-	switch uiconv.MembersType {
-	case chat1.ConversationMembersType_IMPTEAMUPGRADE, chat1.ConversationMembersType_IMPTEAMNATIVE:
-		convSummary.ResetUsers = uiconv.ResetParticipants
-	}
-	convSummary.Channel = chat1.ChatChannel{
-		Name:        uiconv.Name,
-		Public:      uiconv.IsPublic,
-		TopicType:   strings.ToLower(uiconv.TopicType.String()),
-		MembersType: strings.ToLower(uiconv.MembersType.String()),
-		TopicName:   uiconv.Channel,
-	}
-	return convSummary
-}
-
 // ListV1 implements ChatServiceHandler.ListV1.
 func (c *chatServiceHandler) ListV1(ctx context.Context, opts listOptionsV1) Reply {
 	var cl chat1.ChatList
 	var rlimits []chat1.RateLimit
-	var pagination *chat1.Pagination
 	client, err := GetChatLocalClient(c.G())
 	if err != nil {
 		return c.errReply(err)
@@ -105,20 +77,27 @@ func (c *chatServiceHandler) ListV1(ctx context.Context, opts listOptionsV1) Rep
 	if err != nil {
 		return c.errReply(err)
 	}
+	var convIDs []chat1.ConversationID
+	if opts.ConversationID != "" {
+		convID, err := chat1.MakeConvID(opts.ConversationID)
+		if err != nil {
+			return c.errReply(err)
+		}
+		convIDs = append(convIDs, convID)
+	}
 	res, err := client.GetInboxAndUnboxUILocal(ctx, chat1.GetInboxAndUnboxUILocalArg{
 		Query: &chat1.GetInboxLocalQuery{
+			ConvIDs:           convIDs,
 			Status:            utils.VisibleChatConversationStatuses(),
 			TopicType:         &topicType,
 			UnreadOnly:        opts.UnreadOnly,
 			OneChatTypePerTLF: new(bool),
 		},
-		Pagination:       opts.Pagination,
 		IdentifyBehavior: keybase1.TLFIdentifyBehavior_CHAT_CLI,
 	})
 	if err != nil {
 		return c.errReply(err)
 	}
-	pagination = res.Pagination
 	rlimits = utils.AggRateLimits(res.RateLimits)
 	if opts.FailOffline && res.Offline {
 		return c.errReply(chat.OfflineError{})
@@ -128,9 +107,8 @@ func (c *chatServiceHandler) ListV1(ctx context.Context, opts listOptionsV1) Rep
 		IdentifyFailures: res.IdentifyFailures,
 	}
 	for _, conv := range res.Conversations {
-		cl.Conversations = append(cl.Conversations, c.exportUIConv(ctx, conv))
+		cl.Conversations = append(cl.Conversations, utils.ExportToSummary(conv))
 	}
-	cl.Pagination = pagination
 	cl.RateLimits = c.aggRateLimits(rlimits)
 	return Reply{Result: cl}
 }
@@ -157,7 +135,7 @@ func (c *chatServiceHandler) ListConvsOnNameV1(ctx context.Context, opts listCon
 	var cl chat1.ChatList
 	cl.RateLimits = c.aggRateLimits(listRes.RateLimits)
 	for _, conv := range listRes.Convs {
-		cl.Conversations = append(cl.Conversations, c.exportUIConv(ctx, conv))
+		cl.Conversations = append(cl.Conversations, utils.ExportToSummary(conv))
 	}
 	return Reply{Result: cl}
 }
@@ -279,6 +257,38 @@ func (c *chatServiceHandler) SetUnfurlSettingsV1(ctx context.Context, opts setUn
 		return c.errReply(err)
 	}
 	return Reply{Result: true}
+}
+
+func (c *chatServiceHandler) GetDeviceInfoV1(ctx context.Context, opts getDeviceInfoOptionsV1) Reply {
+	client, err := GetUserClient(c.G())
+	if err != nil {
+		return c.errReply(err)
+	}
+	user, err := client.LoadUserByName(ctx, keybase1.LoadUserByNameArg{Username: opts.Username})
+	if err != nil {
+		return c.errReply(err)
+	}
+	arg := keybase1.LoadUserPlusKeysV2Arg{
+		Uid: user.Uid,
+	}
+	them, err := client.LoadUserPlusKeysV2(ctx, arg)
+	if err != nil {
+		return c.errReply(err)
+	}
+	var res chat1.GetDeviceInfoRes
+	for _, m := range them.Current.DeviceKeys {
+		dev := chat1.DeviceInfo{
+			DeviceID:          string(m.DeviceID),
+			DeviceDescription: m.DeviceDescription,
+			DeviceType:        m.DeviceType,
+			DeviceCtime:       m.Base.CTime.UnixSeconds(),
+		}
+		if string(m.DeviceID) != "" && m.Base.Revocation == nil {
+			res.Devices = append(res.Devices, dev)
+		}
+	}
+
+	return Reply{Result: res}
 }
 
 func (c *chatServiceHandler) getAdvertTyp(typ string) (chat1.BotCommandsAdvertisementTyp, error) {
@@ -523,7 +533,10 @@ func (c *chatServiceHandler) formatMessages(ctx context.Context, messages []chat
 		}
 		if mv.ClientHeader.BotUID != nil {
 			botUID := mv.ClientHeader.BotUID.String()
-			msg.BotUID = &botUID
+			msg.BotInfo = &chat1.MsgBotInfo{
+				BotUID:      botUID,
+				BotUsername: mv.BotUsername,
+			}
 		}
 		if mv.Reactions.Reactions != nil {
 			msg.Reactions = &mv.Reactions
@@ -900,11 +913,11 @@ func (c *chatServiceHandler) downloadV1NoStream(ctx context.Context, opts downlo
 	}
 
 	arg := chat1.DownloadFileAttachmentLocalArg{
-		SessionID:      getSessionID(chatUI),
-		ConversationID: convID,
-		MessageID:      opts.MessageID,
-		Preview:        opts.Preview,
-		Filename:       opts.Output,
+		SessionID:       getSessionID(chatUI),
+		ConversationID:  convID,
+		MessageID:       opts.MessageID,
+		Preview:         opts.Preview,
+		DownloadToCache: false,
 	}
 
 	dres, err := client.DownloadFileAttachmentLocal(ctx, arg)
@@ -970,7 +983,7 @@ func (c *chatServiceHandler) MarkV1(ctx context.Context, opts markOptionsV1) Rep
 
 	arg := chat1.MarkAsReadLocalArg{
 		ConversationID: convID,
-		MsgID:          opts.MessageID,
+		MsgID:          &opts.MessageID,
 	}
 
 	res, err := client.MarkAsReadLocal(ctx, arg)
@@ -1237,6 +1250,43 @@ func (c *chatServiceHandler) sendV1(ctx context.Context, arg sendArgV1, chatUI c
 	}
 
 	return Reply{Result: res}
+}
+
+// ListMembersV1 implements ChatServiceHandler.ListMembersV1.
+func (c *chatServiceHandler) ListMembersV1(ctx context.Context, opts listMembersOptionsV1) Reply {
+	conv, _, err := c.findConversation(ctx, opts.ConversationID, opts.Channel)
+	if err != nil {
+		return c.errReply(err)
+	}
+
+	chatClient, err := GetChatLocalClient(c.G())
+	if err != nil {
+		return c.errReply(err)
+	}
+	teamID, err := chatClient.TeamIDFromTLFName(ctx, chat1.TeamIDFromTLFNameArg{
+		TlfName:     conv.Info.TlfName,
+		MembersType: conv.Info.MembersType,
+		TlfPublic:   conv.Info.Visibility == keybase1.TLFVisibility_PUBLIC,
+	})
+	if err != nil {
+		return c.errReply(err)
+	}
+
+	cli, err := GetTeamsClient(c.G())
+	if err != nil {
+		return c.errReply(err)
+	}
+	details, err := cli.TeamGetByID(context.Background(), keybase1.TeamGetByIDArg{Id: teamID})
+	if err != nil {
+		return c.errReply(err)
+	}
+
+	// filter the member list down to the specific conversation members based on the server-trust list
+	if conv.Info.TopicName != "" && opts.Channel.TopicName != "general" {
+		details = keybase1.FilterTeamDetailsForMembers(conv.AllNames(), details)
+	}
+
+	return Reply{Result: details}
 }
 
 type postHeader struct {

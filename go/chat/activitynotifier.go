@@ -61,7 +61,6 @@ func (n *NotifyRouterActivityRouter) Activity(ctx context.Context, uid gregor1.U
 }
 
 func (n *NotifyRouterActivityRouter) TypingUpdate(ctx context.Context, updates []chat1.ConvTypingUpdate) {
-	defer n.Trace(ctx, func() error { return nil }, "TypingUpdate")()
 	ctx = globals.BackgroundChatCtx(ctx, n.G())
 	n.notifyCh <- func() {
 		n.G().NotifyRouter.HandleChatTypingUpdate(ctx, updates)
@@ -217,5 +216,14 @@ func (n *NotifyRouterActivityRouter) PromptUnfurl(ctx context.Context, uid grego
 	ctx = globals.BackgroundChatCtx(ctx, n.G())
 	n.notifyCh <- func() {
 		n.G().NotifyRouter.HandleChatPromptUnfurl(ctx, n.kuid(uid), convID, msgID, domain)
+	}
+}
+
+func (n *NotifyRouterActivityRouter) ConvUpdate(ctx context.Context, uid gregor1.UID,
+	convID chat1.ConversationID, topicType chat1.TopicType, conv *chat1.InboxUIItem) {
+	defer n.Trace(ctx, func() error { return nil }, "ConvUpdate(%s,%v)", convID, topicType)()
+	ctx = globals.BackgroundChatCtx(ctx, n.G())
+	n.notifyCh <- func() {
+		n.G().NotifyRouter.HandleChatConvUpdate(ctx, n.kuid(uid), convID, topicType, conv)
 	}
 }

@@ -12,9 +12,23 @@ type Props = {
   waiting: boolean
 }
 
+// Copied from go/libkb/checkers.go
+const deviceRE = /^[a-zA-Z0-9][ _'a-zA-Z0-9+‘’—–-]*$/
+// eslint-disable-next-line
+const badDeviceRE = /  |[ '_-]$|['_-][ ]?['_-]/
+const normalizeDeviceRE = /[^a-zA-Z0-9]/
+
 const EnterDevicename = (props: Props) => {
   const [devicename, onChangeDevicename] = React.useState(props.initialDevicename || '')
-  const disabled = !devicename
+  const disabled = React.useMemo(() => {
+    const normalized = devicename.replace(normalizeDeviceRE, '')
+    return (
+      normalized.length < 3 ||
+      normalized.length > 64 ||
+      !deviceRE.test(devicename) ||
+      badDeviceRE.test(devicename)
+    )
+  }, [devicename])
   const onContinue = () => (disabled ? {} : props.onContinue(devicename))
   return (
     <SignupScreen
@@ -40,7 +54,7 @@ const EnterDevicename = (props: Props) => {
           }
         />
         <Kb.Box2 direction="vertical" gap="tiny" style={styles.inputBox}>
-          <Kb.NewInput
+          <Kb.LabeledInput
             autoFocus={true}
             containerStyle={styles.input}
             placeholder={Styles.isMobile ? 'Phone 1' : 'Computer 1'}
@@ -72,21 +86,17 @@ EnterDevicename.navigationOptions = {
 
 const styles = Styles.styleSheetCreate(() => ({
   input: Styles.platformStyles({
-    common: {},
     isElectron: {
-      ...Styles.padding(0, Styles.globalMargins.xsmall),
-      height: 38,
       width: 368,
-    },
-    isMobile: {
-      ...Styles.padding(0, Styles.globalMargins.small),
-      height: 48,
     },
   }),
   inputBox: Styles.platformStyles({
     isElectron: {
       // need to set width so subtext will wrap
       width: 368,
+    },
+    isMobile: {
+      width: '100%',
     },
   }),
   inputSub: {

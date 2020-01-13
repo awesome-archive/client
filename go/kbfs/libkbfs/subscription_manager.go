@@ -104,8 +104,8 @@ type pathSubscriptionRef struct {
 type subscriptionManager struct {
 	config Config
 
-	shutdownOnlineStatusWatcher func()
-	lock                        sync.RWMutex
+	onlineStatusTracker *onlineStatusTracker
+	lock                sync.RWMutex
 	// TODO HOTPOT-416: add another layer here to reference by topics, and
 	// actually check topics in LocalChange and BatchChanges.
 	pathSubscriptions               map[pathSubscriptionRef]map[SubscriptionID]debouncedNotify
@@ -132,25 +132,6 @@ func (sm *subscriptionManager) notifyOnlineStatus() {
 	}
 }
 
-func (sm *subscriptionManager) watchOnlineStatus() func() {
-	ctx, shutdown := context.WithCancel(context.Background())
-	go func() {
-		for sm.config.KBFSOps() == nil {
-			time.Sleep(100 * time.Millisecond)
-		}
-		for {
-			_, invalidateChan := sm.config.KBFSOps().StatusOfServices()
-			select {
-			case <-invalidateChan:
-				sm.notifyOnlineStatus()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return shutdown
-}
-
 func newSubscriptionManager(config Config) (SubscriptionManager, SubscriptionManagerPublisher) {
 	sm := &subscriptionManager{
 		pathSubscriptions:               make(map[pathSubscriptionRef]map[SubscriptionID]debouncedNotify),
@@ -161,12 +142,12 @@ func newSubscriptionManager(config Config) (SubscriptionManager, SubscriptionMan
 		subscriptionIDs:                 make(map[SubscriptionID]bool),
 		subscriptionCountByFolderBranch: make(map[data.FolderBranch]int),
 	}
-	sm.shutdownOnlineStatusWatcher = sm.watchOnlineStatus()
+	sm.onlineStatusTracker = newOnlineStatusTracker(config, sm.notifyOnlineStatus)
 	return sm, sm
 }
 
 func (sm *subscriptionManager) Shutdown(ctx context.Context) {
-	sm.shutdownOnlineStatusWatcher()
+	sm.onlineStatusTracker.shutdown()
 	pathSids := make([]SubscriptionID, 0, len(sm.pathSubscriptionIDToRef))
 	nonPathSids := make([]SubscriptionID, 0, len(sm.nonPathSubscriptionIDToTopic))
 	for sid := range sm.pathSubscriptionIDToRef {
@@ -185,6 +166,10 @@ func (sm *subscriptionManager) Shutdown(ctx context.Context) {
 
 func (sm *subscriptionManager) Subscriber(notifier SubscriptionNotifier) Subscriber {
 	return subscriber{sm: sm, notifier: notifier}
+}
+
+func (sm *subscriptionManager) OnlineStatusTracker() OnlineStatusTracker {
+	return sm.onlineStatusTracker
 }
 
 func (sm *subscriptionManager) checkSubscriptionIDLocked(sid SubscriptionID) (setter func(), err error) {
@@ -393,6 +378,22 @@ var _ SubscriptionManagerPublisher = (*subscriptionManager)(nil)
 func (sm *subscriptionManager) PublishChange(topic keybase1.SubscriptionTopic) {
 	sm.lock.RLock()
 	defer sm.lock.RUnlock()
+
+	// When sync status changes, trigger notification for all paths so they
+	// reload to get new prefetch status. This is unfortunate but it's
+	// non-trivial to actually build notification around individuall path's
+	// prefetch status. Since GUI doesnt' have that many path notifications,
+	// this should be fine.
+	//
+	// TODO: Build it.
+	if topic == keybase1.SubscriptionTopic_OVERALL_SYNC_STATUS {
+		for _, subscriptions := range sm.pathSubscriptions {
+			for _, notifier := range subscriptions {
+				notifier.notify()
+			}
+		}
+	}
+
 	if sm.nonPathSubscriptions[topic] == nil {
 		return
 	}

@@ -32,18 +32,31 @@ export type Props = {
   text: string
 }
 
-const getIcon = status => {
+const getIcon = (status: Status) => {
   switch (status) {
     case 'completed':
       return 'iconfont-success'
     case 'claimable':
-      return 'iconfont-time'
+      return 'iconfont-success'
     case 'pending':
       return 'iconfont-time'
     case 'error':
       return 'iconfont-remove'
     default:
       return 'iconfont-time'
+  }
+}
+
+const statusIcon = (s: Status) => {
+  switch (s) {
+    case 'completed':
+      return 'completedIcon'
+    case 'claimable':
+      return 'claimableIcon'
+    case 'pending':
+      return 'pendingIcon'
+    case 'error':
+      return 'errorIcon'
   }
 }
 
@@ -80,7 +93,7 @@ class PaymentStatus extends React.Component<Props, State> {
           type={getIcon(this.props.status)}
           fontSize={12}
           boxStyle={styles.iconBoxStyle}
-          style={styles[this.props.status + 'Icon']}
+          style={styles[statusIcon(this.props.status)]}
         />{' '}
       </Kb.Text>
     )
@@ -124,9 +137,9 @@ const styles = Styles.styleSheetCreate(
   () =>
     ({
       claimable: {
-        backgroundColor: Styles.globalColors.black_05OrBlack_60,
+        backgroundColor: Styles.globalColors.purple_10OrPurple,
         borderRadius: Styles.globalMargins.xxtiny,
-        color: Styles.globalColors.black_50OrWhite,
+        color: Styles.globalColors.purpleDarkOrWhite,
       },
       claimableIcon: {},
       completed: {
@@ -156,7 +169,7 @@ const styles = Styles.styleSheetCreate(
         },
       }),
       pending: {
-        backgroundColor: Styles.globalColors.black_05OrBlack_60,
+        backgroundColor: Styles.globalColors.greyLight,
         borderRadius: Styles.globalMargins.xxtiny,
         color: Styles.globalColors.black_50OrWhite,
       },

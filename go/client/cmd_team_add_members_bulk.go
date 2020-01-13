@@ -16,7 +16,8 @@ import (
 
 type CmdTeamAddMembersBulk struct {
 	libkb.Contextified
-	arg keybase1.TeamAddMembersMultiRoleArg
+	arg  keybase1.TeamAddMembersMultiRoleArg
+	Team string
 }
 
 func newCmdTeamAddMembersBulk(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {
@@ -29,6 +30,10 @@ func newCmdTeamAddMembersBulk(cl *libcmdline.CommandLine, g *libkb.GlobalContext
 			cl.ChooseCommand(cmd, "add-members-bulk", c)
 		},
 		Flags: []cli.Flag{
+			cli.StringFlag{
+				Name:  "b, bots",
+				Usage: "specify bots to add",
+			},
 			cli.StringFlag{
 				Name:  "r, readers",
 				Usage: "specify readers to add",
@@ -53,13 +58,6 @@ func newCmdTeamAddMembersBulk(cl *libcmdline.CommandLine, g *libkb.GlobalContext
 		Description: teamAddMembersBulkDoc,
 	}
 
-	// TODO HOTPOT-599 expose publicly
-	if g.Env.GetRunMode() == libkb.DevelRunMode || libkb.IsKeybaseAdmin(g.GetMyUID()) {
-		cmd.Flags = append(cmd.Flags, cli.StringFlag{
-			Name:  "b, bots",
-			Usage: "specify bots to add",
-		})
-	}
 	return cmd
 }
 
@@ -84,7 +82,7 @@ func (c *CmdTeamAddMembersBulk) parseBulkList(v string, role keybase1.TeamRole) 
 }
 
 func (c *CmdTeamAddMembersBulk) ParseArgv(ctx *cli.Context) (err error) {
-	c.arg.Name, err = ParseOneTeamName(ctx)
+	c.Team, err = ParseOneTeamName(ctx)
 	if err != nil {
 		return err
 	}
@@ -109,8 +107,7 @@ func (c *CmdTeamAddMembersBulk) ParseArgv(ctx *cli.Context) (err error) {
 		tot += n
 	}
 	if tot == 0 {
-		// TODO HOTPOT-599 add --bots
-		return errors.New("Need at least one of --readers, --writers, --admins or --owners")
+		return errors.New("Need at least one of --bots, --readers, --writers, --admins or --owners")
 	}
 	c.arg.SendChatNotification = !ctx.Bool("skip-chat-message")
 	return nil
@@ -122,7 +119,14 @@ func (c *CmdTeamAddMembersBulk) Run() error {
 		return err
 	}
 
-	err = cli.TeamAddMembersMultiRole(context.Background(), c.arg)
+	teamID, err := cli.GetTeamID(context.Background(), c.Team)
+	if err != nil {
+		return err
+	}
+	c.arg.TeamID = teamID
+
+	// TODO: currently ignoring res; address in PICNIC-714
+	_, err = cli.TeamAddMembersMultiRole(context.Background(), c.arg)
 	if err != nil {
 		return err
 	}
@@ -137,7 +141,6 @@ func (c *CmdTeamAddMembersBulk) GetUsage() libkb.Usage {
 	}
 }
 
-// TODO HOTPOT-599 add --bots here too
 const teamAddMembersBulkDoc = `"keybase team add-members-bulk" allows you to add multiple users to a team, in bulk
 
 EXAMPLES:
@@ -148,14 +151,14 @@ Add existing keybase users as writers:
 
 Add users via social assertions:
 
-    keybase team add-members-bulk acme --writers=alice+alice@github,bob@github,jerry@redder --readers=jon,bob32
+    keybase team add-members-bulk acme --writers=alice+alice@github,bob@github,jerry@redder --readers=jon,bob32 --bots=botua
 
 Add users via email:
 
     keybase team add-members-bulk acme --readers='[max43@gmail.com]@email,[bill32@yahoo.com]@email' --writers='[lucy32@poems.com]@email'
 
-You can specify one or more of --readers, --writers, --admins, --owners, to add multiple
-roles at one go. For each of those lists, you can mix and match Keybase users, social
-assertions, and email addresses. Email addresses cannot be combined with other assertions,
-however.
+You can specify one or more of --bots, --readers, --writers, --admins,
+--owners, to add multiple roles at one go. For each of those lists, you can mix
+and match Keybase users, social assertions, and email addresses. Email
+addresses cannot be combined with other assertions, however.
 `

@@ -25,7 +25,11 @@ const _InfoIcon = (props: Kb.PropsWithOverlay<InfoIconProps>) => (
       type="iconfont-question-mark"
       onClick={props.invisible ? undefined : props.toggleShowingMenu}
       ref={props.setAttachmentRef}
-      style={Styles.collapseStyles([props.invisible && styles.opacityNone, props.style])}
+      style={Styles.collapseStyles([
+        Styles.desktopStyles.windowDraggingClickable,
+        props.invisible && styles.opacityNone,
+        props.style,
+      ])}
     />
     <Kb.FloatingMenu
       items={[
@@ -69,6 +73,8 @@ type HeaderProps = {
   style: Styles.StylesCrossPlatform
   negative: boolean
   rightActionComponent?: React.ReactNode
+  rightActionLabel?: string
+  onRightAction?: (() => void) | null
 }
 
 // Only used on desktop
@@ -104,6 +110,16 @@ const Header = (props: HeaderProps) => (
         </Kb.ClickableBox>
       )}
       {props.titleComponent || <Kb.Text type="Header">{props.title}</Kb.Text>}
+      {props.onRightAction && !!props.rightActionLabel && (
+        <Kb.Button
+          type="Default"
+          mode="Secondary"
+          small={true}
+          label={props.rightActionLabel}
+          onClick={props.onRightAction}
+          style={styles.rightActionButton}
+        />
+      )}
       {props.rightActionComponent && (
         <Kb.Box2 direction="horizontal" style={styles.rightAction}>
           {props.rightActionComponent}
@@ -119,6 +135,7 @@ type ButtonMeta = {
   onClick: () => void
   type?: ButtonProps['type']
   waiting?: boolean
+  waitingKey?: string | null // makes this a WaitingButton
 }
 
 type SignupScreenProps = {
@@ -146,7 +163,13 @@ type SignupScreenProps = {
 
 // Screens with header + body bg color (i.e. all but join-or-login)
 export const SignupScreen = (props: SignupScreenProps) => (
-  <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} alignItems="center">
+  <Kb.Box2
+    direction="vertical"
+    fullWidth={true}
+    fullHeight={true}
+    alignItems="center"
+    style={styles.whiteBackground}
+  >
     {!Styles.isMobile && (
       <Header
         onBack={props.onBack}
@@ -157,6 +180,8 @@ export const SignupScreen = (props: SignupScreenProps) => (
         style={Styles.collapseStyles([props.noBackground && styles.whiteHeaderContainer, props.headerStyle])}
         negative={!!props.negativeHeader}
         rightActionComponent={props.rightActionComponent}
+        rightActionLabel={props.rightActionLabel}
+        onRightAction={props.onRightAction}
       />
     )}
     {Styles.isMobile && !props.skipMobileHeader && (
@@ -202,9 +227,21 @@ export const SignupScreen = (props: SignupScreenProps) => (
       {!!props.banners && <Kb.Box2 direction="vertical" style={styles.banners} children={props.banners} />}
       {!!props.buttons && (
         <Kb.ButtonBar direction="column" fullWidth={Styles.isMobile} style={styles.buttonBar}>
-          {props.buttons.map(b => (
-            <Kb.Button key={b.label} style={styles.button} {...b} fullWidth={true} />
-          ))}
+          {props.buttons.map(b =>
+            b.waitingKey !== undefined ? (
+              <Kb.WaitingButton
+                key={b.label}
+                style={styles.button}
+                {...b}
+                // TS doesn't narrow the type inside ButtonMeta, so still thinks
+                // waitingKey can be undefined unless we pull it out
+                waitingKey={b.waitingKey}
+                fullWidth={true}
+              />
+            ) : (
+              <Kb.Button key={b.label} style={styles.button} {...b} fullWidth={true} />
+            )
+          )}
         </Kb.ButtonBar>
       )}
     </Kb.Box2>
@@ -287,16 +324,27 @@ const styles = Styles.styleSheetCreate(
       opacityNone: {
         opacity: 0,
       },
-      rightAction: {
-        alignItems: 'center',
-        alignSelf: 'flex-end',
-        bottom: 0,
-        justifyContent: 'center',
-        paddingRight: Styles.globalMargins.small,
-        position: 'absolute',
-        right: 0,
-        top: 0,
-      },
+      rightAction: Styles.platformStyles({
+        common: {
+          alignItems: 'center',
+          alignSelf: 'flex-end',
+          bottom: 0,
+          justifyContent: 'center',
+          paddingRight: Styles.globalMargins.small,
+          position: 'absolute',
+          right: 0,
+          top: 0,
+        },
+        isElectron: Styles.desktopStyles.windowDraggingClickable,
+      }),
+      rightActionButton: Styles.platformStyles({
+        common: {
+          position: 'absolute',
+          right: Styles.globalMargins.small,
+          top: 10,
+        },
+        isElectron: Styles.desktopStyles.windowDraggingClickable,
+      }),
       titleContainer: {
         ...Styles.padding(Styles.globalMargins.xsmall, 0, Styles.globalMargins.small),
         position: 'relative',

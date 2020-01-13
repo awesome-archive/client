@@ -25,6 +25,9 @@ If you're on the nth page and want to go back, set the previous field instead.
 Send a message:
     {"method": "send", "params": {"options": {"channel": {"name": "you,them"}, "message": {"body": "is it cold today?"}}}}
 
+Send a reply:
+   {"method": "send", "params": {"options": {"channel": {"name": "you,them"}, "message": {"body": "is it cold today?"}, "reply_to": 314}}}
+
 Delete a message:
     {"method": "delete", "params": {"options": {"channel": {"name": "you,them"}, "message_id": 314}}}
 
@@ -94,10 +97,10 @@ Load a flip's result:
 Get unfurl settings:
     {"method": "getunfurlsettings"}
 
-Set unfurl setings (thumbnails for sent links):
+Set unfurl settings (thumbnails for sent links):
     {"method": "setunfurlsettings", "params": {"options":{"mode": "always/never/whitelisted", "whitelist":["example.com"]}}}
 
-Advertise availabe bot commands in the UI:
+Advertise available bot commands in the UI:
     {"method": "advertisecommands", "params": {"options":{"alias": "helpbot", "advertisements":[{"type": "public", "commands": [{"name": "help", "description": "Get help using this bot"}]}]}}}
 
 Clear bot commands:
@@ -111,4 +114,19 @@ Pin a message to a chat:
 
 Unpin the message of chat:
    {"method": "unpin", "params": {"options": {"channel": {"name": "treehouse", "members_type": "team", "topic_name": "random"}}}}
+
+Get a user's device info from their username:
+   {"method": "getdeviceinfo", "params": {"options": {"username": "cjb"}}}
+
+Get all reset members of conversations in your inbox:
+   {"method": "getresetconvmembers"}
+
+Re-add a reset user back to a conversation:
+   {"method": "addresetconvmember", "params": {"options": {"username": "joshblum", "conversation_id": "..."}}}
+
+List members of a conversation from a topic name:
+   {"method": "listmembers", "params": {"options": {"channel": {"name": "treehouse", "members_type": "team", "topic_name": "random"}}}}
+
+List members of a conversation from a conversation id:
+   {"method": "listmembers", "params": {"options": {"conversation_id": "..."}}}
 `

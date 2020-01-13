@@ -27,6 +27,8 @@ import (
 	insecureTriplesec "github.com/keybase/go-triplesec-insecure"
 )
 
+var mockTLFID = chat1.TLFID([]byte{0, 1})
+
 func cryptKey(t *testing.T) *keybase1.CryptKey {
 	kp, err := libkb.GenerateNaclDHKeyPair()
 	require.NoError(t, err)
@@ -46,6 +48,9 @@ func textMsg(t *testing.T, text string, mbVersion chat1.MessageBoxedVersion) cha
 
 func textMsgWithSender(t *testing.T, text string, uid gregor1.UID, mbVersion chat1.MessageBoxedVersion) chat1.MessagePlaintext {
 	header := chat1.MessageClientHeader{
+		Conv: chat1.ConversationIDTriple{
+			Tlfid: mockTLFID,
+		},
 		Sender:      uid,
 		MessageType: chat1.MessageType_TEXT,
 	}
@@ -117,7 +122,7 @@ func getActiveDevicesAndKeys(tc *kbtest.ChatTestContext, u *kbtest.FakeUser) ([]
 	activeDevices := []*libkb.Device{}
 	for _, device := range user.GetComputedKeyFamily().GetAllDevices() {
 		if device.Status != nil && *device.Status == libkb.DeviceStatusActive {
-			activeDevices = append(activeDevices, device)
+			activeDevices = append(activeDevices, device.Device)
 		}
 	}
 	return activeDevices, append(sibkeys, subkeys...)
@@ -708,8 +713,7 @@ func TestChatMessageRevokedKeyThenSent(t *testing.T) {
 		require.NotNil(t, thisDevice, "thisDevice should be non-nil")
 
 		// Find the key
-		f := func() libkb.SecretUI { return u.NewSecretUI() }
-		signingKey, err := engine.GetMySecretKey(context.TODO(), tc.G, f, libkb.DeviceSigningKeyType, "some chat or something test")
+		signingKey, err := engine.GetMySecretKey(context.TODO(), tc.G, libkb.DeviceSigningKeyType, "some chat or something test")
 		require.NoError(t, err, "get device signing key")
 		signKP, ok := signingKey.(libkb.NaclSigningKeyPair)
 		require.Equal(t, true, ok, "signing key must be nacl")
@@ -786,8 +790,7 @@ func TestChatMessageSentThenRevokedSenderKey(t *testing.T) {
 		require.NotNil(t, thisDevice, "thisDevice should be non-nil")
 
 		// Find the key
-		f := func() libkb.SecretUI { return u.NewSecretUI() }
-		signingKey, err := engine.GetMySecretKey(context.TODO(), tc.G, f, libkb.DeviceSigningKeyType, "some chat or something test")
+		signingKey, err := engine.GetMySecretKey(context.TODO(), tc.G, libkb.DeviceSigningKeyType, "some chat or something test")
 		require.NoError(t, err, "get device signing key")
 		signKP, ok := signingKey.(libkb.NaclSigningKeyPair)
 		require.Equal(t, true, ok, "signing key must be nacl")
@@ -1495,7 +1498,7 @@ func TestChatMessagePrevPointerInconsistency(t *testing.T) {
 		boxerContext := globals.BackgroundChatCtx(context.TODO(), g)
 
 		// Everything below will use the zero convID.
-		convID := chat1.ConversationIDTriple{}.ToConversationID([2]byte{0, 0})
+		convID := chat1.ConversationIDTriple{Tlfid: mockTLFID}.ToConversationID([2]byte{0, 0})
 		conv := chat1.Conversation{
 			Metadata: chat1.ConversationMetadata{
 				ConversationID: convID,
