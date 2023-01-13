@@ -1,43 +1,22 @@
 import * as TeamsGen from '../../actions/teams-gen'
 import * as RouteTreeGen from '../../actions/route-tree-gen'
-import JoinTeamDialog from '.'
-import {upperFirst} from 'lodash-es'
+import JoinTeam from '.'
+import upperFirst from 'lodash/upperFirst'
 import * as Container from '../../util/container'
 
-type OwnProps = {}
+type OwnProps = Container.RouteProps<'teamJoinTeamDialog'>
 
-export default Container.compose(
-  Container.connect(
-    state => ({
-      errorText: upperFirst(state.teams.teamJoinError),
-      success: state.teams.teamJoinSuccess,
-      successTeamName: state.teams.teamJoinSuccessTeamName,
-    }),
-    dispatch => ({
-      _onJoinTeam: (teamname: string) => {
-        dispatch(TeamsGen.createJoinTeam({teamname}))
-      },
-      _onSetTeamJoinError: (error: string) => {
-        dispatch(TeamsGen.createSetTeamJoinError({error}))
-      },
-      _onSetTeamJoinSuccess: (success: boolean, teamname: string) => {
-        dispatch(TeamsGen.createSetTeamJoinSuccess({success, teamname}))
-      },
-      onBack: () => dispatch(RouteTreeGen.createNavigateUp()),
-    }),
-    (s, d, o: OwnProps) => ({...o, ...s, ...d})
-  ),
-  Container.withStateHandlers(
-    {name: ''},
-    {onNameChange: () => (name: string) => ({name: name.toLowerCase()})}
-  ),
-  Container.withHandlers({
-    onSubmit: ({name, _onJoinTeam}) => () => _onJoinTeam(name),
-  } as any),
-  Container.lifecycle({
-    componentDidMount() {
-      this.props._onSetTeamJoinError('')
-      this.props._onSetTeamJoinSuccess(false, null)
-    },
-  } as any)
-)(JoinTeamDialog as any)
+export default Container.connect(
+  (state, ownProps: OwnProps) => ({
+    errorText: upperFirst(state.teams.errorInTeamJoin),
+    initialTeamname: ownProps.route.params?.initialTeamname ?? undefined,
+    open: state.teams.teamJoinSuccessOpen,
+    success: state.teams.teamJoinSuccess,
+    successTeamName: state.teams.teamJoinSuccessTeamName,
+  }),
+  dispatch => ({
+    onBack: () => dispatch(RouteTreeGen.createNavigateUp()),
+    onJoinTeam: (teamname: string) => dispatch(TeamsGen.createJoinTeam({teamname})),
+  }),
+  (s, d) => ({...s, ...d})
+)(JoinTeam)

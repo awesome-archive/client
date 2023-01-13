@@ -1,8 +1,10 @@
-import * as React from 'react'
 import * as Kb from '../../../../common-adapters'
-import {NativeFlatList} from '../../../../common-adapters/native-wrappers.native'
+import * as RPCChatTypes from '../../../../constants/types/rpc-chat-gen'
 import * as Styles from '../../../../styles'
-import {Props} from './suggestion-list'
+import noop from 'lodash/noop'
+import type {Props} from './suggestion-list'
+import {BotCommandUpdateStatus} from '../normal/shared'
+import {NativeFlatList} from '../../../../common-adapters/native-wrappers.native'
 
 const SuggestionList = (props: Props) => (
   <Kb.Box2
@@ -18,13 +20,25 @@ const SuggestionList = (props: Props) => (
       keyExtractor={props.keyExtractor || (item => item)}
       keyboardShouldPersistTaps="always"
       windowSize={10}
+      onScrollToIndexFailed={noop}
     />
+    {props.suggestBotCommandsUpdateStatus &&
+      props.suggestBotCommandsUpdateStatus !== RPCChatTypes.UIBotCommandsUpdateStatusTyp.blank && (
+        <Kb.Box2 style={styles.commandStatusContainer} fullWidth={true} direction="vertical">
+          <BotCommandUpdateStatus status={props.suggestBotCommandsUpdateStatus} />
+        </Kb.Box2>
+      )}
   </Kb.Box2>
 )
 
 const styles = Styles.styleSheetCreate(
   () =>
     ({
+      commandStatusContainer: {
+        backgroundColor: Styles.globalColors.white,
+        justifyContent: 'center',
+        ...Styles.padding(Styles.globalMargins.xtiny, 0),
+      },
       listContainer: {flexGrow: 0, marginTop: 'auto'},
       noGrow: {flexGrow: 0},
     } as const)

@@ -1,8 +1,5 @@
-import * as React from 'react'
 import * as Types from '../../../constants/types/fs'
-import * as Constants from '../../../constants/fs'
-import {namedConnect} from '../../../util/container'
-import OpenHOC from '../../common/open-hoc'
+import {useOpen} from '../../common/use-open'
 import TlfType from './tlf-type'
 
 type OwnProps = {
@@ -10,22 +7,17 @@ type OwnProps = {
   name: Types.TlfType
 }
 
-const mapStateToProps = (state, {name}: OwnProps) => ({
-  _tlfList: Constants.getTlfListFromType(state.fs.tlfs, name),
-})
-
-const mergeProps = (stateProps, _, {name, destinationPickerIndex}: OwnProps) => {
-  const badgeCount = Constants.computeBadgeNumberForTlfList(stateProps._tlfList)
+const TLFTypeContainer = (p: OwnProps) => {
+  const {destinationPickerIndex, name} = p
   const path = Types.stringToPath(`/keybase/${name}`)
-  return {
-    badgeCount,
+  const onOpen = useOpen({destinationPickerIndex, path})
+  const np = {
     destinationPickerIndex,
     name,
+    onOpen,
     path,
   }
-}
 
-export default ((ComposedComponent: React.ComponentType<any>) =>
-  namedConnect(mapStateToProps, () => ({}), mergeProps, 'ConnectedTlfTypeRow')(OpenHOC(ComposedComponent)))(
-  TlfType
-)
+  return <TlfType {...np} />
+}
+export default TLFTypeContainer

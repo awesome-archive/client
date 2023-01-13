@@ -1,24 +1,27 @@
-import * as SafeElectron from '../../util/safe-electron.desktop'
+import * as Electron from 'electron'
 import fs from 'fs'
 import path from 'path'
 import exec from './exec.desktop'
 import {keybaseBinPath} from './paths.desktop'
-import {quit} from './ctl.desktop'
+import {ctlQuit} from './ctl.desktop'
 import {isDarwin} from '../../constants/platform'
 import logger from '../../logger'
 import zlib from 'zlib'
+import type {TypedActions} from '../../actions/typed-actions-gen'
+import * as FsGen from '../../actions/fs-gen'
 
-const file = path.join(SafeElectron.getApp().getPath('userData'), 'installer.json')
+const file = path.join(Electron.app.getPath('userData'), 'installer.json')
 
 const loadHasPrompted = () => {
   try {
     const data = fs.readFileSync(file, 'utf8')
-    return JSON.parse(data).promptedForCLI
-  } catch (err) {
-    if (err && err.code === 'ENOENT') {
+    return JSON.parse(data)?.promptedForCLI
+  } catch (error_) {
+    const error = error_ as {code?: string} | undefined
+    if (error?.code === 'ENOENT') {
       console.log('[Installer] loadHasPrompted: No installer.json file')
     } else {
-      console.warn('[Installer] loadHasPrompted: Error loading state:', err)
+      console.warn('[Installer] loadHasPrompted: Error loading state:', error)
     }
     return false
   }
@@ -32,7 +35,31 @@ const saveHasPrompted = () => {
   }
 }
 
-const checkErrors = (result, errors, errorTypes) => {
+type ErrorTypes = {
+  cli: boolean
+  fuse: boolean
+  kbnm: boolean
+}
+
+type ResultType =
+  | {
+      componentResults?: Array<{
+        status?: {
+          code?: number
+          desc?: string
+        }
+        name?: string
+        exitCode?: number
+      }>
+    }
+  | undefined
+
+const checkErrors = (
+  dispatch: (action: TypedActions) => void,
+  result: ResultType,
+  errors: Array<string>,
+  errorTypes: ErrorTypes
+) => {
   // Copied from old constants/favorite.js
   // See Installer.m: KBExitFuseKextError
   const ExitCodeFuseKextError = 4
@@ -40,10 +67,14 @@ const checkErrors = (result, errors, errorTypes) => {
   const ExitCodeFuseKextPermissionError = 5
   // See Installer.m: KBExitAuthCanceledError
   const ExitCodeAuthCanceledError = 6
+  // See Installer.m: KBExitFuseCriticalUpdate
+  const ExitFuseCriticalUpdate = 8
+  // See install_darwin.go: exitCodeFuseCriticalUpdateFailed
+  const ExitFuseCriticalUpdateFailed = 300
 
-  const results = (result && result.componentResults) || []
+  const results = result?.componentResults || []
   results.forEach(cr => {
-    if (cr.status.code === 0) {
+    if (cr.status?.code === 0) {
       return
     }
     if (cr.name === 'fuse') {
@@ -62,6 +93,16 @@ const checkErrors = (result, errors, errorTypes) => {
       errors.push(
         `Installation was canceled. The file system will not be available until authorization is granted.`
       )
+    } else if (cr.name === 'helper' && cr.exitCode === ExitFuseCriticalUpdate) {
+      logger.info('[Installer] fuse critical update, setting badge')
+      // ignore critical update error, it's just to coerce specific behavior in the Go installer
+      dispatch(FsGen.createSetCriticalUpdate({val: true}))
+      return
+    } else if (cr.name === 'helper' && cr.exitCode === ExitFuseCriticalUpdateFailed) {
+      errorTypes.fuse = true
+      errors.push(
+        `We were unable to perform required KBFS maintenance. This is likely because you are using KBFS mounts on more than one macOS system account on this computer. In order to fix this situation, please quit all running copies of Keybase on all accounts, and try starting Keybase again.`
+      )
     } else if (cr.name === 'cli') {
       errorTypes.cli = true
     } else if (cr.name === 'redirector') {
@@ -70,8 +111,8 @@ const checkErrors = (result, errors, errorTypes) => {
         `We were unable to load the part of Keybase that lets you access your files in your file system. You should be able to do so if you wait a few minutes and restart Keybase.`
       )
     } else {
-      errors.push(`There was an error trying to install the ${cr.name}.`)
-      errors.push(`\n${cr.status.desc}`)
+      errors.push(`There was an error trying to install the ${cr.name ?? ''}.`)
+      errors.push(`\n${cr.status?.desc ?? ''}`)
       if (cr.name === 'kbnm') {
         errorTypes.kbnm = true
       }
@@ -79,8 +120,8 @@ const checkErrors = (result, errors, errorTypes) => {
   })
 }
 
-type CB = (err: any) => void
-const darwinInstall = (callback: CB) => {
+type CB = (err: Error | null) => void
+const darwinInstall = (dispatch: (action: TypedActions) => void, callback: CB) => {
   logger.info('[Installer]: Installer check starting now')
   const keybaseBin = keybaseBinPath()
   if (!keybaseBin) {
@@ -90,11 +131,11 @@ const darwinInstall = (callback: CB) => {
   let timeout = 30
   // If the app was opened at login, there might be contention for lots
   // of resources, so let's bump the install timeout to something large.
-  if (SafeElectron.getApp().getLoginItemSettings().wasOpenedAtLogin) {
+  if (Electron.app.getLoginItemSettings().wasOpenedAtLogin) {
     timeout = 90
   }
 
-  const logOutput = (stdout, stderr) =>
+  const logOutput = async (stdout: string, stderr: string) =>
     Promise.all([
       new Promise((resolve, reject) =>
         zlib.gzip(stdout, (error, res) => (error ? reject(error) : resolve(res)))
@@ -114,10 +155,10 @@ const darwinInstall = (callback: CB) => {
       )
       .catch(err => logger.error('[Installer]: Error zipping up logs: ', err))
 
-  const handleResults = (err, _, stdout, stderr) => {
+  const handleResults = (err: {code: number} | undefined, _, stdout: string, stderr: string) => {
     const loggingPromise = logOutput(stdout, stderr)
     const errors: Array<string> = []
-    const errorTypes = {
+    const errorTypes: ErrorTypes = {
       cli: false,
       fuse: false,
       kbnm: false,
@@ -126,9 +167,9 @@ const darwinInstall = (callback: CB) => {
       errors.push(`There was an error trying to run the install (${err.code}).`)
     } else if (stdout !== '') {
       try {
-        const result = JSON.parse(stdout)
+        const result = JSON.parse(stdout) as ResultType
         if (result) {
-          checkErrors(result, errors, errorTypes)
+          checkErrors(dispatch, result, errors, errorTypes)
         } else {
           errors.push(`There was an error trying to run the install. No output.`)
         }
@@ -145,15 +186,17 @@ const darwinInstall = (callback: CB) => {
       const buttons = errorTypes.fuse || errorTypes.kbnm ? ['Okay'] : ['Ignore', 'Quit']
       const detail = errors.join('\n') + `\n\nPlease run \`keybase log send\` to report the error.`
       const message = 'Keybase Install Error'
-      loggingPromise.then(() =>
-        SafeElectron.getDialog().showMessageBox({buttons, detail, message}, resp => {
-          if (resp === 1) {
-            quit()
-          } else {
-            callback(null)
-          }
-        })
-      )
+      loggingPromise
+        .then(async () =>
+          Electron.dialog.showMessageBox({buttons, detail, message}).then(({response}) => {
+            if (response === 1) {
+              ctlQuit()
+            } else {
+              callback(null)
+            }
+          })
+        )
+        .catch(() => {})
       return
     }
 
@@ -188,5 +231,5 @@ const darwinInstall = (callback: CB) => {
   )
 }
 
-const install = isDarwin ? darwinInstall : (callback: CB) => callback(null) // nothing on other platforms
+const install = isDarwin ? darwinInstall : (_: unknown, callback: CB) => callback(null) // nothing on other platforms
 export default install

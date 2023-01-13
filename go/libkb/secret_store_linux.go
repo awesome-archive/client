@@ -1,6 +1,7 @@
 // Copyright 2019 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
+//go:build linux && !android
 // +build linux,!android
 
 package libkb
@@ -8,14 +9,14 @@ package libkb
 func NewSecretStoreAll(mctx MetaContext) SecretStoreAll {
 	g := mctx.G()
 	sfile := NewSecretStoreFile(g.Env.GetDataDir())
-	sfile.notifyCreate = func(name NormalizedUsername) { notifySecretStoreCreate(g, name) }
+	sfile.notifyCreate = func(name NormalizedUsername) { notifySecretStoreCreate(mctx, name) }
 	ssecretservice := NewSecretStoreRevokableSecretService()
 
 	if mctx.G().Env.GetForceLinuxKeyring() {
 		return ssecretservice
 	}
 
-	if mctx.G().Env.ForceSecretStoreFile() {
+	if mctx.G().Env.ForceSecretStoreFile() || mctx.G().Env.RunningInCI() {
 		return sfile
 	}
 

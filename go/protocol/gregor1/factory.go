@@ -142,7 +142,7 @@ func (o ObjFactory) MakeDismissalByIDs(uid gregor.UID, msgid gregor.MsgID, devid
 	if err != nil {
 		return nil, err
 	}
-	ourIds := make([]MsgID, len(ids), len(ids))
+	ourIds := make([]MsgID, len(ids))
 	for i, id := range ids {
 		ourIds[i] = MsgID(id.Bytes())
 	}
@@ -191,7 +191,7 @@ func (its itemSlice) Less(i, j int) bool {
 }
 
 func (o ObjFactory) MakeState(items []gregor.Item) (gregor.State, error) {
-	var ourItems itemSlice
+	ourItems := make(itemSlice, 0, len(items))
 	for _, item := range items {
 		ourItem, err := castItem(item)
 		if err != nil {

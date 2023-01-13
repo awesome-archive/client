@@ -1,46 +1,64 @@
-import * as React from 'react'
+import * as Chat2Gen from '../../../../../actions/chat2-gen'
+import * as Container from '../../../../../util/container'
 import * as Kb from '../../../../../common-adapters/mobile.native'
+import * as React from 'react'
 import * as Styles from '../../../../../styles'
+import type {Props} from '.'
+import {GetIdsContext} from '../../ids-context'
+import {SwipeTrigger} from '../../../../../common-adapters/swipeable.native'
+import {dismiss} from '../../../../../util/keyboard'
 
-const _renderRightActions = () => {
-  return (
-    <Kb.Box2 direction="horizontal">
-      <Kb.Icon type="iconfont-reply" style={styles.replyIcon} />
-    </Kb.Box2>
+const LongPressable = React.memo(function LongPressable(props: Props) {
+  const {children, onLongPress} = props
+  const onPress = React.useCallback(() => dismiss(), [])
+
+  const inner = (
+    <Kb.NativePressable style={styles.pressable} onLongPress={onLongPress} onPress={onPress}>
+      {children}
+    </Kb.NativePressable>
   )
-}
 
-// See '.js.flow' for explanation
-const LongPressable = (props: {children: React.ElementType; onSwipeLeft?: () => void}) => {
-  const {children, ...rest} = props
-  const swipeable = React.useRef<Kb.Swipeable>(null)
-  const onRightOpen = () => {
-    props.onSwipeLeft && props.onSwipeLeft()
-    swipeable.current && swipeable.current.close()
+  const makeAction = React.useCallback(() => {
+    return (
+      <Kb.Box2 direction="vertical" style={styles.reply}>
+        <Kb.Icon type="iconfont-reply" style={styles.replyIcon} />
+      </Kb.Box2>
+    )
+  }, [])
+
+  const getIds = React.useContext(GetIdsContext)
+  const dispatch = Container.useDispatch()
+  const onSwipeLeft = React.useCallback(() => {
+    const {conversationIDKey, ordinal} = getIds()
+    dispatch(Chat2Gen.createToggleReplyToMessage({conversationIDKey, ordinal}))
+  }, [dispatch, getIds])
+
+  // Only swipeable if there is an onSwipeLeft handler
+  if (onSwipeLeft) {
+    return (
+      <SwipeTrigger actionWidth={100} onSwiped={onSwipeLeft} makeAction={makeAction}>
+        {inner}
+      </SwipeTrigger>
+    )
+  } else {
+    return inner
   }
-  return (
-    // @ts-ignore failOffsetX exists in GestureHandler but not swipable
-    <Kb.Swipeable
-      ref={swipeable}
-      renderRightActions={_renderRightActions}
-      onSwipeableRightWillOpen={onRightOpen}
-      friction={2}
-      rightThreshold={100}
-      failOffsetX={0}
-    >
-      <Kb.NativeTouchableHighlight key="longPressbale" {...rest}>
-        <Kb.NativeView style={styles.view}>{children}</Kb.NativeView>
-      </Kb.NativeTouchableHighlight>
-    </Kb.Swipeable>
-  )
-}
+})
 
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      replyIcon: {
-        paddingRight: Styles.globalMargins.small,
+      pressable: {
+        flexDirection: 'row',
+        paddingBottom: 3,
+        paddingRight: Styles.globalMargins.tiny,
+        paddingTop: 3,
       },
+      reply: {
+        alignSelf: 'flex-end',
+        justifyContent: 'flex-end',
+      },
+      replyIcon: {paddingRight: Styles.globalMargins.small},
       view: {
         ...Styles.globalStyles.flexBoxColumn,
         position: 'relative',

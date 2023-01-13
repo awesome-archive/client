@@ -34,11 +34,11 @@ func newCmdChatEditBotMember(cl *libcmdline.CommandLine, g *libkb.GlobalContext)
 		Usage: "username",
 	}, cli.StringFlag{
 		Name:  "r, role",
-		Usage: "team role (bot, restricted)",
+		Usage: "team role (bot, restrictedbot)",
 	})
 	return cli.Command{
 		Name:         "edit-bot-member",
-		Usage:        "Edit the role bot or a restricted bot in a conversation",
+		Usage:        "Edit the role bot or a restricted bot in a conversation.",
 		ArgumentHelp: "[conversation]",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(NewCmdChatEditBotMemberRunner(g), "edit-bot-member", c)
@@ -60,12 +60,10 @@ func (c *CmdChatEditBotMember) Run() (err error) {
 	}
 
 	if err = resolver.ChatClient.EditBotMember(context.TODO(), chat1.EditBotMemberArg{
-		TlfName:     conversationInfo.TlfName,
+		ConvID:      conversationInfo.Id,
 		Username:    c.username,
 		Role:        c.role,
 		BotSettings: c.botSettings,
-		MembersType: conversationInfo.MembersType,
-		TlfPublic:   conversationInfo.Visibility == keybase1.TLFVisibility_PUBLIC,
 	}); err != nil {
 		return err
 	}

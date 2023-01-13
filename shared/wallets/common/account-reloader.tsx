@@ -2,7 +2,7 @@ import * as React from 'react'
 import * as WalletsGen from '../../actions/wallets-gen'
 import {Reloadable} from '../../common-adapters'
 import {checkOnlineWaitingKey} from '../../constants/wallets'
-import {namedConnect} from '../../util/container'
+import * as Container from '../../util/container'
 
 type OwnProps = {
   children: React.ReactNode
@@ -31,7 +31,6 @@ const mapStateToProps = () => ({})
 const mapDispatchToProps = dispatch => ({
   onReload: () => {
     dispatch(WalletsGen.createLoadAccounts({reason: 'initial-load'}))
-    dispatch(WalletsGen.createUpdateAirdropDetails())
   },
 })
 
@@ -41,6 +40,4 @@ const mergeProps = (_, dispatchProps, ownProps: OwnProps) => ({
   onReload: dispatchProps.onReload,
 })
 
-export default namedConnect(mapStateToProps, mapDispatchToProps, mergeProps, 'AccountReloader')(
-  AccountReloader
-)
+export default Container.connect(mapStateToProps, mapDispatchToProps, mergeProps)(AccountReloader)

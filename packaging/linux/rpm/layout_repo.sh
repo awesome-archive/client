@@ -12,7 +12,7 @@
 
 set -e -u -o pipefail
 
-here="$(dirname "$BASH_SOURCE")"
+here="$(dirname "${BASH_SOURCE[0]}")"
 
 build_root="${1:-}"
 if [ -z "$build_root" ] ; then
@@ -29,7 +29,7 @@ repo_root="$build_root/rpm_repo"
 # Run the RPM packaging script on this build root.
 "$here/package_binaries.sh" "$build_root"
 
-code_signing_fingerprint="$(cat "$here/../code_signing_fingerprint")"
+code_signing_fingerprint="$("$here/../fingerprint.sh")"
 
 # Get the name of the create repo program. It can be called either "createrepo"
 # (normally) or "createrepo_c" (on Arch).
@@ -54,7 +54,7 @@ fi
 # Copy the RPM files into our repo. This is flatter than the way Debian's
 # reprepro does things, and it's allowed to contain multiple copies of the same
 # package.
-for arch in i386 x86_64 ; do
+for arch in x86_64 ; do
   rpmfile="$(ls "$build_root/rpm/$arch/RPMS/$arch"/*.rpm)"  # keybase, kdstage, or kbdev
   rpmname="$(basename "$rpmfile")"
   destdir="$repo_root/repo/$arch"
@@ -79,7 +79,6 @@ for arch in i386 x86_64 ; do
 
   # Add a standalone signature file, for user convenience. Other packaging
   # steps will pick this up and copy it around.
-  code_signing_fingerprint="$(cat "$here/../code_signing_fingerprint")"
   gpg --detach-sign --armor --use-agent --local-user "$code_signing_fingerprint" \
       -o "$rpmcopy.sig" "$rpmcopy"
 

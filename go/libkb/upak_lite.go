@@ -2,7 +2,7 @@ package libkb
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 
 	"github.com/buger/jsonparser"
 	"github.com/keybase/client/go/jsonparserw"
@@ -110,17 +110,18 @@ func (hsc *HighSigChain) LoadFromServer(m MetaContext, t *MerkleTriple, selfUID 
 	apiArg := APIArg{
 		Endpoint:    "sig/get_high",
 		SessionType: APISessionTypeOPTIONAL,
-		Args:        HTTPArgs{"uid": S{Val: hsc.uid.String()}},
+		Args: HTTPArgs{
+			"uid": S{Val: hsc.uid.String()},
+			"c3":  I{Val: int(sigCompression3Unstubbed)},
+		},
 	}
 	resp, finisher, err := m.G().API.GetResp(m, apiArg)
 	if err != nil {
 		return nil, err
 	}
-	if finisher != nil {
-		defer finisher()
-	}
+	defer finisher()
 	recordFin := tbs.Record("HighSigChain.LoadFromServer.ReadAll")
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		recordFin()
 		return nil, err
@@ -142,6 +143,9 @@ func (hsc *HighSigChain) LoadFromServer(m MetaContext, t *MerkleTriple, selfUID 
 
 		parentSigChain := &SigChain{} // because we don't want the cache to use these
 		link, err = ImportLinkFromServer(m, parentSigChain, value, selfUID)
+		if err != nil {
+			m.Debug("Error importing link: %s", err.Error())
+		}
 		links = append(links, link)
 		lastLink = link
 	}, "sigs")
@@ -164,7 +168,7 @@ func (hsc *HighSigChain) LoadFromServer(m MetaContext, t *MerkleTriple, selfUID 
 }
 
 func (hsc *HighSigChain) VerifyChain(m MetaContext) (err error) {
-	defer m.Trace("HighSigChain.VerifyChain", func() error { return err })()
+	defer m.Trace("HighSigChain.VerifyChain", &err)()
 
 	for i := len(hsc.chainLinks) - 1; i >= 0; i-- {
 		curr := hsc.chainLinks[i]
@@ -251,7 +255,7 @@ func (hsc *HighSigChain) VerifySigsAndComputeKeys(m MetaContext, eldest keybase1
 		return false, err
 	}
 
-	//historical
+	// historical
 	historicalLinks := hsc.chainLinks.omittingNRightmostLinks(linksConsumed)
 	if len(historicalLinks) > 0 {
 		m.VLogf(VLog1, "After consuming %d links, there are %d historical links left",

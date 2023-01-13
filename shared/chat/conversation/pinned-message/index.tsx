@@ -30,7 +30,7 @@ const PinnedMessage = (props: Props) => {
       ? Constants.zoomImage(props.imageWidth, props.imageHeight, 30)
       : undefined
   const pin = (
-    <Kb.ClickableBox onClick={props.onClick} style={styles.container}>
+    <Kb.ClickableBox className="hover_container" onClick={props.onClick} style={styles.container}>
       <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny">
         <Kb.Box2 direction="horizontal" style={styles.blueBar} />
         {!!props.imageURL && (
@@ -42,25 +42,37 @@ const PinnedMessage = (props: Props) => {
         )}
         <Kb.Box2 direction="vertical" fullWidth={true} style={{flex: 1}}>
           <Kb.Box2 direction="horizontal" gap="tiny" fullWidth={true}>
-            <Kb.Text type="BodyTinySemibold" style={styles.author}>
+            <Kb.Text type="BodyTinyBold" style={styles.author}>
               {props.author}
             </Kb.Text>
             <Kb.Text type="BodyTinySemibold" style={styles.label}>
               Pinned
             </Kb.Text>
           </Kb.Box2>
-          <Kb.Markdown smallStandaloneEmoji={true} lineClamp={1} style={styles.text} serviceOnly={true}>
+          <Kb.Markdown
+            smallStandaloneEmoji={true}
+            lineClamp={1}
+            style={styles.text}
+            styleOverride={{link: styles.styleOverride} as any}
+            serviceOnly={true}
+          >
             {props.text}
           </Kb.Markdown>
         </Kb.Box2>
-        {props.unpinning && <Kb.ProgressIndicator style={styles.progress} />}
-        <Kb.Icon
-          onClick={props.dismissUnpins ? () => setShowPopup(true) : props.onDismiss}
-          type="iconfont-close"
-          style={Kb.iconCastPlatformStyles(styles.close)}
-          boxStyle={styles.close}
-          ref={closeref}
-        />
+        {props.unpinning ? (
+          <Kb.Box2 direction="vertical" alignSelf="center">
+            <Kb.ProgressIndicator type="Small" />
+          </Kb.Box2>
+        ) : (
+          <Kb.Icon
+            onClick={props.dismissUnpins ? () => setShowPopup(true) : props.onDismiss}
+            type="iconfont-close"
+            sizeType="Small"
+            style={styles.close}
+            boxStyle={styles.close}
+            ref={closeref}
+          />
+        )}
       </Kb.Box2>
     </Kb.ClickableBox>
   )
@@ -106,12 +118,9 @@ const UnpinPrompt = (props: UnpinProps) => {
       onHidden={props.onHidden}
       visible={props.visible}
       propagateOutsideClicks={true}
-      header={{
-        title: 'header',
-        view: header,
-      }}
+      header={header}
       position="left center"
-      items={['Divider', {onClick: props.onUnpin, title: 'Yes, unpin'}]}
+      items={['Divider', {icon: 'iconfont-close', onClick: props.onUnpin, title: 'Yes, unpin'}]}
     />
   )
 }
@@ -127,18 +136,25 @@ const styles = Styles.styleSheetCreate(
         backgroundColor: Styles.globalColors.blue,
         width: Styles.globalMargins.xtiny,
       },
-      close: {
-        alignSelf: 'center',
-      },
+      close: Styles.platformStyles({
+        common: {
+          alignSelf: 'flex-start',
+        },
+        isElectron: {
+          paddingBottom: Styles.globalMargins.xtiny,
+          paddingLeft: Styles.globalMargins.xtiny,
+          paddingTop: Styles.globalMargins.xtiny,
+        },
+        isMobile: {
+          padding: Styles.globalMargins.xtiny,
+        },
+      }),
       container: {
-        ...Styles.padding(Styles.globalMargins.xtiny, Styles.globalMargins.tiny),
+        ...Styles.padding(Styles.globalMargins.tiny, Styles.globalMargins.xsmall),
         backgroundColor: Styles.globalColors.white,
         borderBottomWidth: 1,
         borderColor: Styles.globalColors.black_10,
         borderStyle: 'solid',
-        left: 0,
-        position: 'absolute',
-        top: 0,
         width: '100%',
       },
       imageContainer: {
@@ -158,11 +174,12 @@ const styles = Styles.styleSheetCreate(
           maxWidth: 200,
         },
       }),
-      progress: Styles.platformStyles({
+      styleOverride: Styles.platformStyles({
+        common: {
+          color: Styles.globalColors.black_50,
+        },
         isElectron: {
-          alignSelf: 'center',
-          height: 17,
-          width: 17,
+          transition: 'color 0.25s ease-in-out',
         },
       }),
       text: Styles.platformStyles({

@@ -52,8 +52,9 @@ func checkTrackCommon(tc libkb.TestContext, blocks []sb, outcome *keybase1.Ident
 
 	if s == nil {
 		tc.T.Fatal("me.TrackChainLinkFor(...) returned nil, nil")
+	} else {
+		tc.T.Logf("payload json:\n%s", s.UnmarshalPayloadJSON().MarshalPretty())
 	}
-	tc.T.Logf("payload json:\n%s", s.UnmarshalPayloadJSON().MarshalPretty())
 
 	sbs := s.ToServiceBlocks()
 	if len(sbs) != len(blocks) {
@@ -534,7 +535,7 @@ func _testTrackProofRooterRevoke(t *testing.T, sigVersion libkb.SigVersion) {
 	// revoke the rooter proof
 	Logout(tc)
 	proofUser.LoginOrBust(tc)
-	revEng := NewRevokeSigsEngine(tc.G, []string{sigID.ToString(true)})
+	revEng := NewRevokeSigsEngine(tc.G, []string{sigID.String()})
 	uis := libkb.UIs{
 		LogUI:    tc.G.UI.GetLogUI(),
 		SecretUI: proofUser.NewSecretUI(),

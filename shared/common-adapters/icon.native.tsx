@@ -2,7 +2,7 @@ import * as React from 'react'
 import * as Shared from './icon.shared'
 import * as Styles from '../styles'
 import logger from '../logger'
-import {IconType, Props, DisallowedStyles, SizeType} from './icon'
+import type {IconType, Props, SizeType} from './icon'
 import {NativeImage, NativeText, NativeTouchableOpacity} from './native-wrappers.native'
 import {iconMeta} from './icon.constants-gen'
 
@@ -15,16 +15,18 @@ const Kb = {
 type TextProps = {
   children: React.ReactNode
   color?: Styles.Color
+  fixOverdraw?: boolean
   fontSize?: number
   onClick?: ((event: React.BaseSyntheticEvent) => void) | null
+  onLongPress?: (event: React.BaseSyntheticEvent) => void
   opacity?: boolean
   sizeType: SizeType
-  style?: Styles.StylesCrossPlatformWithSomeDisallowed<DisallowedStyles>
+  style?: Props['style']
   type: IconType
 }
-
-const Text = React.forwardRef<NativeText, TextProps>((p, ref) => {
-  const style: Styles.StylesCrossPlatform = {}
+type Writeable<T> = {-readonly [P in keyof T]: T[P]}
+const Text = React.forwardRef<NativeText, TextProps>(function Text(p, ref) {
+  const style: Writeable<Styles.StylesCrossPlatform> = {}
 
   // we really should disallow reaching into style like this but this is what the old code does.
   // TODO change this
@@ -69,14 +71,12 @@ const Text = React.forwardRef<NativeText, TextProps>((p, ref) => {
   const fontSizeStyle = {fontSize: p.fontSize || Shared.typeToFontSize(p.sizeType)}
 
   return (
-    // @ts-ignore TODO fix styles
     <Kb.NativeText
-      // @ts-ignore TODO fix styles
-      style={[styles.text, style, fontSizeStyle, p.style]}
+      style={[styles.text, style, p.fixOverdraw && styles.fixOverdraw, fontSizeStyle, p.style]}
       allowFontScaling={false}
-      type={p.type}
       ref={ref}
       onPress={p.onClick || undefined}
+      onLongPress={p.onLongPress}
       suppressHighlighting={true}
     >
       {p.children}
@@ -86,7 +86,7 @@ const Text = React.forwardRef<NativeText, TextProps>((p, ref) => {
 Text.displayName = 'IconText'
 
 type ImageProps = {
-  style?: Styles.StylesCrossPlatformWithSomeDisallowed<DisallowedStyles>
+  style?: Props['style']
   source: any
 }
 
@@ -110,7 +110,7 @@ const Image = React.forwardRef<NativeImage, ImageProps>((p, ref) => {
     }
   }
 
-  return <Kb.NativeImage ref={ref} style={[style, pStyle]} source={p.source} resizeMode="contain" />
+  return <Kb.NativeImage ref={ref} style={[style, pStyle]} source={p.source} />
 })
 Image.displayName = 'IconImage'
 
@@ -122,6 +122,8 @@ const Icon = React.memo<Props>(
     // Only apply props.style to icon if there is no onClick
     const hasContainer = p.onClick && p.style
     const iconType = Shared.typeToIconMapper(p.type)
+
+    const isDarkMode = React.useContext(Styles.DarkModeContext)
 
     if (!iconType) {
       logger.warn('Null iconType passed')
@@ -144,6 +146,7 @@ const Icon = React.memo<Props>(
 
       icon = (
         <Text
+          fixOverdraw={p.fixOverdraw}
           style={hasContainer ? null : p.style}
           color={color}
           type={p.type}
@@ -151,6 +154,7 @@ const Icon = React.memo<Props>(
           fontSize={p.fontSize}
           sizeType={sizeType}
           onClick={p.onClick}
+          onLongPress={p.onLongPress}
         >
           {code}
         </Text>
@@ -158,7 +162,7 @@ const Icon = React.memo<Props>(
     } else {
       icon = (
         <Image
-          source={(Styles.isDarkMode() && iconMeta[iconType].requireDark) || iconMeta[iconType].require}
+          source={(isDarkMode && iconMeta[iconType].requireDark) || iconMeta[iconType].require}
           style={hasContainer ? null : p.style}
           ref={wrap ? undefined : ref}
         />
@@ -222,6 +226,9 @@ export function castPlatformStyles(styles: any) {
 }
 
 const styles = Styles.styleSheetCreate(() => ({
+  fixOverdraw: {
+    backgroundColor: Styles.globalColors.fastBlank,
+  },
   text: {
     color: Styles.globalColors.black_50, // MUST set this or it can be inherited from outside text
     fontFamily: 'kb',

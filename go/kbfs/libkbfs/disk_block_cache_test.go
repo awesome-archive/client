@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/keybase/client/go/kbfs/data"
+	"github.com/keybase/client/go/kbfs/env"
 	"github.com/keybase/client/go/kbfs/ioutil"
 	"github.com/keybase/client/go/kbfs/kbfsblock"
 	"github.com/keybase/client/go/kbfs/kbfscrypto"
@@ -144,7 +145,7 @@ func newTestDiskBlockCacheGetter(t *testing.T,
 }
 
 func shutdownDiskBlockCacheTest(cache DiskBlockCache) {
-	cache.Shutdown(context.Background())
+	<-cache.Shutdown(context.Background())
 }
 
 func setupRealBlockForDiskCache(t *testing.T, ptr data.BlockPointer, block data.Block,
@@ -476,7 +477,8 @@ func TestDiskBlockCacheStaticLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, int64(standardCache.currBytes) < currBytes)
-	require.Equal(t, 1+numBlocks-defaultNumBlocksToEvict, standardCache.numBlocks)
+	require.Equal(
+		t, 1+numBlocks-minNumBlocksToEvictInBatch, standardCache.numBlocks)
 }
 
 func TestDiskBlockCacheDynamicLimit(t *testing.T) {
@@ -522,7 +524,7 @@ func TestDiskBlockCacheDynamicLimit(t *testing.T) {
 
 	t.Log("Add a round of blocks to the cache. Verify that blocks were" +
 		" evicted each time we went past the limit.")
-	start := numBlocks - defaultNumBlocksToEvict
+	start := numBlocks - minNumBlocksToEvictInBatch
 	for i := 1; i <= numBlocks; i++ {
 		blockPtr, _, blockEncoded, serverHalf := setupBlockForDiskCache(
 			t, config)
@@ -530,7 +532,8 @@ func TestDiskBlockCacheDynamicLimit(t *testing.T) {
 			ctx, tlf.FakeID(10, tlf.Private), blockPtr.ID, blockEncoded,
 			serverHalf)
 		require.NoError(t, err)
-		require.Equal(t, start+(i%defaultNumBlocksToEvict), standardCache.numBlocks)
+		require.Equal(
+			t, start+(i%minNumBlocksToEvictInBatch), standardCache.numBlocks)
 	}
 
 	require.True(t, int64(standardCache.currBytes) < currBytes)
@@ -547,7 +550,8 @@ func TestDiskBlockCacheWithRetrievalQueue(t *testing.T) {
 	t.Log("Create a queue with 0 workers to rule it out from serving blocks.")
 	bg := newFakeBlockGetter(false)
 	q := newBlockRetrievalQueue(
-		0, 0, 0, newTestBlockRetrievalConfig(t, bg, cache))
+		0, 0, 0, newTestBlockRetrievalConfig(t, bg, cache),
+		env.EmptyAppStateUpdater{})
 	require.NotNil(t, q)
 	defer endBlockRetrievalQueueTest(t, q)
 
@@ -720,6 +724,9 @@ func TestDiskBlockCacheUnsyncTlf(t *testing.T) {
 	err = config.MakeDiskBlockCacheIfNotExists()
 	require.NoError(t, err)
 	cache := config.DiskBlockCache().(*diskBlockCacheWrapped)
+	defer func() {
+		<-cache.Shutdown(context.Background())
+	}()
 	standardCache := cache.syncCache
 	err = standardCache.WaitUntilStarted()
 	require.NoError(t, err)

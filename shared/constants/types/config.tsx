@@ -1,10 +1,10 @@
-import * as NetInfo from '@react-native-community/netinfo'
-import * as RPCTypes from './rpc-gen'
-import {ConversationIDKey} from './chat2'
-import {DarkModePreference} from '../../styles/dark-mode'
-import {LocalPath} from './fs'
-import {RPCError} from '../../util/errors'
-import {Tab} from '../tabs'
+import type * as NetInfo from '@react-native-community/netinfo'
+import type * as RPCTypes from './rpc-gen'
+import type HiddenString from '../../util/hidden-string'
+import type {ConversationIDKey} from './chat2'
+import type {DarkModePreference} from '../../styles/dark-mode'
+import type {RPCError} from '../../util/errors'
+import type {Tab} from '../tabs'
 
 export type OutOfDate = {
   critical: boolean
@@ -18,7 +18,7 @@ export type ConfiguredAccount = {
   username: string
 }
 // 'notavailable' is the desktop default
-export type ConnectionType = NetInfo.ConnectionType | 'notavailable'
+export type ConnectionType = NetInfo.NetInfoStateType | 'notavailable'
 
 export type WindowState = {
   dockHidden: boolean
@@ -31,6 +31,16 @@ export type WindowState = {
 }
 
 export type State = {
+  allowAnimatedEmojis: boolean
+  androidShare?:
+    | {
+        type: RPCTypes.IncomingShareType.file
+        url: string
+      }
+    | {
+        type: RPCTypes.IncomingShareType.text
+        text: string
+      }
   appFocused: boolean
   appFocusedCount: number
   appOutOfDateMessage: string
@@ -54,10 +64,12 @@ export type State = {
   globalError?: Error | RPCError
   httpSrvAddress: string
   httpSrvToken: string
-  justDeletedSelf: string
+  incomingShareUseOriginal?: boolean
+  justDeletedSelf?: string
   loggedIn: boolean
   logoutHandshakeWaiters: Map<string, number>
   logoutHandshakeVersion: number
+  mainWindowMax: boolean
   menubarWindowID: number
   notifySound: boolean
   openAtLogin: boolean
@@ -70,14 +82,18 @@ export type State = {
   startupDetailsLoaded: boolean
   startupWasFromPush: boolean
   startupConversation: ConversationIDKey
+  startupPushPayload?: string
+  startupFile: HiddenString
   startupFollowUser: string
   startupLink: string
   startupTab?: Tab
-  startupSharePath?: LocalPath
   systemDarkMode: boolean
+  windowShownCount: Map<string, number>
   windowState: WindowState
   uid: string
   userActive: boolean
   username: string
+  userSwitching: boolean
   useNativeFrame: boolean
+  whatsNewLastSeenVersion: string
 }

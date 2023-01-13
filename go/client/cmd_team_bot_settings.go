@@ -24,7 +24,7 @@ func newCmdTeamBotSettings(cl *libcmdline.CommandLine, g *libkb.GlobalContext) c
 	return cli.Command{
 		Name:         "bot-settings",
 		ArgumentHelp: "<team name>",
-		Usage:        "Modify the bot settings of the given user. User must be a member of the given team with role restrictedbot",
+		Usage:        "Modify the bot settings of the given user. User must be a member of the given team with role restrictedbot.",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(NewCmdTeamBotSettingsRunner(g), "bot-settings", c)
 		},
@@ -89,17 +89,43 @@ func (c *CmdTeamBotSettings) Run() error {
 			return err
 		}
 	}
-	if err := renderBotSettings(c.G(), c.Username, botSettings); err != nil {
+	if err := renderBotSettings(c.G(), c.Username, nil, botSettings); err != nil {
 		return err
 	}
 	return nil
 }
 
-func renderBotSettings(g *libkb.GlobalContext, username string, botSettings keybase1.TeamBotSettings) error {
+func renderBotSettings(g *libkb.GlobalContext, username string, convID *chat1.ConversationID, botSettings keybase1.TeamBotSettings) error {
 	var output string
 	if botSettings.Cmds {
-		// TODO HOTPOT-661 call bot advertise list for public commands, build output
-		output += "\t- command messages\n"
+		chatClient, err := GetChatLocalClient(g)
+		if err != nil {
+			return fmt.Errorf("Getting chat service client error: %s", err)
+		}
+		var cmds chat1.ListBotCommandsLocalRes
+		if convID == nil {
+			cmds, err = chatClient.ListPublicBotCommandsLocal(context.TODO(), username)
+			if err != nil {
+				return err
+			}
+		} else {
+			cmds, err = chatClient.ListBotCommandsLocal(context.TODO(), *convID)
+			if err != nil {
+				return err
+			}
+		}
+
+		if len(cmds.Commands) > 0 {
+			output += "\t- command messages for the following commands: \n"
+		} else {
+			output += "\t- command messages\n"
+		}
+		username = libkb.NewNormalizedUsername(username).String()
+		for _, cmd := range cmds.Commands {
+			if cmd.Username == username {
+				output += fmt.Sprintf("\t\t- !%s\n", cmd.Name)
+			}
+		}
 	}
 
 	if botSettings.Mentions {
@@ -118,13 +144,17 @@ func renderBotSettings(g *libkb.GlobalContext, username string, botSettings keyb
 	if len(output) == 0 {
 		dui.Printf("%s will not receive any messages with the current bot settings\n", username)
 	} else {
-		dui.Printf("%s will receive messages in the follow cases:\n%s", username, output)
+		dui.Printf("%s will receive messages in the following cases:\n%s", username, output)
 	}
 	if len(botSettings.Convs) == 0 {
 		dui.Printf("%s can send/receive into all conversations", username)
 	} else {
 		dui.Printf("%s can send/receive into the following conversations:\n\t", username)
-		convNames, err := getConvNames(g, botSettings)
+		convIDs := []chat1.ConvIDStr{}
+		for _, conv := range botSettings.Convs {
+			convIDs = append(convIDs, chat1.ConvIDStr(conv))
+		}
+		convNames, err := getConvNames(g, convIDs)
 		if err != nil {
 			return err
 		}
@@ -134,10 +164,10 @@ func renderBotSettings(g *libkb.GlobalContext, username string, botSettings keyb
 	return nil
 }
 
-func getConvNames(g *libkb.GlobalContext, botSettings keybase1.TeamBotSettings) (convNames []string, err error) {
+func getConvNames(g *libkb.GlobalContext, convs []chat1.ConvIDStr) (convNames []string, err error) {
 	fetcher := chatCLIInboxFetcher{}
-	for _, convIDStr := range botSettings.Convs {
-		convID, err := chat1.MakeConvID(convIDStr)
+	for _, convIDStr := range convs {
+		convID, err := chat1.MakeConvID(convIDStr.String())
 		if err != nil {
 			return nil, err
 		}

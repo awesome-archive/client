@@ -1,4 +1,4 @@
-import {Background} from './text'
+import type {Background} from './text'
 /* eslint-disable sort-keys */
 export const allTextTypes = {
   Body: 'Body',
@@ -6,6 +6,7 @@ export const allTextTypes = {
   BodyBig: 'BodyBig',
   BodyBigExtrabold: 'BodyBigExtrabold',
   BodyBigLink: 'BodyBigLink',
+  BodyBold: 'BodyBold',
   BodyExtrabold: 'BodyExtrabold',
   BodyPrimaryLink: 'BodyPrimaryLink',
   BodySecondaryLink: 'BodySecondaryLink',
@@ -38,6 +39,7 @@ export const allTextTypes = {
   HeaderBig: 'HeaderBig',
   HeaderBigExtrabold: 'HeaderBigExtrabold',
   HeaderLink: 'HeaderLink',
+  Nyctographic: 'Nyctographic',
   Terminal: 'Terminal',
   TerminalComment: 'TerminalComment',
   TerminalEmpty: 'TerminalEmpty',

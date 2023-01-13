@@ -1,11 +1,10 @@
-import {namedConnect} from '../../util/container'
+import * as Container from '../../util/container'
 import * as Types from '../../constants/types/fs'
 import * as Constants from '../../constants/fs'
 import * as Kb from '../../common-adapters'
 import * as Chat2Gen from '../../actions/chat2-gen'
 import * as Styles from '../../styles'
 import * as Util from '../../util/kbfs'
-import * as React from 'react'
 
 type OwnProps = {
   path: Types.Path
@@ -50,4 +49,4 @@ const mapDispatchToProps = (dispatch, {path}: OwnProps) => ({
 
 const mergeProps = (_, d) => d
 
-export default namedConnect(() => ({}), mapDispatchToProps, mergeProps, 'OpenChat')(OpenChat)
+export default Container.connect(() => ({}), mapDispatchToProps, mergeProps)(OpenChat)

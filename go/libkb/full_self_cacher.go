@@ -228,7 +228,7 @@ func (m *CachedFullSelf) Update(ctx context.Context, u *User) (err error) {
 	// we're being called from a LoginState context, so we get a circular locking situation.
 	// So the onus is on the caller to check that we're actually loading self.
 
-	defer m.G().CTrace(ctx, fmt.Sprintf("CachedFullSelf#Update(%s)", u.GetUID()), func() error { return err })()
+	defer m.G().CTrace(ctx, fmt.Sprintf("CachedFullSelf#Update(%s)", u.GetUID()), &err)()
 	m.Lock()
 	defer m.Unlock()
 
@@ -275,12 +275,12 @@ func (m *CachedFullSelf) OnLogin(mctx MetaContext) error {
 }
 
 func LoadSelfForTeamSignatures(ctx context.Context, g *GlobalContext) (ret UserForSignatures, err error) {
-	err = g.GetFullSelfer().WithSelf(ctx, func(u *User) error {
+	err = g.GetFullSelfer().WithSelf(ctx, func(u *User) (err error) {
 		if u == nil {
 			return LoginRequiredError{"no self in FullSelfCacher"}
 		}
-		ret = u.ToUserForSignatures()
-		return nil
+		ret, err = u.ToUserForSignatures()
+		return err
 	})
 	return ret, err
 }

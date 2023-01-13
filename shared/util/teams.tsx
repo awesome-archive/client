@@ -1,5 +1,5 @@
 import {publicAdminsLimit} from '../constants/teams'
-import {RetentionPolicy} from '../constants/types/retention-policy'
+import type {RetentionPolicy} from '../constants/types/retention-policy'
 
 type SortedAdmins = {
   publicAdmins: Array<string>
@@ -40,11 +40,11 @@ function makeRetentionNotice(
   let explanation = ''
   switch (policy.type) {
     case 'expire': {
-      explanation = `are destroyed after ${policy.title}.`
+      explanation = `will auto-delete after ${policy.title}.`
       break
     }
     case 'inherit': {
-      explanation = `${teamPolicy.type === 'explode' ? 'will explode' : 'are destroyed'} after ${
+      explanation = `${teamPolicy.type === 'explode' ? 'will explode' : 'will auto-delete'} after ${
         teamPolicy.title
       }`
       explanation += teamType === 'small' ? '.' : ', the team default.'

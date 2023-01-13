@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import {WalletBackButton} from '../common'
@@ -20,7 +19,7 @@ const Header = (props: HeaderProps) => (
             ? 'icon-fancy-stellar-sending-mobile-149-129'
             : 'icon-fancy-stellar-sending-desktop-98-86'
         }
-        style={Kb.iconCastPlatformStyles(styles.headerIcon)}
+        style={styles.headerIcon}
       />
       <Kb.Text selectable={true} type="BodyTiny" style={styles.headerText}>
         {(props.sendingIntentionXLM ? 'Sending' : 'Sending Lumens worth').toUpperCase()}
@@ -47,6 +46,8 @@ const styles = Styles.styleSheetCreate(() => ({
       backgroundColor: Styles.globalColors.purpleDark,
     },
     isElectron: {
+      borderTopLeftRadius: Styles.borderRadius,
+      borderTopRightRadius: Styles.borderRadius,
       flex: 1,
       minHeight: 160,
     },

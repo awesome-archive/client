@@ -1,57 +1,73 @@
+import * as React from 'react'
+import * as Container from '../../../../util/container'
+import * as Chat2Gen from '../../../../actions/chat2-gen'
 import * as RouteTreeGen from '../../../../actions/route-tree-gen'
 import * as Constants from '../../../../constants/chat2'
-import * as Types from '../../../../constants/types/chat2'
-import {getRole, isAdmin} from '../../../../constants/teams'
+import type * as Types from '../../../../constants/types/chat2'
+import * as TeamConstants from '../../../../constants/teams'
 import SystemAddedToTeam from '.'
 import {teamsTab} from '../../../../constants/tabs'
-import {connect} from '../../../../util/container'
 
 type OwnProps = {
   message: Types.MessageSystemAddedToTeam
 }
 
-const mapStateToProps = (state, ownProps) => {
-  const teamname = Constants.getMeta(state, ownProps.message.conversationIDKey).teamname
-  return {
-    addee: ownProps.message.addee,
-    adder: ownProps.message.adder,
-    isAdmin: isAdmin(getRole(state, teamname)),
-    teamname,
-    timestamp: ownProps.message.timestamp,
-    you: state.config.username,
-  }
-}
+const SystemAddedToTeamContainer = React.memo(function (p: OwnProps) {
+  const {message} = p
+  const {conversationIDKey, addee, adder, author, bulkAdds, role, timestamp} = message
+  const meta = Container.useSelector(state => Constants.getMeta(state, conversationIDKey))
+  const {teamID, teamname, teamType} = meta
+  const authorIsAdmin = Container.useSelector(state =>
+    TeamConstants.userIsRoleInTeam(state, teamID, author, 'admin')
+  )
+  const authorIsOwner = Container.useSelector(state =>
+    TeamConstants.userIsRoleInTeam(state, teamID, author, 'owner')
+  )
+  const you = Container.useSelector(state => state.config.username)
+  const isAdmin = authorIsAdmin || authorIsOwner
+  const isTeam = teamType === 'big' || teamType === 'small'
 
-const mapDispatchToProps = dispatch => ({
-  _onManageChannels: (teamname: string) =>
-    dispatch(
-      RouteTreeGen.createNavigateAppend({path: [{props: {teamname}, selected: 'chatManageChannels'}]})
-    ),
-  _onManageNotifications: conversationIDKey =>
+  const dispatch = Container.useDispatch()
+  const onManageNotifications = React.useCallback(() => {
+    dispatch(Chat2Gen.createShowInfoPanel({conversationIDKey, show: true, tab: 'settings'}))
+  }, [dispatch, conversationIDKey])
+
+  const onViewBot = React.useCallback(() => {
     dispatch(
       RouteTreeGen.createNavigateAppend({
-        path: [{props: {conversationIDKey: conversationIDKey, tab: 'settings'}, selected: 'chatInfoPanel'}],
+        path: [
+          {
+            props: {botUsername: addee, conversationIDKey: conversationIDKey},
+            selected: 'chatInstallBot',
+          },
+        ],
       })
-    ),
-  _onViewTeam: (teamname: string) => {
-    dispatch(RouteTreeGen.createNavigateAppend({path: [teamsTab, {props: {teamname}, selected: 'team'}]}))
-  },
-})
+    )
+  }, [dispatch, conversationIDKey, addee])
 
-const mergeProps = (stateProps, dispatchProps, ownProps: OwnProps) => ({
-  addee: stateProps.addee,
-  adder: stateProps.adder,
-  isAdmin: stateProps.isAdmin,
-  onManageChannels: () => dispatchProps._onManageChannels(stateProps.teamname),
-  onManageNotifications: () => dispatchProps._onManageNotifications(ownProps.message.conversationIDKey),
-  onViewTeam: () => dispatchProps._onViewTeam(stateProps.teamname),
-  teamname: stateProps.teamname,
-  timestamp: stateProps.timestamp,
-  you: stateProps.you,
-})
+  const onViewTeam = React.useCallback(() => {
+    if (teamID) {
+      dispatch(RouteTreeGen.createNavigateAppend({path: [teamsTab, {props: {teamID}, selected: 'team'}]}))
+    } else {
+      dispatch(Chat2Gen.createShowInfoPanel({conversationIDKey, show: true, tab: 'settings'}))
+    }
+  }, [dispatch, conversationIDKey, teamID])
 
-export default connect(
-  mapStateToProps,
-  mapDispatchToProps,
-  mergeProps
-)(SystemAddedToTeam)
+  const props = {
+    addee,
+    adder,
+    bulkAdds,
+    isAdmin,
+    isTeam,
+    onManageNotifications,
+    onViewBot,
+    onViewTeam,
+    role,
+    teamname,
+    timestamp,
+    you,
+  }
+
+  return <SystemAddedToTeam {...props} />
+})
+export default SystemAddedToTeamContainer

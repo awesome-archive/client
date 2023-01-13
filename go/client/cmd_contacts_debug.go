@@ -1,6 +1,7 @@
 // Copyright 2019 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
+//go:build !production
 // +build !production
 
 package client
@@ -9,7 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	"github.com/keybase/cli"
@@ -21,7 +22,7 @@ import (
 
 // Devel commands for testing contact syncing.
 
-func NwCmdContacts(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {
+func NewCmdContacts(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {
 	return cli.Command{
 		Name:         "contacts",
 		Usage:        "commands for testing contact sync on desktop",
@@ -67,7 +68,7 @@ func (c *CmdContactLookup) Run() error {
 	if err != nil {
 		return err
 	}
-	bytes, err := ioutil.ReadAll(os.Stdin)
+	bytes, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return err
 	}
@@ -131,7 +132,7 @@ func (c *CmdSaveContacts) Run() error {
 	if err != nil {
 		return err
 	}
-	bytes, err := ioutil.ReadAll(os.Stdin)
+	bytes, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return err
 	}

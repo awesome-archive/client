@@ -1,9 +1,8 @@
-import * as React from 'react'
-import * as Types from '../../../constants/types/chat2'
 import * as Constants from '../../../constants/chat2'
-import Normal from './normal/container'
+import * as Container from '../../../util/container'
+import type * as Types from '../../../constants/types/chat2'
+import Normal from './normal'
 import Preview from './preview/container'
-import {connect, isMobile} from '../../../util/container'
 import ThreadSearch from '../search/container'
 
 type OwnProps = {
@@ -13,19 +12,18 @@ type OwnProps = {
   onRequestScrollDown: () => void
   onRequestScrollToBottom: () => void
   onRequestScrollUp: () => void
+  maxInputArea?: number
 }
 
-type Props = {
-  isPreview: boolean
-  noInput: boolean
-  showThreadSearch: boolean
-} & OwnProps
+const InputAreaContainer = (p: OwnProps) => {
+  const {conversationIDKey, focusInputCounter, jumpToRecent, maxInputArea} = p
+  const {onRequestScrollUp, onRequestScrollDown, onRequestScrollToBottom} = p
+  const meta = Container.useSelector(state => Constants.getMeta(state, conversationIDKey))
+  const showThreadSearch = Container.useSelector(
+    state => Constants.getThreadSearchInfo(state, conversationIDKey).visible
+  )
 
-const mapStateToProps = (state, {conversationIDKey}: OwnProps) => {
-  const meta = Constants.getMeta(state, conversationIDKey)
-  let noInput = !meta.resetParticipants.isEmpty() || !!meta.wasFinalizedBy
-  const showThreadSearch = Constants.getThreadSearchInfo(state, conversationIDKey).visible
-
+  let noInput = meta.resetParticipants.size > 0 || !!meta.wasFinalizedBy
   if (
     conversationIDKey === Constants.pendingWaitingConversationIDKey ||
     conversationIDKey === Constants.pendingErrorConversationIDKey
@@ -33,40 +31,27 @@ const mapStateToProps = (state, {conversationIDKey}: OwnProps) => {
     noInput = true
   }
 
-  return {
-    conversationIDKey,
-    isPreview: meta.membershipType === 'youArePreviewing',
-    noInput,
-    showThreadSearch,
-  }
-}
+  const isPreview = meta.membershipType === 'youArePreviewing'
 
-class InputArea extends React.PureComponent<Props> {
-  render() {
-    if (this.props.noInput) {
-      return null
-    }
-    if (this.props.isPreview) {
-      return <Preview conversationIDKey={this.props.conversationIDKey} />
-    }
-    if (this.props.showThreadSearch && isMobile) {
-      return <ThreadSearch conversationIDKey={this.props.conversationIDKey} />
-    }
-    return (
-      <Normal
-        focusInputCounter={this.props.focusInputCounter}
-        jumpToRecent={this.props.jumpToRecent}
-        onRequestScrollDown={this.props.onRequestScrollDown}
-        onRequestScrollToBottom={this.props.onRequestScrollToBottom}
-        onRequestScrollUp={this.props.onRequestScrollUp}
-        conversationIDKey={this.props.conversationIDKey}
-      />
-    )
+  if (noInput) {
+    return null
   }
+  if (isPreview) {
+    return <Preview conversationIDKey={p.conversationIDKey} />
+  }
+  if (showThreadSearch && Container.isMobile) {
+    return <ThreadSearch conversationIDKey={p.conversationIDKey} />
+  }
+  return (
+    <Normal
+      focusInputCounter={focusInputCounter}
+      jumpToRecent={jumpToRecent}
+      onRequestScrollDown={onRequestScrollDown}
+      onRequestScrollToBottom={onRequestScrollToBottom}
+      onRequestScrollUp={onRequestScrollUp}
+      conversationIDKey={conversationIDKey}
+      maxInputArea={maxInputArea}
+    />
+  )
 }
-
-export default connect(
-  mapStateToProps,
-  () => ({}),
-  (s, d, o) => ({...o, ...s, ...d})
-)(InputArea)
+export default InputAreaContainer

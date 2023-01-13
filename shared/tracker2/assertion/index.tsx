@@ -1,7 +1,12 @@
 import * as React from 'react'
-import * as Types from '../../constants/types/tracker2'
+import * as RouteTreeGen from '../../actions/route-tree-gen'
+import * as ConfigGen from '../../actions/config-gen'
+import * as Container from '../../util/container'
+import * as WalletsType from '../../constants/types/wallets'
+import * as WalletsGen from '../../actions/wallets-gen'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
+import type * as Types from '../../constants/types/tracker2'
 import {SiteIcon} from '../../profile/generic/shared'
 import {formatTimeForAssertionPopup} from '../../util/timestamp'
 
@@ -9,28 +14,28 @@ type Props = {
   color: Types.AssertionColor
   isSuggestion: boolean
   isYours: boolean
-  metas: ReadonlyArray<Types._AssertionMeta>
+  metas: ReadonlyArray<Types.AssertionMeta>
   notAUser: boolean
-  onCopyAddress: () => void
-  onRequestLumens: () => void
-  onRecheck: (() => void) | null
-  onRevoke: (() => void) | null
-  onSendLumens: () => void
+  onHideStellar: (hidden: boolean) => void
+  onRecheck?: () => void
+  onRevoke?: () => void
   onShowProof?: () => void
-  onShowSite: (() => void) | null
-  onCreateProof: (() => void) | null
-  onWhatIsStellar: () => void
+  onShowSite?: () => void
+  onCreateProof?: () => void
   proofURL: string
-  siteIcon: Types.SiteIconSet | null
-  siteIconFull: Types.SiteIconSet | null
+  siteIcon?: Types.SiteIconSet
+  siteIconDarkmode?: Types.SiteIconSet
+  siteIconFull?: Types.SiteIconSet
+  siteIconFullDarkmode?: Types.SiteIconSet
   siteURL: string
   state: Types.AssertionState
+  stellarHidden: boolean
   timestamp: number
   type: string
   value: string
 }
 
-const proofTypeToDesc = proofType => {
+const proofTypeToDesc = (proofType: string) => {
   switch (proofType) {
     case 'btc':
     case 'zcash':
@@ -40,7 +45,7 @@ const proofTypeToDesc = proofType => {
   }
 }
 
-const stateToIcon = state => {
+const stateToIcon = (state: Types.AssertionState) => {
   switch (state) {
     case 'checking':
       return 'iconfont-proof-pending'
@@ -53,12 +58,12 @@ const stateToIcon = state => {
     case 'suggestion':
       return 'iconfont-proof-placeholder'
     default:
-      throw new Error('Impossible')
+      return 'iconfont-proof-pending'
   }
 }
 
 // alternate versions of the ones from `stateToIcon` for the popup menu header
-const stateToDecorationIcon = state => {
+const stateToDecorationIcon = (state: Types.AssertionState) => {
   switch (state) {
     case 'checking':
       return 'icon-proof-pending'
@@ -71,11 +76,11 @@ const stateToDecorationIcon = state => {
     case 'suggestion':
       return 'icon-proof-unfinished'
     default:
-      throw new Error('impossible')
+      return 'icon-proof-pending'
   }
 }
 
-const stateToValueTextStyle = state => {
+const stateToValueTextStyle = (state: Types.AssertionState) => {
   switch (state) {
     case 'revoked':
       return styles.strikeThrough
@@ -84,9 +89,8 @@ const stateToValueTextStyle = state => {
     case 'error':
     case 'warning':
     case 'suggestion':
-      return null
     default:
-      throw new Error('Impossible')
+      return null
   }
 }
 
@@ -128,63 +132,81 @@ const assertionColorToColor = (c: Types.AssertionColor) => {
   }
 }
 
-class _StellarValue extends React.PureComponent<
-  Props & Kb.OverlayParentProps,
-  {
-    storedAttachmentRef: Kb.Box | null
-  }
-> {
-  state = {storedAttachmentRef: null}
-  // only set this once ever
-  _storeAttachmentRef = storedAttachmentRef =>
-    !this.state.storedAttachmentRef && this.setState({storedAttachmentRef})
-  _getAttachmentRef = () => this.state.storedAttachmentRef
-  render() {
-    const menuItems = [
-      {newTag: true, onClick: this.props.onSendLumens, title: 'Send Lumens (XLM)'},
-      {newTag: true, onClick: this.props.onRequestLumens, title: 'Request Lumens (XLM)'},
-      {onClick: this.props.onCopyAddress, title: 'Copy address'},
-      'Divider' as const,
-      {onClick: this.props.onWhatIsStellar, title: 'What is Stellar?'},
-    ]
+const StellarValue = (p: Props) => {
+  const {value, color} = p
+  const dispatch = Container.useDispatch()
 
-    return Styles.isMobile ? (
-      <Kb.Text
-        type="BodyPrimaryLink"
-        style={Styles.collapseStyles([styles.username, {color: assertionColorToTextColor(this.props.color)}])}
-      >
-        {this.props.value}
-      </Kb.Text>
-    ) : (
-      <Kb.Box ref={r => this._storeAttachmentRef(r)} style={styles.tooltip}>
-        <Kb.WithTooltip
-          tooltip={Styles.isMobile || this.props.showingMenu ? '' : 'Stellar Federation Address'}
-        >
-          <Kb.Text
-            type="BodyPrimaryLink"
-            onClick={this.props.toggleShowingMenu}
-            style={Styles.collapseStyles([
-              styles.username,
-              {color: assertionColorToTextColor(this.props.color)},
-            ])}
-          >
-            {this.props.value}
-          </Kb.Text>
-        </Kb.WithTooltip>
-        <Kb.FloatingMenu
-          attachTo={this.state.storedAttachmentRef ? this._getAttachmentRef : undefined}
-          closeOnSelect={true}
-          containerStyle={undefined}
-          items={menuItems}
-          onHidden={this.props.toggleShowingMenu}
-          visible={this.props.showingMenu}
-          position="bottom center"
-        />
-      </Kb.Box>
+  const onCopyAddress = () => {
+    dispatch(ConfigGen.createCopyToClipboard({text: value}))
+  }
+
+  const onWhatIsStellar = () => {
+    dispatch(RouteTreeGen.createNavigateAppend({path: ['whatIsStellarModal']}))
+  }
+
+  const onRequestLumens = () => {
+    dispatch(
+      WalletsGen.createOpenSendRequestForm({
+        from: WalletsType.noAccountID,
+        isRequest: true,
+        recipientType: 'keybaseUser',
+        to: value.split('*')[0],
+      })
     )
   }
+
+  const onSendLumens = () => {
+    dispatch(
+      WalletsGen.createOpenSendRequestForm({
+        from: WalletsType.noAccountID,
+        isRequest: false,
+        recipientType: 'keybaseUser',
+        to: value.split('*')[0],
+      })
+    )
+  }
+
+  const {toggleShowingPopup, showingPopup, popup, popupAnchor} = Kb.usePopup(attachTo => (
+    <Kb.FloatingMenu
+      attachTo={attachTo}
+      closeOnSelect={true}
+      items={menuItems}
+      onHidden={toggleShowingPopup}
+      visible={showingPopup}
+      position="bottom center"
+    />
+  ))
+
+  const menuItems: Kb.MenuItems = [
+    {newTag: true, onClick: onSendLumens, title: 'Send Lumens (XLM)'},
+    {newTag: true, onClick: onRequestLumens, title: 'Request Lumens (XLM)'},
+    {onClick: onCopyAddress, title: 'Copy address'},
+    'Divider' as const,
+    {onClick: onWhatIsStellar, title: 'What is Stellar?'},
+  ]
+
+  return Styles.isMobile ? (
+    <Kb.Text
+      type="BodyPrimaryLink"
+      style={Styles.collapseStyles([styles.username, {color: assertionColorToTextColor(color)}])}
+    >
+      {value}
+    </Kb.Text>
+  ) : (
+    <Kb.Box ref={popupAnchor} style={styles.tooltip}>
+      <Kb.WithTooltip tooltip={Styles.isMobile || showingPopup ? '' : 'Stellar Federation Address'}>
+        <Kb.Text
+          type="BodyPrimaryLink"
+          onClick={toggleShowingPopup}
+          style={Styles.collapseStyles([styles.username, {color: assertionColorToTextColor(color)}])}
+        >
+          {value}
+        </Kb.Text>
+      </Kb.WithTooltip>
+      {popup}
+    </Kb.Box>
+  )
 }
-const StellarValue = Kb.OverlayParentHOC(_StellarValue)
 
 const Value = (p: Props) => {
   let content: JSX.Element | null = null
@@ -192,7 +214,7 @@ const Value = (p: Props) => {
     content = <StellarValue {...p} />
   } else {
     let str = p.value
-    let style = styles.username
+    let style: Styles.StylesCrossPlatform = styles.username
 
     if (!p.isSuggestion) {
       switch (p.type) {
@@ -227,14 +249,50 @@ const Value = (p: Props) => {
 }
 
 const HoverOpacity = Styles.styled(Kb.Box)(() => ({
-  '&:hover': {
-    opacity: 1,
-  },
+  '&:hover': {opacity: 1},
   opacity: 0.5,
 }))
 
 type State = {
   showingMenu: boolean
+}
+
+type SIProps = {
+  full: boolean
+} & Pick<
+  Props,
+  | 'siteIconFullDarkmode'
+  | 'siteIconFull'
+  | 'siteIconDarkmode'
+  | 'siteIcon'
+  | 'onCreateProof'
+  | 'onShowProof'
+  | 'isSuggestion'
+>
+const AssertionSiteIcon = (p: SIProps) => {
+  const {full, siteIconFullDarkmode, siteIconFull, siteIconDarkmode, siteIcon} = p
+  const {onCreateProof, onShowProof, isSuggestion} = p
+  const isDarkMode = React.useContext(Styles.DarkModeContext)
+  const set = full
+    ? isDarkMode
+      ? siteIconFullDarkmode
+      : siteIconFull
+    : isDarkMode
+    ? siteIconDarkmode
+    : siteIcon
+  if (!set) return null
+  let child = <SiteIcon full={full} set={set} />
+  if (full) {
+    return child
+  }
+  if (!Styles.isMobile && isSuggestion) {
+    child = <HoverOpacity>{child}</HoverOpacity>
+  }
+  return (
+    <Kb.ClickableBox onClick={onCreateProof || onShowProof} style={isSuggestion ? styles.halfOpacity : null}>
+      {child}
+    </Kb.ClickableBox>
+  )
 }
 
 class Assertion extends React.PureComponent<Props, State> {
@@ -245,26 +303,29 @@ class Assertion extends React.PureComponent<Props, State> {
   _getRef = () => this._ref.current
   _getMenu = () => {
     const p = this.props
-    if (!p.isYours || p.isSuggestion || p.type === 'stellar') {
+    if (!p.isYours || p.isSuggestion) {
       return {}
     }
-
-    const onRevoke = {
-      danger: true,
-      onClick: p.onRevoke,
-      title: p.type === 'pgp' ? 'Drop' : 'Revoke',
-    }
+    const onRevoke =
+      p.type === 'stellar'
+        ? {
+            danger: true,
+            onClick: () => p.onHideStellar(!this.props.stellarHidden),
+            title: `${this.props.stellarHidden ? 'Show' : 'Hide'} Stellar address on profile`,
+          }
+        : {
+            danger: true,
+            onClick: p.onRevoke,
+            title: p.type === 'pgp' ? 'Drop' : 'Revoke',
+          }
 
     if (p.metas.find(m => m.label === 'unreachable')) {
       return {
-        header: {
-          title: 'header',
-          view: (
-            <Kb.PopupHeaderText color={Styles.globalColors.white} backgroundColor={Styles.globalColors.red}>
-              Your proof could not be found, and Keybase has stopped checking. How would you like to proceed?
-            </Kb.PopupHeaderText>
-          ),
-        },
+        header: (
+          <Kb.PopupHeaderText color={Styles.globalColors.white} backgroundColor={Styles.globalColors.red}>
+            Your proof could not be found, and Keybase has stopped checking. How would you like to proceed?
+          </Kb.PopupHeaderText>
+        ),
         items: [
           {onClick: p.onShowProof, title: 'View proof'},
           {onClick: p.onRecheck, title: 'I fixed it - recheck'},
@@ -274,7 +335,7 @@ class Assertion extends React.PureComponent<Props, State> {
     }
 
     if (p.metas.find(m => m.label === 'pending')) {
-      let pendingMessage
+      let pendingMessage: undefined | string
       switch (p.type) {
         case 'hackernews':
           pendingMessage =
@@ -285,65 +346,49 @@ class Assertion extends React.PureComponent<Props, State> {
           break
       }
       return {
-        header: {
-          title: 'header',
-          view: pendingMessage ? (
-            <Kb.PopupHeaderText color={Styles.globalColors.white} backgroundColor={Styles.globalColors.blue}>
-              {pendingMessage}
-            </Kb.PopupHeaderText>
-          ) : null,
-        },
+        header: pendingMessage ? (
+          <Kb.PopupHeaderText color={Styles.globalColors.white} backgroundColor={Styles.globalColors.blue}>
+            {pendingMessage}
+          </Kb.PopupHeaderText>
+        ) : null,
         items: [onRevoke],
       }
     }
 
     return {
-      header: {
-        title: 'header',
-        view: (
-          <Kb.Box2
-            direction="vertical"
-            gap="tiny"
-            centerChildren={true}
-            style={styles.menuHeader}
-            fullWidth={true}
-          >
-            <Kb.Box2 direction="vertical" style={styles.positionRelative}>
-              {this._siteIcon(true)}
-              <Kb.Icon type={stateToDecorationIcon(p.state)} style={styles.siteIconFullDecoration} />
-            </Kb.Box2>
-            {!!this.props.timestamp && (
-              <>
-                <Kb.Text type="BodySmall">Posted on</Kb.Text>
-                <Kb.Text center={true} type="BodySmall">
-                  {formatTimeForAssertionPopup(this.props.timestamp)}
-                </Kb.Text>
-              </>
-            )}
+      header: (
+        <Kb.Box2
+          direction="vertical"
+          gap="tiny"
+          centerChildren={true}
+          style={styles.menuHeader}
+          fullWidth={true}
+        >
+          <Kb.Box2 direction="vertical" style={styles.positionRelative}>
+            <AssertionSiteIcon
+              full={true}
+              siteIconFullDarkmode={this.props.siteIconFullDarkmode}
+              siteIconFull={this.props.siteIconFull}
+              siteIconDarkmode={this.props.siteIconDarkmode}
+              siteIcon={this.props.siteIcon}
+              onCreateProof={this.props.onCreateProof}
+              onShowProof={this.props.onShowProof}
+              isSuggestion={this.props.isSuggestion}
+            />
+            <Kb.Icon type={stateToDecorationIcon(p.state)} style={styles.siteIconFullDecoration} />
           </Kb.Box2>
-        ),
-      },
+          {!!this.props.timestamp && (
+            <>
+              <Kb.Text type="BodySmall">Posted on</Kb.Text>
+              <Kb.Text center={true} type="BodySmall">
+                {formatTimeForAssertionPopup(this.props.timestamp)}
+              </Kb.Text>
+            </>
+          )}
+        </Kb.Box2>
+      ),
       items: [{onClick: p.onShowProof, title: `View ${proofTypeToDesc(p.type)}`}, onRevoke],
     }
-  }
-  _siteIcon = (full: boolean) => {
-    const set = full ? this.props.siteIconFull : this.props.siteIcon
-    if (!set) return null
-    let child = <SiteIcon full={full} set={set} />
-    if (full) {
-      return child
-    }
-    if (!Styles.isMobile && this.props.isSuggestion) {
-      child = <HoverOpacity>{child}</HoverOpacity>
-    }
-    return (
-      <Kb.ClickableBox
-        onClick={this.props.onCreateProof || this.props.onShowProof}
-        style={this.props.isSuggestion ? styles.halfOpacity : null}
-      >
-        {child}
-      </Kb.ClickableBox>
-    )
   }
   render() {
     const p = this.props
@@ -365,7 +410,16 @@ class Assertion extends React.PureComponent<Props, State> {
           gapStart={true}
           gapEnd={true}
         >
-          {this._siteIcon(false)}
+          <AssertionSiteIcon
+            full={false}
+            siteIconFullDarkmode={this.props.siteIconFullDarkmode}
+            siteIconFull={this.props.siteIconFull}
+            siteIconDarkmode={this.props.siteIconDarkmode}
+            siteIcon={this.props.siteIcon}
+            onCreateProof={this.props.onCreateProof}
+            onShowProof={this.props.onShowProof}
+            isSuggestion={this.props.isSuggestion}
+          />
           <Kb.Text type="Body" style={styles.textContainer}>
             <Value {...p} />
             {!p.isSuggestion && (
@@ -375,31 +429,33 @@ class Assertion extends React.PureComponent<Props, State> {
             )}
           </Kb.Text>
           <Kb.ClickableBox onClick={items ? this._toggleMenu : p.onShowProof} style={styles.statusContainer}>
-            <Kb.Box2 direction="horizontal" alignItems="center" gap="tiny">
-              <Kb.Icon
-                type={stateToIcon(p.state)}
-                fontSize={20}
-                hoverColor={assertionColorToColor(p.color)}
-                color={p.isSuggestion ? Styles.globalColors.black_20 : assertionColorToColor(p.color)}
-              />
-              {items ? (
-                <>
-                  <Kb.Icon className="hover-visible" type="iconfont-caret-down" sizeType="Tiny" />
-                  <Kb.FloatingMenu
-                    closeOnSelect={true}
-                    visible={this.state.showingMenu}
-                    onHidden={this._hideMenu}
-                    attachTo={this._getRef}
-                    position="bottom right"
-                    containerStyle={styles.floatingMenu}
-                    header={header}
-                    items={items}
-                  />
-                </>
-              ) : (
-                <Kb.Box2 direction="vertical" />
-              )}
-            </Kb.Box2>
+            <Kb.WithTooltip tooltip={(p.state === 'valid' || p.state === 'revoked') && 'View proof'}>
+              <Kb.Box2 direction="horizontal" alignItems="center" gap="tiny">
+                <Kb.Icon
+                  type={stateToIcon(p.state)}
+                  fontSize={20}
+                  hoverColor={assertionColorToColor(p.color)}
+                  color={p.isSuggestion ? Styles.globalColors.black_20 : assertionColorToColor(p.color)}
+                />
+                {items ? (
+                  <>
+                    <Kb.Icon className="hover-visible" type="iconfont-caret-down" sizeType="Tiny" />
+                    <Kb.FloatingMenu
+                      closeOnSelect={true}
+                      visible={this.state.showingMenu}
+                      onHidden={this._hideMenu}
+                      attachTo={this._getRef}
+                      position="bottom right"
+                      containerStyle={styles.floatingMenu}
+                      header={header}
+                      items={items}
+                    />
+                  </>
+                ) : (
+                  <Kb.Box2 direction="vertical" />
+                )}
+              </Kb.Box2>
+            </Kb.WithTooltip>
           </Kb.ClickableBox>
         </Kb.Box2>
         {!!p.metas.length && (
@@ -442,7 +498,10 @@ const styles = Styles.styleSheetCreate(
         isMobile: {position: 'relative', top: -2},
       }),
       strikeThrough: {textDecorationLine: 'line-through'},
-      textContainer: {flexGrow: 1, flexShrink: 1, marginTop: -1},
+      textContainer: Styles.platformStyles({
+        common: {flexGrow: 1, flexShrink: 1, marginTop: -1},
+        isMobile: {backgroundColor: Styles.globalColors.fastBlank},
+      }),
       tooltip: Styles.platformStyles({isElectron: {display: 'inline-flex'}}),
       username: Styles.platformStyles({
         common: {letterSpacing: 0.2},

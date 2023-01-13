@@ -49,17 +49,19 @@ const (
 // TODO: Move more common code here.
 func newConfigForTest(modeType InitModeType, loggerFn func(module string) logger.Logger) *ConfigLocal {
 	mode := modeTest{NewInitModeFromType(modeType)}
-	config := NewConfigLocal(mode, loggerFn, "", DiskCacheModeOff, env.NewContextFromGlobalContext(&libkb.GlobalContext{
+	g := &libkb.GlobalContext{
 		// Env is needed by simplefs.
 		Env: libkb.NewEnv(nil, nil, func() logger.Logger {
 			return loggerFn("G")
 		}),
-	}))
+	}
+	g.MobileAppState = libkb.NewMobileAppState(g)
+	config := NewConfigLocal(mode, loggerFn, "", DiskCacheModeOff, env.NewContextFromGlobalContext(g))
 	config.SetVLogLevel(libkb.VLog1String)
 
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	config.SetBlockOps(bops)
 
 	bsplit, err := data.NewBlockSplitterSimpleExact(
@@ -228,9 +230,6 @@ func MakeTestConfigOrBustLoggedInWithMode(
 	configs := []Config{config}
 	config.allKnownConfigsForTesting = &configs
 
-	config.subscriptionManager, config.subscriptionManagerPublisher =
-		newSubscriptionManager(config)
-
 	return config
 }
 
@@ -376,7 +375,7 @@ func keySaltForUserDevice(name kbname.NormalizedUsername,
 	if index > 0 {
 		// We can't include the device index when it's 0, because we
 		// have to match what's done in MakeLocalUsers.
-		return kbname.NormalizedUsername(string(name) + " " + string(index))
+		return kbname.NormalizedUsername(string(name) + " " + fmt.Sprint(index))
 	}
 	return name
 }

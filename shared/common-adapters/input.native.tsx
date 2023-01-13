@@ -1,13 +1,13 @@
 // Known issues:
 // When input gets focus it shifts down 1 pixel when the cursor appears. This happens with a naked TextInput on RN...
-import React, {Component} from 'react'
+import * as React from 'react'
 import Box from './box'
 import Text, {getStyle as getTextStyle} from './text.native'
 import {NativeTextInput} from './native-wrappers.native'
 import * as Styles from '../styles'
 import {isIOS, isAndroid} from '../constants/platform'
-import {TextInput} from 'react-native'
-import {KeyboardType, Props, Selection, TextInfo} from './input'
+import type {TextInput} from 'react-native'
+import type {KeyboardType, Props, Selection, TextInfo} from './input'
 import {checkTextInfo} from './input.shared'
 
 type State = {
@@ -15,24 +15,20 @@ type State = {
   height: number | null
 }
 
-class Input extends Component<Props, State> {
+class Input extends React.Component<Props, State> {
   state: State
-  _input = React.createRef<TextInput>()
-  _lastNativeText: string | null = null
-  _lastNativeSelection: {
+  private input = React.createRef<TextInput>()
+  private lastNativeText: string | null = null
+  private lastNativeSelection: {
     start: number | null
     end: number | null
   } | null = null
 
-  // TODO: Remove once we can use HOCTimers.
-  _timeoutIds: Array<NodeJS.Timeout>
+  private timeoutIds: Array<ReturnType<typeof setTimeout>>
 
-  // We define _setTimeout instead of using HOCTimers since we'd need
-  // to use React.forwardRef with HOCTimers, and it doesn't seem to
-  // work with React Native yet.
-  _setTimeout = (f, n) => {
+  private setTimeout = (f: () => void, n: number) => {
     const id = setTimeout(f, n)
-    this._timeoutIds.push(id)
+    this.timeoutIds.push(id)
     return id
   }
 
@@ -44,22 +40,20 @@ class Input extends Component<Props, State> {
       height: null,
     }
 
-    // TODO: Remove once we can use HOCTimers.
-    this._timeoutIds = []
+    this.timeoutIds = []
   }
 
-  // TODO: Remove once we can use HOCTimers.
-  componentWillUnmount = () => {
-    this._timeoutIds.forEach(clearTimeout)
+  componentWillUnmount() {
+    this.timeoutIds.forEach(clearTimeout)
   }
 
-  componentDidUpdate = (prevProps: Props) => {
+  componentDidUpdate(prevProps: Props) {
     if (prevProps.clearTextCounter !== this.props.clearTextCounter) {
-      this._clearText()
+      this.clearText()
     }
   }
 
-  _clearText = () => {
+  private clearText = () => {
     if (!this.props.uncontrolled) {
       throw new Error('clearTextCounter only works on uncontrolled components')
     }
@@ -75,22 +69,19 @@ class Input extends Component<Props, State> {
 
   // Needed to support wrapping with e.g. a ClickableBox. See
   // https://facebook.github.io/react-native/docs/direct-manipulation.html .
-  setNativeProps = (nativeProps: Object) => {
-    this._input.current && this._input.current.setNativeProps(nativeProps)
+  setNativeProps = (nativeProps: object) => {
+    this.input.current?.setNativeProps(nativeProps)
   }
 
-  _onContentSizeChange = event => {
+  private onContentSizeChange = (event?: {nativeEvent?: {contentSize?: {width: number; height: number}}}) => {
     if (
       this.props.multiline &&
-      event &&
-      event.nativeEvent &&
-      event.nativeEvent.contentSize &&
-      event.nativeEvent.contentSize.height &&
+      event?.nativeEvent?.contentSize?.height &&
       event.nativeEvent.contentSize.width
     ) {
       let height = event.nativeEvent.contentSize.height
-      const minHeight = this.props.rowsMin && this._rowsToHeight(this.props.rowsMin)
-      const maxHeight = this.props.rowsMax && this._rowsToHeight(this.props.rowsMax)
+      const minHeight = this.props.rowsMin && this.rowsToHeight(this.props.rowsMin)
+      const maxHeight = this.props.rowsMax && this.rowsToHeight(this.props.rowsMax)
       if (minHeight && height < minHeight) {
         height = minHeight
       } else if (maxHeight && height > maxHeight) {
@@ -103,37 +94,37 @@ class Input extends Component<Props, State> {
     }
   }
 
-  _getValue = () => {
-    return (this.props.uncontrolled ? this._lastNativeText : this.props.value) || ''
+  private getValueImpl = () => {
+    return (this.props.uncontrolled ? this.lastNativeText : this.props.value) || ''
   }
 
   getValue = (): string => {
     if (this.props.uncontrolled) {
-      return this._getValue()
+      return this.getValueImpl()
     } else {
       throw new Error('getValue only supported on uncontrolled inputs')
     }
   }
 
   selection = (): Selection => {
-    return this._lastNativeSelection || {end: 0, start: 0}
+    return this.lastNativeSelection || {end: 0, start: 0}
   }
 
-  _onChangeTextDone = (value: string) => {
+  private onChangeTextDone = (value: string) => {
     this.props.onChangeText && this.props.onChangeText(value)
   }
 
-  _onChangeText = (text: string) => {
-    this._lastNativeText = text
-    this._onChangeTextDone(text)
+  private onChangeText = (text: string) => {
+    this.lastNativeText = text
+    this.onChangeTextDone(text)
   }
 
   focus = () => {
-    this._input.current && this._input.current.focus()
+    this.input.current && this.input.current.focus()
   }
 
   blur = () => {
-    this._input.current && this._input.current.blur()
+    this.input.current && this.input.current.blur()
   }
 
   transformText = (fn: (textInfo: TextInfo) => TextInfo) => {
@@ -143,41 +134,41 @@ class Input extends Component<Props, State> {
 
     const textInfo: TextInfo = {
       selection: this.selection(),
-      text: this._getValue(),
+      text: this.getValueImpl(),
     }
     const newTextInfo = fn(textInfo)
     checkTextInfo(newTextInfo)
     this.setNativeProps({text: newTextInfo.text})
-    this._lastNativeText = newTextInfo.text
+    this.lastNativeText = newTextInfo.text
     // Setting both the text and the selection at the same time
     // doesn't seem to work, but setting a short timeout to set the
     // selection does.
-    this._setTimeout(() => {
+    this.setTimeout(() => {
       // It's possible that, by the time this runs, the selection is
       // out of bounds with respect to the current text value. So fix
       // it up if necessary.
-      const text = this._getValue()
+      const text = this.getValueImpl()
       let {start, end} = newTextInfo.selection
       end = Math.max(0, Math.min(end || 0, text.length))
       start = Math.max(0, Math.min(start || 0, end))
       const selection = {end, start}
       this.setNativeProps({selection})
-      this._lastNativeSelection = selection
+      this.lastNativeSelection = selection
     }, 0)
   }
 
-  _onFocus = () => {
+  private onFocus = () => {
     this.setState({focused: true})
     this.props.onFocus && this.props.onFocus()
     this.setNativeProps({style: {textAlignVertical: 'top'}})
   }
 
-  _onBlur = () => {
+  private onBlur = () => {
     this.setState({focused: false})
     this.props.onBlur && this.props.onBlur()
   }
 
-  _lineHeight = () => {
+  private lineHeight = () => {
     if (this.props.small) {
       return 20
     } else if (this.props.multiline && isAndroid) {
@@ -185,7 +176,7 @@ class Input extends Component<Props, State> {
     } else return 28
   }
 
-  _underlineColor = () => {
+  private underlineColor = () => {
     if (this.props.hideUnderline) {
       return Styles.globalColors.transparent
     }
@@ -197,12 +188,12 @@ class Input extends Component<Props, State> {
     return this.state.focused ? Styles.globalColors.blue : Styles.globalColors.black_10_on_white
   }
 
-  _rowsToHeight = rows => {
+  private rowsToHeight = (rows: number) => {
     const border = this.props.hideUnderline ? 0 : 1
-    return rows * this._lineHeight() + border
+    return rows * this.lineHeight() + border
   }
 
-  _containerStyle = underlineColor => {
+  private containerStyle = (underlineColor: Styles.Color) => {
     return this.props.small
       ? {
           ...Styles.globalStyles.flexBoxRow,
@@ -219,7 +210,7 @@ class Input extends Component<Props, State> {
         }
   }
 
-  _onSelectionChange = (event: {
+  private onSelectionChange = (event: {
     nativeEvent: {
       selection: {
         start: number
@@ -227,27 +218,27 @@ class Input extends Component<Props, State> {
       }
     }
   }) => {
-    let {start: _start, end: _end} = event.nativeEvent.selection
+    const {start: _start, end: _end} = event.nativeEvent.selection
     // Work around Android bug which sometimes puts end before start:
     // https://github.com/facebook/react-native/issues/18579 .
     const start = Math.min(_start, _end)
     const end = Math.max(_start, _end)
-    this._lastNativeSelection = {end, start}
+    this.lastNativeSelection = {end, start}
     // Bit of a hack here: Unlike the desktop case, where the text and
     // selection are updated simultaneously, on mobile the text gets
     // updated first, so handlers that rely on an updated selection
     // will get strange results. So trigger a text change notification
     // when the selection changes.
-    this._onChangeTextDone(this._getValue())
+    this.onChangeTextDone(this.getValueImpl())
   }
 
   render() {
-    const underlineColor = this._underlineColor()
-    const lineHeight = this._lineHeight()
+    const underlineColor = this.underlineColor()
+    const lineHeight = this.lineHeight()
     const defaultRowsToShow = Math.min(2, this.props.rowsMax || 2)
-    const containerStyle = this._containerStyle(underlineColor)
+    const containerStyle = this.containerStyle(underlineColor)
 
-    const singlelineStyle = Styles.collapseStyles([
+    const singlelineStyle: Styles.StylesCrossPlatform = Styles.collapseStyles([
       styles.commonInput,
       {
         lineHeight: lineHeight,
@@ -258,25 +249,26 @@ class Input extends Component<Props, State> {
       this.props.small ? styles.commonInputSmall : styles.commonInputRegular,
     ])
 
-    const multilineStyle: any = Styles.collapseStyles([
+    const multilineStyle: Styles.StylesCrossPlatform = Styles.collapseStyles([
       styles.commonInput,
       {
         height: undefined,
         lineHeight: lineHeight,
-        minHeight: this._rowsToHeight(this.props.rowsMin || defaultRowsToShow),
+        minHeight: this.rowsToHeight(this.props.rowsMin || defaultRowsToShow),
         paddingBottom: 0,
         paddingTop: 0,
-        ...(this.props.rowsMax ? {maxHeight: this._rowsToHeight(this.props.rowsMax)} : null),
+        ...(this.props.rowsMax ? {maxHeight: this.rowsToHeight(this.props.rowsMax)} : null),
       },
       this.props.small ? styles.commonInputSmall : styles.commonInputRegular,
     ])
 
     // Override height if we received an onContentSizeChange() earlier.
     if (isIOS && this.state.height) {
+      // @ts-ignore we shouldn't reach in here
       multilineStyle.height = this.state.height
     }
 
-    const value = this._getValue()
+    const value = this.getValueImpl()
 
     const floatingHintText =
       !!value.length &&
@@ -302,22 +294,24 @@ class Input extends Component<Props, State> {
       autoCorrect: Object.prototype.hasOwnProperty.call(this.props, 'autoCorrect') && this.props.autoCorrect,
       autoFocus: this.props.autoFocus,
       editable: Object.prototype.hasOwnProperty.call(this.props, 'editable') ? this.props.editable : true,
+      keyboardAppearance: Styles.isIOS ? (Styles.isDarkMode() ? 'dark' : 'light') : undefined,
       keyboardType,
-      onBlur: this._onBlur,
-      onChangeText: this._onChangeText,
+      onBlur: this.onBlur,
+      onChangeText: this.onChangeText,
       onEndEditing: this.props.onEndEditing,
-      onFocus: this._onFocus,
-      onSelectionChange: this._onSelectionChange,
+      onFocus: this.onFocus,
+      onSelectionChange: this.onSelectionChange,
       onSubmitEditing: this.props.onEnterKeyDown,
       placeholder: this.props.hintText,
-      ref: this._input,
+      placeholderTextColor: Styles.globalColors.black_40,
+      ref: this.input,
       returnKeyType: this.props.returnKeyType,
       secureTextEntry: this.props.type === 'password',
       selectTextOnFocus: this.props.selectTextOnFocus,
       textContentType: this.props.textContentType,
       underlineColorAndroid: 'transparent',
       ...(this.props.maxLength ? {maxLength: this.props.maxLength} : null),
-    }
+    } as const
 
     if (!this.props.uncontrolled) {
       // @ts-ignore it's ok to add this
@@ -334,9 +328,9 @@ class Input extends Component<Props, State> {
       ...commonProps,
       blurOnSubmit: false,
       multiline: true,
-      onContentSizeChange: this._onContentSizeChange,
+      onContentSizeChange: this.onContentSizeChange,
       style: Styles.collapseStyles([multilineStyle, this.props.inputStyle]),
-      ...(this.props.rowsMax ? {maxHeight: this._rowsToHeight(this.props.rowsMax)} : {}),
+      ...(this.props.rowsMax ? {maxHeight: this.rowsToHeight(this.props.rowsMax)} : {}),
     }
 
     return (

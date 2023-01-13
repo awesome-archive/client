@@ -1,11 +1,11 @@
 import {
-  AggregateLogger,
-  LogLevel,
-  Logger,
-  LogFn,
-  LogLineWithLevel,
-  LogLineWithLevelISOTimestamp,
-  Loggers,
+  type AggregateLogger,
+  type LogLevel,
+  type Logger,
+  type LogFn,
+  type LogLineWithLevel,
+  type LogLineWithLevelISOTimestamp,
+  type Loggers,
   toISOTimestamp,
 } from './types'
 import {isMobile} from '../constants/platform'
@@ -61,10 +61,10 @@ class AggregateLoggerImpl implements AggregateLogger {
     this.debug = debug.log
   }
 
-  dump(filter?: Array<LogLevel>) {
+  async dump(filter?: Array<LogLevel>) {
     const allKeys = Object.keys(this._allLoggers) as Array<LogLevel>
     const filterKeys = filter || allKeys
-    const logDumpPromises = filterKeys.map((level: LogLevel) => this._allLoggers[level].dump(level))
+    const logDumpPromises = filterKeys.map(async (level: LogLevel) => this._allLoggers[level].dump(level))
     const p: Promise<Array<LogLineWithLevelISOTimestamp>> = Promise.all(logDumpPromises).then(
       (logsToDump: Array<Array<LogLineWithLevel>>): Array<LogLineWithLevelISOTimestamp> =>
         _mergeSortedArraysHelper(
@@ -76,15 +76,16 @@ class AggregateLoggerImpl implements AggregateLogger {
     return p
   }
 
-  flush() {
+  async flush() {
     const allKeys = Object.keys(this._allLoggers) as Array<LogLevel>
-    allKeys.map(level => this._allLoggers[level].flush())
+    allKeys.map(async level => this._allLoggers[level].flush())
     const p: Promise<void> = Promise.all(allKeys).then(() => {})
     return p
   }
 }
 
 const devLoggers = () => ({
+  // We already pretty print the actions when we have an actual console.
   action: new TeeLogger(new RingLogger(100), new ConsoleLogger('log', 'Dispatching Action')),
   debug: new TeeLogger(
     isMobile
@@ -122,10 +123,4 @@ const prodLoggers = () => ({
 const logSetup = __DEV__ || __STORYBOOK__ ? devLoggers() : prodLoggers()
 
 const theOnlyLogger = new AggregateLoggerImpl(logSetup)
-
-if (!isMobile && typeof global !== 'undefined') {
-  // So we can easily grab this from the main renderer
-  global.globalLogger = theOnlyLogger
-}
-
 export default theOnlyLogger

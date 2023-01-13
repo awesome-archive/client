@@ -1,39 +1,32 @@
-import * as React from 'react'
-import * as Types from '../../constants/types/fs'
+import type * as Types from '../../constants/types/fs'
 import * as Styles from '../../styles'
 import * as Kb from '../../common-adapters'
 import * as Kbfs from '../common'
 import Footer from '../footer/footer'
-import View from './view-container'
+import View from './view'
 
 type NormalPreviewProps = {
   path: Types.Path
+  onUrlError: (err: string) => void
 }
 
-type State = {
-  loading: boolean
-}
+const NormalPreview = (props: NormalPreviewProps) => (
+  <Kb.Box2 direction="vertical" fullHeight={true} fullWidth={true}>
+    <Kbfs.Errs />
+    <Kb.Box2
+      direction="vertical"
+      centerChildren={true}
+      fullWidth={true}
+      fullHeight={true}
+      style={styles.greyContainer}
+    >
+      <View path={props.path} onUrlError={props.onUrlError} />
+    </Kb.Box2>
+    <Footer path={props.path} />
+  </Kb.Box2>
+)
 
-export default class NormalPreview extends React.PureComponent<NormalPreviewProps, State> {
-  state = {
-    loading: false,
-  }
-
-  _onLoadingStateChange = (loading: boolean) => this.setState({loading})
-
-  render() {
-    return (
-      <Kb.Box2 direction="vertical" fullHeight={true} fullWidth={true}>
-        <Kbfs.Errs />
-        <Kb.Box2 direction="vertical" centerChildren={true} fullWidth={true} style={styles.greyContainer}>
-          <View path={this.props.path} onLoadingStateChange={this._onLoadingStateChange} />
-          {this.state.loading && <Kb.ProgressIndicator style={styles.loading} />}
-        </Kb.Box2>
-        <Footer path={this.props.path} />
-      </Kb.Box2>
-    )
-  }
-}
+export default NormalPreview
 
 const styles = Styles.styleSheetCreate(
   () =>
@@ -55,21 +48,5 @@ const styles = Styles.styleSheetCreate(
         flex: 1,
         flexShrink: 1,
       },
-      loading: Styles.platformStyles({
-        common: {
-          height: 32,
-          width: 32,
-        },
-        isElectron: {
-          left: 40,
-          position: 'absolute',
-          top: 86,
-        },
-        isMobile: {
-          left: 0,
-          position: 'absolute',
-          top: 0,
-        },
-      }),
     } as const)
 )

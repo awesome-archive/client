@@ -1,13 +1,16 @@
-import * as React from 'react'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
-import {Props} from './participant-rekey.types'
+import type {Props} from './participant-rekey.types'
 
-const Row = ({username, onUsernameClicked}) => (
-  <Kb.Box style={styles.row} onClick={() => onUsernameClicked(username)}>
-    <Kb.Avatar username={username} size={48} style={{marginRight: Styles.globalMargins.small, padding: 4}} />
+const Row = (props: {username: string; onUsernameClicked: (s: string) => void}) => (
+  <Kb.Box style={styles.row} onClick={() => props.onUsernameClicked(props.username)}>
+    <Kb.Avatar
+      username={props.username}
+      size={48}
+      style={{marginRight: Styles.globalMargins.small, padding: 4}}
+    />
     <Kb.Box style={styles.innerRow}>
-      <Kb.Usernames inline={true} type="BodySemibold" users={[{username}]} />
+      <Kb.ConnectedUsernames inline={true} type="BodyBold" usernames={props.username} />
       <Kb.Text type="BodySmall" style={Styles.platformStyles({isElectron: {lineHeight: '17px'}})}>
         Can rekey this chat by opening the Keybase app.
       </Kb.Text>
@@ -55,25 +58,31 @@ const ParticipantRekey = ({rekeyers, onShowProfile: onUsernameClicked}: Props) =
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      container: {
-        ...Styles.globalStyles.flexBoxColumn,
-        alignItems: 'stretch',
-        backgroundColor: Styles.globalColors.white,
-        borderLeft: `1px solid ${Styles.globalColors.black_20}`,
-        flex: 1,
-        justifyContent: 'flex-start',
-      },
-      innerRow: {
-        ...Styles.globalStyles.flexBoxColumn,
-        borderBottom: `1px solid ${Styles.globalColors.black_10}`,
-        flex: 1,
-        justifyContent: 'center',
-      },
-      row: {
-        ...Styles.globalStyles.flexBoxRow,
-        ...Styles.desktopStyles.clickable,
-        minHeight: 48,
-      },
+      container: Styles.platformStyles({
+        isElectron: {
+          ...Styles.globalStyles.flexBoxColumn,
+          alignItems: 'stretch',
+          backgroundColor: Styles.globalColors.white,
+          borderLeft: `1px solid ${Styles.globalColors.black_20}`,
+          flex: 1,
+          justifyContent: 'flex-start',
+        },
+      }),
+      innerRow: Styles.platformStyles({
+        isElectron: {
+          ...Styles.globalStyles.flexBoxColumn,
+          borderBottom: `1px solid ${Styles.globalColors.black_10}`,
+          flex: 1,
+          justifyContent: 'center',
+        },
+      }),
+      row: Styles.platformStyles({
+        isElectron: {
+          ...Styles.globalStyles.flexBoxRow,
+          ...Styles.desktopStyles.clickable,
+          minHeight: 48,
+        },
+      }),
     } as const)
 )
 

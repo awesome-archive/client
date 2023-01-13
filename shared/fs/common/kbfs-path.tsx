@@ -1,5 +1,5 @@
 import * as React from 'react'
-import * as Types from '../../constants/types/fs'
+import type * as Types from '../../constants/types/fs'
 import * as Constants from '../../constants/fs'
 import * as Styles from '../../styles'
 import * as Kb from '../../common-adapters'
@@ -26,24 +26,21 @@ const useOpenInFilesTab = (path: Types.Path) => {
 
 const KbfsPathPopup = (props: PopupProps) => {
   const openInFilesTab = useOpenInFilesTab(props.standardPath)
-  const header = {
-    title: 'header',
-    view: (
-      <Kb.Box2 direction="vertical" style={styles.headerContainer} centerChildren={true}>
-        <PathItemInfo
-          path={props.standardPath}
-          showTooltipOnName={false}
-          containerStyle={Styles.collapseStyles([styles.sectionContainer, styles.noBottomPadding])}
-        />
-        <Kb.Divider />
-        <PathInfo
-          path={props.standardPath}
-          knownPathInfo={props.knownPathInfo}
-          containerStyle={styles.sectionContainer}
-        />
-      </Kb.Box2>
-    ),
-  }
+  const header = (
+    <Kb.Box2 direction="vertical" style={styles.headerContainer} centerChildren={true} fullWidth={true}>
+      <PathItemInfo
+        path={props.standardPath}
+        containerStyle={Styles.collapseStyles([styles.sectionContainer, styles.noBottomPadding])}
+      />
+      <Kb.Divider />
+      <PathInfo
+        path={props.standardPath}
+        knownPathInfo={props.knownPathInfo}
+        containerStyle={styles.sectionContainer}
+      />
+    </Kb.Box2>
+  )
+
   return (
     <Kb.FloatingMenu
       closeOnSelect={true}
@@ -55,7 +52,9 @@ const KbfsPathPopup = (props: PopupProps) => {
       items={
         Styles.isMobile
           ? [
+              'Divider',
               {
+                icon: 'iconfont-file',
                 onClick: openInFilesTab,
                 title: 'Open',
               },

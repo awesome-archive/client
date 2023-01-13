@@ -38,7 +38,6 @@ func (n NullConfiguration) GetExternalURLKitFilename() string                   
 func (n NullConfiguration) GetProveBypass() (bool, bool)                                   { return false, false }
 func (n NullConfiguration) GetUsername() NormalizedUsername                                { return NormalizedUsername("") }
 func (n NullConfiguration) GetEmail() string                                               { return "" }
-func (n NullConfiguration) GetUpgradePerUserKey() (bool, bool)                             { return false, false }
 func (n NullConfiguration) GetProxy() string                                               { return "" }
 func (n NullConfiguration) GetProxyType() string                                           { return "" }
 func (n NullConfiguration) IsCertPinningEnabled() bool                                     { return true }
@@ -78,11 +77,13 @@ func (n NullConfiguration) GetUsernameForUID(u keybase1.UID) NormalizedUsername 
 func (n NullConfiguration) GetUIDForUsername(u NormalizedUsername) keybase1.UID {
 	return keybase1.UID("")
 }
+func (n NullConfiguration) GetStayLoggedOut() (bool, bool)                  { return false, false }
 func (n NullConfiguration) GetAutoFork() (bool, bool)                       { return false, false }
 func (n NullConfiguration) GetRunMode() (RunMode, error)                    { return NoRunMode, nil }
 func (n NullConfiguration) GetNoAutoFork() (bool, bool)                     { return false, false }
 func (n NullConfiguration) GetLogFile() string                              { return "" }
 func (n NullConfiguration) GetEKLogFile() string                            { return "" }
+func (n NullConfiguration) GetPerfLogFile() string                          { return "" }
 func (n NullConfiguration) GetGUILogFile() string                           { return "" }
 func (n NullConfiguration) GetUseDefaultLogFile() (bool, bool)              { return false, false }
 func (n NullConfiguration) GetUseRootConfigFile() (bool, bool)              { return false, false }
@@ -115,23 +116,30 @@ func (n NullConfiguration) GetAppType() AppType                             { re
 func (n NullConfiguration) IsMobileExtension() (bool, bool)                 { return false, false }
 func (n NullConfiguration) GetSlowGregorConn() (bool, bool)                 { return false, false }
 func (n NullConfiguration) GetReadDeletedSigChain() (bool, bool)            { return false, false }
-func (n NullConfiguration) GetRememberPassphrase() (bool, bool)             { return false, false }
-func (n NullConfiguration) GetLevelDBNumFiles() (int, bool)                 { return 0, false }
-func (n NullConfiguration) GetChatInboxSourceLocalizeThreads() (int, bool)  { return 1, false }
-func (n NullConfiguration) GetAttachmentHTTPStartPort() (int, bool)         { return 0, false }
-func (n NullConfiguration) GetAttachmentDisableMulti() (bool, bool)         { return false, false }
-func (n NullConfiguration) GetDisableTeamAuditor() (bool, bool)             { return false, false }
-func (n NullConfiguration) GetDisableMerkleAuditor() (bool, bool)           { return false, false }
-func (n NullConfiguration) GetDisableSearchIndexer() (bool, bool)           { return false, false }
-func (n NullConfiguration) GetDisableBgConvLoader() (bool, bool)            { return false, false }
-func (n NullConfiguration) GetDisableTeamBoxAuditor() (bool, bool)          { return false, false }
-func (n NullConfiguration) GetDisableEKBackgroundKeygen() (bool, bool)      { return false, false }
-func (n NullConfiguration) GetEnableBotLiteMode() (bool, bool)              { return false, false }
-func (n NullConfiguration) GetExtraNetLogging() (bool, bool)                { return false, false }
-func (n NullConfiguration) GetForceLinuxKeyring() (bool, bool)              { return false, false }
-func (n NullConfiguration) GetForceSecretStoreFile() (bool, bool)           { return false, false }
-func (n NullConfiguration) GetChatOutboxStorageEngine() string              { return "" }
-func (n NullConfiguration) GetRuntimeStatsEnabled() (bool, bool)            { return false, false }
+func (n NullConfiguration) GetRememberPassphrase(NormalizedUsername) (bool, bool) {
+	return false, false
+}
+func (n NullConfiguration) GetLevelDBNumFiles() (int, bool)                { return 0, false }
+func (n NullConfiguration) GetLevelDBWriteBufferMB() (int, bool)           { return 4, false }
+func (n NullConfiguration) GetChatInboxSourceLocalizeThreads() (int, bool) { return 1, false }
+func (n NullConfiguration) GetAttachmentHTTPStartPort() (int, bool)        { return 0, false }
+func (n NullConfiguration) GetAttachmentDisableMulti() (bool, bool)        { return false, false }
+func (n NullConfiguration) GetDisableTeamAuditor() (bool, bool)            { return false, false }
+func (n NullConfiguration) GetDisableMerkleAuditor() (bool, bool)          { return false, false }
+func (n NullConfiguration) GetDisableSearchIndexer() (bool, bool)          { return false, false }
+func (n NullConfiguration) GetDisableBgConvLoader() (bool, bool)           { return false, false }
+func (n NullConfiguration) GetDisableTeamBoxAuditor() (bool, bool)         { return false, false }
+func (n NullConfiguration) GetDisableEKBackgroundKeygen() (bool, bool)     { return false, false }
+func (n NullConfiguration) GetEnableBotLiteMode() (bool, bool)             { return false, false }
+func (n NullConfiguration) GetExtraNetLogging() (bool, bool)               { return false, false }
+func (n NullConfiguration) GetForceLinuxKeyring() (bool, bool)             { return false, false }
+func (n NullConfiguration) GetForceSecretStoreFile() (bool, bool)          { return false, false }
+func (n NullConfiguration) GetRuntimeStatsEnabled() (bool, bool)           { return false, false }
+func (n NullConfiguration) GetPassphraseState() *keybase1.PassphraseState  { return nil }
+func (n NullConfiguration) GetPassphraseStateForUsername(NormalizedUsername) *keybase1.PassphraseState {
+	return nil
+}
+
 func (n NullConfiguration) GetBug3964RepairTime(NormalizedUsername) (time.Time, error) {
 	return time.Time{}, nil
 }
@@ -150,9 +158,8 @@ func (n NullConfiguration) GetAllUserConfigs() (*UserConfig, []UserConfig, error
 	return nil, nil, nil
 }
 
-func (n NullConfiguration) GetDebug() (bool, bool) {
-	return false, false
-}
+func (n NullConfiguration) GetDebug() (bool, bool)            { return false, false }
+func (n NullConfiguration) GetDebugJourneycard() (bool, bool) { return false, false }
 func (n NullConfiguration) GetDisplayRawUntrustedOutput() (bool, bool) {
 	return false, false
 }
@@ -181,6 +188,10 @@ func (n NullConfiguration) GetIntAtPath(string) (int, bool) {
 	return 0, false
 }
 
+func (n NullConfiguration) GetFloatAtPath(string) (float64, bool) {
+	return 0, false
+}
+
 func (n NullConfiguration) GetNullAtPath(string) bool {
 	return false
 }
@@ -188,6 +199,8 @@ func (n NullConfiguration) GetNullAtPath(string) bool {
 func (n NullConfiguration) GetSecurityAccessGroupOverride() (bool, bool) {
 	return false, false
 }
+
+func (n NullConfiguration) GetAndroidInstallReferrerChecked() bool { return false }
 
 type TestParameters struct {
 	ConfigFilename   string
@@ -202,6 +215,7 @@ type TestParameters struct {
 	// If we're in dev mode, the name for this test, with a random
 	// suffix.
 	DevelName                string
+	DevelPrefix              string // when in test - name for the test without suffix.
 	RuntimeDir               string
 	DisableUpgradePerUserKey bool
 	EnvironmentFeatureFlags  FeatureFlags
@@ -239,6 +253,9 @@ type TestParameters struct {
 
 	// Toggle if we want to try to 'prime' the secret store before using it.
 	SecretStorePrimingDisabled bool
+
+	// Extra headers for API
+	APIHeaders map[string]string
 }
 
 func (tp TestParameters) GetDebug() (bool, bool) {
@@ -342,8 +359,12 @@ func (e *Env) GetMountDirDefault() string {
 	case keybase1.RuntimeGroup_DARWINLIKE:
 		volumes := "/Volumes"
 		user, err := user.Current()
+		var username string
 		if err != nil {
-			panic(fmt.Sprintf("Couldn't get current user: %+v", err))
+			// The iOS simulator may not have a proper user set,
+			username = "<unknown>"
+		} else {
+			username = user.Username
 		}
 		var runmodeName string
 		switch e.GetRunMode() {
@@ -357,7 +378,7 @@ func (e *Env) GetMountDirDefault() string {
 			panic("Invalid run mode")
 		}
 		return filepath.Join(volumes, fmt.Sprintf(
-			"%s (%s)", runmodeName, user.Username))
+			"%s (%s)", runmodeName, username))
 	case keybase1.RuntimeGroup_LINUXLIKE:
 		return filepath.Join(e.GetRuntimeDir(), "kbfs")
 	// kbfsdokan depends on an empty default
@@ -426,6 +447,7 @@ func (e *Env) getMobileSharedHomeFromCmdOrConfig() string {
 	)
 }
 
+func (e *Env) GetDownloadsDir() string     { return e.HomeFinder.DownloadsDir() }
 func (e *Env) GetHome() string             { return e.HomeFinder.Home(false) }
 func (e *Env) GetMobileSharedHome() string { return e.HomeFinder.MobileSharedHome(false) }
 func (e *Env) GetConfigDir() string        { return e.HomeFinder.ConfigDir() }
@@ -747,15 +769,6 @@ func (e *Env) GetDbFilename() string {
 	)
 }
 
-func (e *Env) GetChatOutboxStorageEngine() string {
-	return e.GetString(
-		func() string { return e.cmd.GetChatOutboxStorageEngine() },
-		func() string { return os.Getenv("KEYBASE_CHAT_OUTBOXSTORAGEENGINE") },
-		func() string { return e.GetConfig().GetChatOutboxStorageEngine() },
-		func() string { return "" },
-	)
-}
-
 func (e *Env) GetChatDbFilename() string {
 	return e.GetString(
 		func() string { return e.cmd.GetChatDbFilename() },
@@ -802,6 +815,14 @@ func (e *Env) GetProveBypass() bool {
 		func() (bool, bool) { return e.cmd.GetProveBypass() },
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_PROVE_BYPASS") },
 		func() (bool, bool) { return e.GetConfig().GetProveBypass() })
+}
+
+// GetDebugJourneycard enables experimental chat journey cards.
+func (e *Env) GetDebugJourneycard() bool {
+	return e.GetBool(false,
+		func() (bool, bool) { return e.cmd.GetDebugJourneycard() },
+		func() (bool, bool) { return e.getEnvBool("KEYBASE_DEBUG_JOURNEYCARD") },
+		func() (bool, bool) { return e.GetConfig().GetDebugJourneycard() })
 }
 
 func (e *Env) GetDebug() bool {
@@ -1108,6 +1129,12 @@ func (e *Env) GetEmail() string {
 	)
 }
 
+func (e *Env) GetStayLoggedOut() bool {
+	return e.GetBool(false,
+		func() (bool, bool) { return e.GetConfig().GetStayLoggedOut() },
+	)
+}
+
 // Upgrade sigchains to contain per-user-keys.
 func (e *Env) GetUpgradePerUserKey() bool {
 	return !e.Test.DisableUpgradePerUserKey
@@ -1315,6 +1342,14 @@ func (e *Env) GetLevelDBNumFiles() int {
 		e.cmd.GetLevelDBNumFiles,
 		func() (int, bool) { return e.getEnvInt("KEYBASE_LEVELDB_NUM_FILES") },
 		e.GetConfig().GetLevelDBNumFiles,
+	)
+}
+
+func (e *Env) GetLevelDBWriteBufferMB() int {
+	return e.GetInt(LevelDBWriteBufferMB,
+		e.cmd.GetLevelDBWriteBufferMB,
+		func() (int, bool) { return e.getEnvInt("KEYBASE_LEVELDB_WRITE_BUFFER_MB") },
+		e.GetConfig().GetLevelDBWriteBufferMB,
 	)
 }
 
@@ -1623,6 +1658,14 @@ func (e *Env) GetEKLogFile() string {
 	)
 }
 
+func (e *Env) GetPerfLogFile() string {
+	return e.GetString(
+		func() string { return e.cmd.GetPerfLogFile() },
+		func() string { return os.Getenv("KEYBASE_PERF_LOG_FILE") },
+		func() string { return filepath.Join(e.GetLogDir(), PerfLogFileName) },
+	)
+}
+
 func (e *Env) GetGUILogFile() string {
 	return e.GetString(
 		func() string { return e.cmd.GetGUILogFile() },
@@ -1692,7 +1735,7 @@ func (e *Env) GetStoredSecretAccessGroup() string {
 	return "99229SGT5K.group.keybase"
 }
 
-func (e *Env) GetStoredSecretServiceName() string {
+func (e *Env) GetStoredSecretServiceBaseName() string {
 	var serviceName string
 	switch e.GetRunMode() {
 	case DevelRunMode:
@@ -1707,17 +1750,29 @@ func (e *Env) GetStoredSecretServiceName() string {
 	if e.Test.Devel {
 		// Append DevelName so that tests won't clobber each
 		// other's keychain entries on shutdown.
-		serviceName += fmt.Sprintf("-test (%s)", e.Test.DevelName)
+		serviceName += "-test"
+	}
+	return serviceName
+}
+
+func (e *Env) GetStoredSecretServiceName() string {
+	serviceName := e.GetStoredSecretServiceBaseName()
+	if e.Test.Devel {
+		// Append DevelName so that tests won't clobber each
+		// other's keychain entries on shutdown.
+		serviceName += fmt.Sprintf("(%s)", e.Test.DevelName)
 	}
 	return serviceName
 }
 
 type AppConfig struct {
 	NullConfiguration
+	DownloadsDir                   string
 	HomeDir                        string
 	MobileSharedHomeDir            string
 	LogFile                        string
 	EKLogFile                      string
+	PerfLogFile                    string
 	GUILogFile                     string
 	UseDefaultLogFile              bool
 	RunMode                        RunMode
@@ -1734,11 +1789,12 @@ type AppConfig struct {
 	UPAKCacheSize                  int
 	PayloadCacheSize               int
 	ProofCacheSize                 int
-	OutboxStorageEngine            string
 	DisableTeamAuditor             bool
 	DisableMerkleAuditor           bool
 	DisableTeamBoxAuditor          bool
 	DisableEKBackgroundKeygen      bool
+	LevelDBWriteBufferMB           int
+	LevelDBNumFiles                int
 }
 
 var _ CommandLine = AppConfig{}
@@ -1749,6 +1805,10 @@ func (c AppConfig) GetLogFile() string {
 
 func (c AppConfig) GetEKLogFile() string {
 	return c.EKLogFile
+}
+
+func (c AppConfig) GetPerfLogFile() string {
+	return c.PerfLogFile
 }
 
 func (c AppConfig) GetGUILogFile() string {
@@ -1769,6 +1829,10 @@ func (c AppConfig) GetLocalRPCDebug() string {
 
 func (c AppConfig) GetRunMode() (RunMode, error) {
 	return c.RunMode, nil
+}
+
+func (c AppConfig) GetDownloadsDir() string {
+	return c.DownloadsDir
 }
 
 func (c AppConfig) GetHome() string {
@@ -1811,17 +1875,18 @@ func (c AppConfig) GetChatInboxSourceLocalizeThreads() (int, bool) {
 	return c.ChatInboxSourceLocalizeThreads, true
 }
 
-func (c AppConfig) GetChatOutboxStorageEngine() string {
-	if len(c.OutboxStorageEngine) > 0 {
-		return c.OutboxStorageEngine
+func (c AppConfig) GetLevelDBWriteBufferMB() (int, bool) {
+	if c.LevelDBWriteBufferMB > 0 {
+		return c.LevelDBWriteBufferMB, true
 	}
-	return ""
+	return LevelDBWriteBufferMBMobile, true
 }
 
-// Default is 500, compacted size of each file is 2MB, so turning
-// this down on mobile to reduce mem usage.
 func (c AppConfig) GetLevelDBNumFiles() (int, bool) {
-	return 50, true
+	if c.LevelDBNumFiles > 0 {
+		return c.LevelDBNumFiles, true
+	}
+	return LevelDBNumFiles, true
 }
 
 func (c AppConfig) GetAttachmentHTTPStartPort() (int, bool) {
@@ -1953,7 +2018,8 @@ func (e *Env) RunningInCI() bool {
 }
 
 func (e *Env) WantsSystemd() bool {
-	return (e.GetRunMode() == ProductionRunMode && e.ModelessWantsSystemd())
+	isNonstandard, isNonstandardErr := e.HomeFinder.IsNonstandardHome()
+	return (e.GetRunMode() == ProductionRunMode && e.ModelessWantsSystemd() && (isNonstandardErr != nil || !isNonstandard))
 }
 
 func (e *Env) ModelessWantsSystemd() bool {
@@ -1977,23 +2043,34 @@ func (e *Env) GetRuntimeStatsEnabled() bool {
 	)
 }
 
-func (e *Env) RememberPassphrase() bool {
+func (e *Env) GetRememberPassphrase(username NormalizedUsername) bool {
 	return e.GetBool(true,
-		e.cmd.GetRememberPassphrase,
-		e.GetConfig().GetRememberPassphrase,
+		func() (bool, bool) { return e.cmd.GetRememberPassphrase(username) },
+		func() (bool, bool) { return e.GetConfig().GetRememberPassphrase(username) },
 	)
 }
 
 func GetPlatformString() string {
+	if IsIPad {
+		return "ipad"
+	}
 	if isIOS {
 		return "ios"
 	}
-	return runtime.GOOS
+	platform := runtime.GOOS
+	if platform == "darwin" && runtime.GOARCH == "arm64" {
+		platform = "darwin-arm64"
+	}
+	return platform
 }
 
 func IsMobilePlatform() bool {
 	s := GetPlatformString()
-	return (s == "ios" || s == "android")
+	return (s == "ios" || s == "android" || s == "ipad")
+}
+
+func IsAndroid() bool {
+	return GetPlatformString() == "android"
 }
 
 func (e *Env) AllowPTrace() bool {

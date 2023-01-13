@@ -1,3 +1,5 @@
+// @ts-nocheck
+/*
 import {action} from '@storybook/addon-actions'
 
 if (!__STORYBOOK__) {
@@ -32,3 +34,5 @@ export const BrowserWindow = {getFocusedWindow: () => {}}
 export const Menu = {}
 export const powerMonitor = {}
 export const powerSaveBlocker = {}
+*/
+export default {}

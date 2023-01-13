@@ -23,6 +23,7 @@ import (
 	"github.com/keybase/client/go/kbfs/kbfsmd"
 	"github.com/keybase/client/go/kbfs/test/clocktest"
 	"github.com/keybase/client/go/kbfs/tlf"
+	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -39,6 +40,7 @@ type testBWDelegate struct {
 	testCtx    context.Context
 	stateCh    chan bwState
 	shutdownCh chan struct{}
+	testDoneCh chan struct{}
 }
 
 func (d testBWDelegate) GetBackgroundContext() context.Context {
@@ -48,6 +50,9 @@ func (d testBWDelegate) GetBackgroundContext() context.Context {
 func (d testBWDelegate) OnNewState(ctx context.Context, bws bwState) {
 	select {
 	case d.stateCh <- bws:
+	case <-d.testDoneCh:
+		// The test is over, so anything waiting on a state change is
+		// likely some errant race that's probably not worth fixing.
 	case <-ctx.Done():
 		assert.Fail(d.t, ctx.Err().Error())
 	}
@@ -79,26 +84,26 @@ type testTLFJournalConfig struct {
 	codecGetter
 	logMaker
 	*testSyncedTlfGetterSetter
-	t                           *testing.T
-	tlfID                       tlf.ID
-	splitter                    data.BlockSplitter
-	crypto                      *CryptoLocal
-	bcache                      data.BlockCache
-	bops                        BlockOps
-	mdcache                     MDCache
-	ver                         kbfsmd.MetadataVer
-	reporter                    Reporter
-	uid                         keybase1.UID
-	verifyingKey                kbfscrypto.VerifyingKey
-	ekg                         singleEncryptionKeyGetter
-	nug                         idutil.NormalizedUsernameGetter
-	mdserver                    MDServer
-	dlTimeout                   time.Duration
-	subsciptionManagerPublisher SubscriptionManagerPublisher
+	t                            *testing.T
+	tlfID                        tlf.ID
+	splitter                     data.BlockSplitter
+	crypto                       *CryptoLocal
+	bcache                       data.BlockCache
+	bops                         BlockOps
+	mdcache                      MDCache
+	ver                          kbfsmd.MetadataVer
+	reporter                     Reporter
+	uid                          keybase1.UID
+	verifyingKey                 kbfscrypto.VerifyingKey
+	ekg                          singleEncryptionKeyGetter
+	nug                          idutil.NormalizedUsernameGetter
+	mdserver                     MDServer
+	dlTimeout                    time.Duration
+	subscriptionManagerPublisher SubscriptionManagerPublisher
 }
 
 func (c testTLFJournalConfig) SubscriptionManagerPublisher() SubscriptionManagerPublisher {
-	return c.subsciptionManagerPublisher
+	return c.subscriptionManagerPublisher
 }
 
 func (c testTLFJournalConfig) BlockSplitter() data.BlockSplitter {
@@ -249,7 +254,7 @@ func setupTLFJournalTest(
 
 	mockPublisher := NewMockSubscriptionManagerPublisher(gomock.NewController(t))
 	config = &testTLFJournalConfig{
-		newTestCodecGetter(), newTestLogMaker(t),
+		newTestCodecGetter(), newTestLogMakerWithVDebug(t, libkb.VLog1String),
 		newTestSyncedTlfGetterSetter(), t,
 		tlf.FakeID(1, tlf.Private), bsplitter, crypto,
 		nil, nil, NewMDCacheStandard(10), ver,
@@ -257,8 +262,12 @@ func setupTLFJournalTest(
 		mdserver, defaultDiskLimitMaxDelay + time.Second,
 		mockPublisher,
 	}
-	mockPublisher.EXPECT().PublishChange(keybase1.SubscriptionTopic_FAVORITES).AnyTimes()
-	mockPublisher.EXPECT().PublishChange(keybase1.SubscriptionTopic_JOURNAL_STATUS).AnyTimes()
+	mockPublisher.EXPECT().PublishChange(
+		keybase1.SubscriptionTopic_FAVORITES).AnyTimes()
+	mockPublisher.EXPECT().PublishChange(
+		keybase1.SubscriptionTopic_JOURNAL_STATUS).AnyTimes()
+	mockPublisher.EXPECT().PublishChange(
+		keybase1.SubscriptionTopic_FILES_TAB_BADGE).AnyTimes()
 
 	ctx, cancel = context.WithTimeout(
 		context.Background(), individualTestTimeout)
@@ -276,6 +285,7 @@ func setupTLFJournalTest(
 		testCtx:    ctx,
 		stateCh:    make(chan bwState),
 		shutdownCh: make(chan struct{}),
+		testDoneCh: make(chan struct{}),
 	}
 
 	tempdir, err = ioutil.TempDir(os.TempDir(), "tlf_journal")
@@ -325,6 +335,10 @@ func teardownTLFJournalTest(
 	ctx context.Context, tempdir string, config *testTLFJournalConfig,
 	cancel context.CancelFunc, tlfJournal *tlfJournal,
 	delegate testBWDelegate) {
+	// If there are any errant state changes left in the journal, this
+	// will cause them to be aborted.
+	close(delegate.testDoneCh)
+
 	// Shutdown first so we don't get the Done() signal (from the
 	// cancel() call) spuriously.
 	tlfJournal.shutdown(ctx)
@@ -447,7 +461,8 @@ func testTLFJournalBlockOpBasic(t *testing.T, ver kbfsmd.MetadataVer) {
 
 	putBlock(ctx, t, config, tlfJournal, []byte{1, 2, 3, 4})
 	numFlushed, rev, converted, err :=
-		tlfJournal.flushBlockEntries(ctx, firstValidJournalOrdinal+1)
+		tlfJournal.flushBlockEntries(ctx, firstValidJournalOrdinal+1,
+			kbfsmd.ID{})
 	require.NoError(t, err)
 	require.Equal(t, 1, numFlushed)
 	require.Equal(t, rev, kbfsmd.RevisionUninitialized)
@@ -532,7 +547,8 @@ func testTLFJournalBlockOpDiskByteLimit(t *testing.T, ver kbfsmd.MetadataVer) {
 	}()
 
 	numFlushed, rev, converted, err :=
-		tlfJournal.flushBlockEntries(ctx, firstValidJournalOrdinal+1)
+		tlfJournal.flushBlockEntries(ctx, firstValidJournalOrdinal+1,
+			kbfsmd.ID{})
 	require.NoError(t, err)
 	require.Equal(t, 1, numFlushed)
 	require.Equal(t, rev, kbfsmd.RevisionUninitialized)
@@ -574,7 +590,8 @@ func testTLFJournalBlockOpDiskFileLimit(t *testing.T, ver kbfsmd.MetadataVer) {
 	}()
 
 	numFlushed, rev, converted, err :=
-		tlfJournal.flushBlockEntries(ctx, firstValidJournalOrdinal+1)
+		tlfJournal.flushBlockEntries(ctx, firstValidJournalOrdinal+1,
+			kbfsmd.ID{})
 	require.NoError(t, err)
 	require.Equal(t, 1, numFlushed)
 	require.Equal(t, rev, kbfsmd.RevisionUninitialized)
@@ -622,7 +639,8 @@ func testTLFJournalBlockOpDiskQuotaLimit(t *testing.T, ver kbfsmd.MetadataVer) {
 	}()
 
 	numFlushed, rev, converted, err :=
-		tlfJournal.flushBlockEntries(ctx, firstValidJournalOrdinal+1)
+		tlfJournal.flushBlockEntries(ctx, firstValidJournalOrdinal+1,
+			kbfsmd.ID{})
 	require.NoError(t, err)
 	require.Equal(t, 1, numFlushed)
 	require.Equal(t, rev, kbfsmd.RevisionUninitialized)
@@ -759,7 +777,8 @@ func testTLFJournalBlockOpDiskLimitTimeout(t *testing.T, ver kbfsmd.MetadataVer)
 
 	data := []byte{1, 2, 3, 4}
 	id, bCtx, serverHalf := config.makeBlock(data)
-	err := tlfJournal.putBlockData(ctx, id, bCtx, data, serverHalf)
+	putCtx := context.Background() // rely on default disk limit timeout
+	err := tlfJournal.putBlockData(putCtx, id, bCtx, data, serverHalf)
 	timeoutErr, ok := errors.Cause(err).(*ErrDiskLimitTimeout)
 	require.True(t, ok)
 	require.Error(t, timeoutErr.err)
@@ -963,7 +982,7 @@ func testTLFJournalFlushMDBasic(t *testing.T, ver kbfsmd.MetadataVer) {
 	var mdserver shimMDServer
 	config.mdserver = &mdserver
 
-	_, mdEnd, err := tlfJournal.getJournalEnds(ctx)
+	_, mdEnd, _, err := tlfJournal.getJournalEnds(ctx)
 	require.NoError(t, err)
 
 	for i := 0; i < mdCount; i++ {
@@ -1008,7 +1027,7 @@ func testTLFJournalFlushMDConflict(t *testing.T, ver kbfsmd.MetadataVer) {
 	mdserver.nextErr = kbfsmd.ServerErrorConflictRevision{}
 	config.mdserver = &mdserver
 
-	_, mdEnd, err := tlfJournal.getJournalEnds(ctx)
+	_, mdEnd, _, err := tlfJournal.getJournalEnds(ctx)
 	require.NoError(t, err)
 
 	// Simulate a flush with a conflict error halfway through.
@@ -1678,7 +1697,7 @@ func testTLFJournalResolveBranch(t *testing.T, ver kbfsmd.MetadataVer) {
 	mdserver.nextErr = kbfsmd.ServerErrorConflictRevision{}
 	config.mdserver = &mdserver
 
-	_, mdEnd, err := tlfJournal.getJournalEnds(ctx)
+	_, mdEnd, _, err := tlfJournal.getJournalEnds(ctx)
 	require.NoError(t, err)
 
 	// This will convert to a branch.
@@ -1699,12 +1718,12 @@ func testTLFJournalResolveBranch(t *testing.T, ver kbfsmd.MetadataVer) {
 		resolveMD, tlfJournal.key, nil)
 	require.NoError(t, err)
 
-	blockEnd, newMDEnd, err := tlfJournal.getJournalEnds(ctx)
+	blockEnd, newMDEnd, _, err := tlfJournal.getJournalEnds(ctx)
 	require.NoError(t, err)
 	require.Equal(t, firstRevision+1, newMDEnd)
 
 	blocks, b, maxMD, err := tlfJournal.getNextBlockEntriesToFlush(
-		ctx, blockEnd)
+		ctx, blockEnd, kbfsmd.ID{})
 	require.NoError(t, err)
 	require.Equal(t, firstRevision, maxMD)
 	// 3 blocks, 3 old MD markers, 1 new MD marker

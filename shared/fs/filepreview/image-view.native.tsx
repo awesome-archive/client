@@ -1,7 +1,7 @@
 import * as React from 'react'
 import * as Styles from '../../styles'
 import * as Kb from '../../common-adapters/mobile.native'
-import {ImageViewProps} from './image-view'
+import type {ImageViewProps} from './image-view'
 
 const {width: screenWidth, height: screenHeight} = Kb.NativeDimensions.get('window')
 
@@ -33,7 +33,7 @@ class ImageView extends React.Component<ImageViewProps, State> {
   }
 
   render() {
-    const {onLoadingStateChange} = this.props
+    const {onUrlError} = this.props
     return (
       <Kb.ZoomableBox
         contentContainerStyle={styles.zoomableBoxContainer}
@@ -51,8 +51,8 @@ class ImageView extends React.Component<ImageViewProps, State> {
               width: Math.min(this.state.width, screenWidth),
             },
           ])}
-          onLoadStart={onLoadingStateChange && (() => onLoadingStateChange(true))}
-          onLoadEnd={onLoadingStateChange && (() => onLoadingStateChange(false))}
+          showLoadingStateUntilLoaded={true}
+          onError={onUrlError && (() => onUrlError('image fetching error'))}
           resizeMode="contain"
         />
       </Kb.ZoomableBox>

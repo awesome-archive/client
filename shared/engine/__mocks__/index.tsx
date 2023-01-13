@@ -1,5 +1,5 @@
 /* eslint-env jest */
-
+/*
 import Session from '../session'
 
 console.error('loaded mock index')
@@ -13,7 +13,6 @@ class FakeEngine {
   rpc() {}
   listenOnConnect() {}
   listenOnDisconnect() {}
-  hasEverConnected() {}
   setIncomingActionCreator() {}
   createSession() {
     return new Session({
@@ -35,3 +34,5 @@ const makeEngine = mock
 
 export default mock
 export {getEngine, makeEngine}
+ */
+export {}

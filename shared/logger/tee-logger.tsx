@@ -1,4 +1,4 @@
-import {Logger, LogLevel} from './types'
+import type {Logger, LogLevel} from './types'
 
 // Log to multiple loggers, only dump from the first one
 class TeeLogger implements Logger {
@@ -15,11 +15,11 @@ class TeeLogger implements Logger {
     this._otherLoggers.map(l => l.log(...args))
   }
 
-  dump = (levelPrefix: LogLevel) => {
+  dump = async (levelPrefix: LogLevel) => {
     return this._loggerToDumpFrom.dump(levelPrefix)
   }
 
-  flush = () => {
+  flush = async () => {
     return this._loggerToDumpFrom.flush()
   }
 }

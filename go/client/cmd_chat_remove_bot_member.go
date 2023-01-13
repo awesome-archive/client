@@ -7,7 +7,6 @@ import (
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
-	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	isatty "github.com/mattn/go-isatty"
 	context "golang.org/x/net/context"
 )
@@ -26,13 +25,10 @@ func NewCmdChatRemoveBotMemberRunner(g *libkb.GlobalContext) *CmdChatRemoveBotMe
 }
 
 func newCmdChatRemoveBotMember(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {
-	flags := append(getConversationResolverFlags(), botSettingsFlags...)
+	flags := getConversationResolverFlags()
 	flags = append(flags, cli.StringFlag{
 		Name:  "u, user",
 		Usage: "username",
-	}, cli.StringFlag{
-		Name:  "r, role",
-		Usage: "team role (bot, restricted)",
 	})
 	return cli.Command{
 		Name:         "remove-bot-member",
@@ -54,10 +50,8 @@ func (c *CmdChatRemoveBotMember) Run() (err error) {
 	}
 
 	if err = resolver.ChatClient.RemoveBotMember(context.TODO(), chat1.RemoveBotMemberArg{
-		TlfName:     conversationInfo.TlfName,
-		Username:    c.username,
-		MembersType: conversationInfo.MembersType,
-		TlfPublic:   conversationInfo.Visibility == keybase1.TLFVisibility_PUBLIC,
+		ConvID:   conversationInfo.Id,
+		Username: c.username,
 	}); err != nil {
 		return err
 	}

@@ -50,7 +50,7 @@ func makeFSWithJournal(t *testing.T, subdir string) (
 	config := libkbfs.MakeTestConfigOrBustLoggedInWithMode(
 		t, 0, libkbfs.InitSingleOp, "user1")
 
-	tempdir, err := ioutil.TempDir(os.TempDir(), "journal_server")
+	tempdir, err := os.MkdirTemp(os.TempDir(), "journal_server")
 	require.NoError(t, err)
 	defer func() {
 		if err != nil {
@@ -706,6 +706,7 @@ func TestArchivedByRevision(t *testing.T) {
 
 	_, _, fsArchived := makeFSWithBranch(
 		t, data.MakeRevBranchName(kbfsmd.Revision(1)), "")
+	defer libkbfs.CheckConfigAndShutdown(ctx, t, fsArchived.config)
 	fis, err = fsArchived.ReadDir("")
 	require.NoError(t, err)
 	require.Len(t, fis, 0)

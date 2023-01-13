@@ -3,28 +3,28 @@ import * as Kb from '../../../../common-adapters'
 import * as Styles from '../../../../styles'
 import * as Container from '../../../../util/container'
 import * as RouteTreeGen from '../../../../actions/route-tree-gen'
-import * as Types from '../../../../constants/types/chat2'
 import * as Chat2Gen from '../../../../actions/chat2-gen'
 import * as ConfigGen from '../../../../actions/config-gen'
 import * as Constants from '../../../../constants/chat2'
 import * as RPCChatTypes from '../../../../constants/types/rpc-chat-gen'
-import {isIOS} from '../../../../constants/platform'
+import LocationMap from '../../../location-map'
 import HiddenString from '../../../../util/hidden-string'
-import {requestLocationPermission} from '../../../../actions/platform-specific'
+import {watchPositionForMap} from '../../../../actions/platform-specific'
 
-type Props = Container.RouteProps<{conversationIDKey: Types.ConversationIDKey}>
+type Props = Container.RouteProps<'chatLocationPreview'>
 
 const LocationPopup = (props: Props) => {
-  // state
-  const conversationIDKey = Container.getRouteProps(props, 'conversationIDKey', Constants.noConversationIDKey)
-  const {httpSrvAddress, httpSrvToken, location} = Container.useSelector(state => ({
-    httpSrvAddress: state.config.httpSrvAddress,
-    httpSrvToken: state.config.httpSrvToken,
-    location: state.chat2.lastCoord,
-  }))
+  const conversationIDKey = props.route.params?.conversationIDKey ?? Constants.noConversationIDKey
+  const httpSrvAddress = Container.useSelector(state => state.config.httpSrvAddress)
+  const httpSrvToken = Container.useSelector(state => state.config.httpSrvToken)
+  const location = Container.useSelector(state => state.chat2.lastCoord)
+  const locationDenied = Container.useSelector(
+    state =>
+      state.chat2.commandStatusMap.get(conversationIDKey)?.displayType ===
+      RPCChatTypes.UICommandStatusDisplayTyp.error
+  )
+  const username = Container.useSelector(state => state.config.username)
   const [mapLoaded, setMapLoaded] = React.useState(false)
-  const [locationDenied, setLocationDenied] = React.useState(false)
-  // dispatch
   const dispatch = Container.useDispatch()
   const onClose = () => {
     dispatch(RouteTreeGen.createClearModals())
@@ -41,51 +41,22 @@ const LocationPopup = (props: Props) => {
       })
     )
   }
-  // lifecycle
   React.useEffect(() => {
-    let watchID: number | null
-    async function watchPosition() {
-      try {
-        await requestLocationPermission(RPCChatTypes.UIWatchPositionPerm.base)
-      } catch (e) {
-        setLocationDenied(true)
-        return
-      }
-      watchID = navigator.geolocation.watchPosition(
-        pos => {
-          dispatch(
-            Chat2Gen.createUpdateLastCoord({
-              coord: {
-                accuracy: Math.floor(pos.coords.accuracy),
-                lat: pos.coords.latitude,
-                lon: pos.coords.longitude,
-              },
-            })
-          )
-        },
-        err => {
-          if (err.code && err.code === 1) {
-            setLocationDenied(true)
-          }
-        },
-        {enableHighAccuracy: isIOS, maximumAge: isIOS ? 0 : undefined}
-      )
-    }
-    watchPosition()
+    let unwatch: undefined | (() => void)
+    watchPositionForMap(dispatch, conversationIDKey)
+      .then(unsub => {
+        unwatch = unsub
+      })
+      .catch(() => {})
     return () => {
-      if (watchID !== null) {
-        navigator.geolocation.clearWatch(watchID)
-      }
+      unwatch?.()
     }
-  }, [])
+  }, [dispatch, conversationIDKey])
 
-  // render
   const width = Math.ceil(Styles.dimensionWidth)
   const height = Math.ceil(Styles.dimensionHeight - 320)
   const mapSrc = location
-    ? `http://${httpSrvAddress}/map?lat=${location.lat}&lon=${
-        location.lon
-      }&width=${width}&height=${height}&token=${httpSrvToken}`
+    ? `http://${httpSrvAddress}/map?lat=${location.lat}&lon=${location.lon}&width=${width}&height=${height}&username=${username}&token=${httpSrvToken}`
     : ''
   return (
     <Kb.Modal
@@ -113,7 +84,7 @@ const LocationPopup = (props: Props) => {
             <Kb.Button
               disabled={locationDenied}
               fullWidth={true}
-              label="Share location for 1 hours"
+              label="Share location for 1 hour"
               onClick={() => onLocationShare('1h')}
               mode="Secondary"
               type="Default"
@@ -130,7 +101,6 @@ const LocationPopup = (props: Props) => {
               style={styles.liveButton}
               subLabel="Live location"
             />
-            <Kb.Divider />
             <Kb.Button
               disabled={locationDenied}
               fullWidth={true}
@@ -156,7 +126,7 @@ const LocationPopup = (props: Props) => {
           <Kb.Button label="Open settings" onClick={onSettings} />
         </Kb.Box2>
       ) : (
-        <Kb.LocationMap mapSrc={mapSrc} height={height} width={width} onLoad={() => setMapLoaded(true)} />
+        <LocationMap mapSrc={mapSrc} height={height} width={width} onLoad={() => setMapLoaded(true)} />
       )}
     </Kb.Modal>
   )

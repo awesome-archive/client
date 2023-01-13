@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
 
@@ -9,7 +8,7 @@ type AccountEntryProps = {
   isDefault?: boolean
   keybaseUser: string
   name: string
-  showWalletIcon: boolean
+  showWalletIcon?: boolean
   style?: Styles.StylesCrossPlatform
 }
 
@@ -24,11 +23,11 @@ const AccountEntry = (props: AccountEntryProps) => (
     centerChildren={props.center}
     fullWidth={props.fullWidth}
   >
-    {props.showWalletIcon && (
+    {(props.showWalletIcon ?? true) && (
       <Kb.Icon
         type={Styles.isMobile ? 'icon-wallet-32' : 'icon-wallet-64'}
         color={Styles.globalColors.black}
-        style={Kb.iconCastPlatformStyles(styles.icon)}
+        style={styles.icon}
       />
     )}
     <Kb.Box2 direction="vertical" style={styles.rightColumn}>
@@ -38,11 +37,7 @@ const AccountEntry = (props: AccountEntryProps) => (
         style={Styles.collapseStyles([styles.user, props.center && styles.userCenter])}
       >
         {props.keybaseUser && props.isDefault && (
-          <Kb.Avatar
-            size={16}
-            style={Kb.avatarCastPlatformStyles(styles.avatar)}
-            username={props.keybaseUser}
-          />
+          <Kb.Avatar size={16} style={styles.avatar} username={props.keybaseUser} />
         )}
         <Kb.Text type="BodySemibold" style={styles.title}>
           {props.name}
@@ -58,10 +53,6 @@ const AccountEntry = (props: AccountEntryProps) => (
     </Kb.Box2>
   </Kb.Box2>
 )
-
-AccountEntry.defaultProps = {
-  showWalletIcon: true,
-}
 
 const rightColumnStyle = Styles.platformStyles({
   isElectron: {

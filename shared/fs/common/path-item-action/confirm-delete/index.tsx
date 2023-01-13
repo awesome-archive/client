@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../../../common-adapters'
 import * as Styles from '../../../../styles'
 import * as Types from '../../../../constants/types/fs'
@@ -10,7 +9,7 @@ export type Props = {
   title: string
 }
 
-const _ReallyDeleteFile = (props: Props) =>
+const ReallyDeleteFile = (props: Props) =>
   props.path ? (
     <Kb.ConfirmModal
       confirmText="Yes, delete"
@@ -22,4 +21,4 @@ const _ReallyDeleteFile = (props: Props) =>
     />
   ) : null
 
-export default Kb.HeaderOnMobile(_ReallyDeleteFile)
+export default ReallyDeleteFile

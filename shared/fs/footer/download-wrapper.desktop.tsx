@@ -1,2 +1,3 @@
-import {Props} from './download-wrapper'
-export default (props: Props) => props.children
+import type {Props} from './download-wrapper'
+const DownloadWrapper = (props: Props) => props.children
+export default DownloadWrapper

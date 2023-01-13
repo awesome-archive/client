@@ -1,35 +1,47 @@
 import * as Chat2Gen from '../chat2-gen'
 import * as ConfigGen from '../config-gen'
 import * as Constants from '../../constants/push'
-import * as FsGen from '../fs-gen'
-import * as Types from '../../constants/types/push'
-import * as FsTypes from '../../constants/types/fs'
+import * as Container from '../../util/container'
 import * as NotificationsGen from '../notifications-gen'
 import * as ProfileGen from '../profile-gen'
 import * as PushGen from '../push-gen'
-import * as PushNotifications from 'react-native-push-notification'
 import * as RPCChatTypes from '../../constants/types/rpc-chat-gen'
 import * as RPCTypes from '../../constants/types/rpc-gen'
-import * as Saga from '../../util/saga'
-import * as WaitingGen from '../waiting-gen'
 import * as RouteTreeGen from '../route-tree-gen'
 import * as Tabs from '../../constants/tabs'
+import * as WaitingGen from '../waiting-gen'
+import PushNotificationIOS from '@react-native-community/push-notification-ios'
 import logger from '../../logger'
-import {NativeModules, NativeEventEmitter} from 'react-native'
+import type * as ChatTypes from '../../constants/types/chat2'
+import type * as Types from '../../constants/types/push'
 import {isIOS, isAndroid} from '../../constants/platform'
-import * as Container from '../../util/container'
+import {
+  iosGetHasShownPushPrompt,
+  androidRequestPushPermissions,
+  androidCheckPushPermissions,
+  androidGetRegistrationToken,
+  androidSetApplicationIconBadgeNumber,
+  androidGetInitialBundleFromNotification,
+  androidGetInitialShareFileUrl,
+  androidGetInitialShareText,
+  getNativeEmitter,
+} from 'react-native-kb'
+
+const setApplicationIconBadgeNumber = (n: number) => {
+  if (isIOS) {
+    PushNotificationIOS.setApplicationIconBadgeNumber(n)
+  } else {
+    androidSetApplicationIconBadgeNumber(n)
+  }
+}
 
 let lastCount = -1
-const updateAppBadge = (_: Container.TypedState, action: NotificationsGen.ReceivedBadgeStatePayload) => {
-  const count = (action.payload.badgeState.conversations || []).reduce(
-    (total, c) => (c.badgeCounts ? total + c.badgeCounts[`${RPCTypes.DeviceType.mobile}`] : total),
-    0
-  )
-
-  PushNotifications.setApplicationIconBadgeNumber(count)
+const updateAppBadge = (_: unknown, action: NotificationsGen.ReceivedBadgeStatePayload) => {
+  const count = action.payload.badgeState.bigTeamBadgeCount + action.payload.badgeState.smallTeamBadgeCount
+  setApplicationIconBadgeNumber(count)
   // Only do this native call if the count actually changed, not over and over if its zero
-  if (count === 0 && lastCount !== 0) {
-    PushNotifications.cancelAllLocalNotifications()
+  if (isIOS && count === 0 && lastCount !== 0) {
+    PushNotificationIOS.removeAllPendingNotificationRequests()
   }
   lastCount = count
 }
@@ -53,32 +65,32 @@ const updateAppBadge = (_: Container.TypedState, action: NotificationsGen.Receiv
 // At startup the flow above can be racy, since we may not have registered the
 // event listener before the event is emitted. In that case you can always use
 // `getInitialPushAndroid`.
-const listenForNativeAndroidIntentNotifications = (emitter: (action: Container.TypedActions) => void) => {
-  const RNEmitter = new NativeEventEmitter(NativeModules.KeybaseEngine)
+const listenForNativeAndroidIntentNotifications = async (listenerApi: Container.ListenerApi) => {
+  const pushToken = await androidGetRegistrationToken()
+  logger.debug('[PushToken] received new token: ', pushToken)
+  listenerApi.dispatch(PushGen.createUpdatePushToken({token: pushToken}))
+
+  const RNEmitter = getNativeEmitter()
   RNEmitter.addListener('initialIntentFromNotification', evt => {
     const notification = evt && Constants.normalizePush(evt)
-    notification && emitter(PushGen.createNotification({notification}))
+    notification && listenerApi.dispatch(PushGen.createNotification({notification}))
   })
 
-  // TODO: move this out of this file.
-  // FIXME: sometimes this doubles up on a cold start--we've already executed the previous code.
-  // TODO: fixme this is buggy. See: TRIAGE-462
   RNEmitter.addListener('onShareData', evt => {
     logger.debug('[ShareDataIntent]', evt)
-    emitter(RouteTreeGen.createSwitchLoggedIn({loggedIn: true}))
-    emitter(FsGen.createSetIncomingShareLocalPath({localPath: FsTypes.stringToLocalPath(evt.localPath)}))
-    emitter(FsGen.createShowIncomingShare({initialDestinationParentPath: FsTypes.stringToPath('/keybase')}))
-  })
-  RNEmitter.addListener('onShareText', evt => {
-    logger.debug('[ShareTextIntent]', evt)
-    // TODO: implement
+    listenerApi.dispatch(
+      ConfigGen.createAndroidShare({
+        text: evt.text,
+        url: evt.localPath,
+      })
+    )
   })
 }
 
-const listenForPushNotificationsFromJS = (emitter: (action: Container.TypedActions) => void) => {
-  const onRegister = (token: {token: string}) => {
+const iosListenForPushNotificationsFromJS = (listenerApi: Container.ListenerApi) => {
+  const onRegister = (token: string) => {
     logger.debug('[PushToken] received new token: ', token)
-    emitter(PushGen.createUpdatePushToken({token: token.token}))
+    listenerApi.dispatch(PushGen.createUpdatePushToken({token}))
   }
 
   const onNotification = (n: Object) => {
@@ -87,77 +99,64 @@ const listenForPushNotificationsFromJS = (emitter: (action: Container.TypedActio
     if (!notification) {
       return
     }
-    emitter(PushGen.createNotification({notification}))
+    listenerApi.dispatch(PushGen.createNotification({notification}))
   }
 
-  const onError = (error: Error) => {
-    logger.error('push error:', error)
-  }
-
-  PushNotifications.configure({
-    onError,
-    onNotification,
-    onRegister,
-    popInitialNotification: false,
-    // Don't request permissions for ios, we'll ask later, after showing UI
-    requestPermissions: !isIOS,
-    senderID: Constants.androidSenderID,
-  })
+  isIOS && PushNotificationIOS.addEventListener('notification', onNotification)
+  isIOS && PushNotificationIOS.addEventListener('localNotification', onNotification)
+  isIOS && PushNotificationIOS.addEventListener('register', onRegister)
 }
 
-function* setupPushEventLoop() {
-  const pushChannel = yield Saga.eventChannel(emitter => {
-    if (!isIOS) {
-      listenForNativeAndroidIntentNotifications(emitter)
-    }
-    listenForPushNotificationsFromJS(emitter)
-
-    // we never unsubscribe
-    return () => {}
-  }, Saga.buffers.expanding(10))
-
-  while (true) {
-    const action = yield Saga.take(pushChannel)
-    yield Saga.put(action)
+const setupPushEventLoop = async (_s: unknown, _a: unknown, listenerApi: Container.ListenerApi) => {
+  if (isAndroid) {
+    try {
+      await listenForNativeAndroidIntentNotifications(listenerApi)
+    } catch {}
+  } else {
+    iosListenForPushNotificationsFromJS(listenerApi)
   }
 }
 
-function* handleLoudMessage(notification: Types.PushNotification) {
+const handleLoudMessage = async (
+  notification: Types.PushNotification,
+  listenerApi: Container.ListenerApi
+) => {
   if (notification.type !== 'chat.newmessage') {
     return
   }
   // We only care if the user clicked while in session
   if (!notification.userInteraction) {
+    logger.warn('push ignore non userInteraction')
     return
   }
 
   const {conversationIDKey, unboxPayload, membersType} = notification
 
-  // immediately show the thread on top of the inbox w/o a nav
-  const actions = [
-    RouteTreeGen.createNavigateAppend({path: [{props: {conversationIDKey}, selected: 'chatConversation'}]}),
-  ]
-  yield Saga.put(RouteTreeGen.createClearModals())
-  yield Saga.put(RouteTreeGen.createResetStack({actions, index: 1, tab: 'tabs.chatTab'}))
-  yield Saga.put(RouteTreeGen.createSwitchTab({tab: 'tabs.chatTab'}))
-  yield Saga.put(Chat2Gen.createSelectConversation({conversationIDKey, reason: 'push'}))
+  logger.warn('push selecting ', conversationIDKey)
+  listenerApi.dispatch(
+    Chat2Gen.createNavigateToThread({conversationIDKey, pushBody: unboxPayload, reason: 'push'})
+  )
   if (unboxPayload && membersType && !isIOS) {
     logger.info('[Push] unboxing message')
     try {
-      yield RPCChatTypes.localUnboxMobilePushNotificationRpcPromise({
+      await RPCChatTypes.localUnboxMobilePushNotificationRpcPromise({
         convID: conversationIDKey,
         membersType,
         payload: unboxPayload,
         shouldAck: false,
       })
     } catch (e) {
-      logger.info('[Push] failed to unbox message form payload')
+      logger.info('[Push] failed to unbox message from payload')
     }
   }
 }
 
 // on iOS the go side handles a lot of push details
-function* handlePush(state: Container.TypedState, action: PushGen.NotificationPayload) {
+const handlePush = async (
+  state: Container.TypedState,
+  action: PushGen.NotificationPayload,
+  listenerApi: Container.ListenerApi
+) => {
   try {
     const notification = action.payload.notification
     logger.info('[Push]: ' + notification.type || 'unknown')
@@ -166,33 +165,33 @@ function* handlePush(state: Container.TypedState, action: PushGen.NotificationPa
       case 'chat.readmessage':
         logger.info('[Push] read message')
         if (notification.badges === 0) {
-          PushNotifications.cancelAllLocalNotifications()
+          isIOS && PushNotificationIOS.removeAllPendingNotificationRequests()
         }
         break
       case 'chat.newmessageSilent_2':
         // entirely handled by go on ios and in onNotification on Android
         break
       case 'chat.newmessage':
-        yield* handleLoudMessage(notification)
+        await handleLoudMessage(notification, listenerApi)
         break
       case 'follow':
         // We only care if the user clicked while in session
         if (notification.userInteraction) {
           const {username} = notification
           logger.info('[Push] follower: ', username)
-          yield Saga.put(ProfileGen.createShowUserProfile({username}))
+          listenerApi.dispatch(ProfileGen.createShowUserProfile({username}))
         }
         break
       case 'chat.extension':
         {
           const {conversationIDKey} = notification
-          yield Saga.put(Chat2Gen.createSelectConversation({conversationIDKey, reason: 'extension'}))
+          listenerApi.dispatch(Chat2Gen.createNavigateToThread({conversationIDKey, reason: 'extension'}))
         }
         break
       case 'settings.contacts':
         if (state.config.loggedIn) {
-          yield Saga.put(RouteTreeGen.createSwitchTab({tab: Tabs.peopleTab}))
-          yield Saga.put(RouteTreeGen.createNavUpToScreen({routeName: 'peopleRoot'}))
+          listenerApi.dispatch(RouteTreeGen.createSwitchTab({tab: Tabs.peopleTab}))
+          listenerApi.dispatch(RouteTreeGen.createNavUpToScreen({name: 'peopleRoot'}))
         }
         break
     }
@@ -232,9 +231,13 @@ const uploadPushToken = async (state: Container.TypedState) => {
   return false as const
 }
 
-function* deletePushToken(state: Container.TypedState, action: ConfigGen.LogoutHandshakePayload) {
+const deletePushToken = async (
+  state: Container.TypedState,
+  action: ConfigGen.LogoutHandshakePayload,
+  listenerApi: Container.ListenerApi
+) => {
   const waitKey = 'push:deleteToken'
-  yield Saga.put(
+  listenerApi.dispatch(
     ConfigGen.createLogoutHandshakeWait({increment: true, name: waitKey, version: action.payload.version})
   )
 
@@ -245,15 +248,18 @@ function* deletePushToken(state: Container.TypedState, action: ConfigGen.LogoutH
       return
     }
 
-    yield RPCTypes.apiserverDeleteRpcPromise({
-      args: [{key: 'device_id', value: deviceID}, {key: 'token_type', value: Constants.tokenType}],
+    await RPCTypes.apiserverDeleteRpcPromise({
+      args: [
+        {key: 'device_id', value: deviceID},
+        {key: 'token_type', value: Constants.tokenType},
+      ],
       endpoint: 'device/push_token',
     })
     logger.info('[PushToken] deleted from server')
   } catch (e) {
     logger.error('[PushToken] delete failed', e)
   } finally {
-    yield Saga.put(
+    listenerApi.dispatch(
       ConfigGen.createLogoutHandshakeWait({
         increment: false,
         name: waitKey,
@@ -263,69 +269,98 @@ function* deletePushToken(state: Container.TypedState, action: ConfigGen.LogoutH
   }
 }
 
-const requestPermissionsFromNative = () =>
-  isIOS ? PushNotifications.requestPermissions() : Promise.resolve()
-const askNativeIfSystemPushPromptHasBeenShown = () =>
-  isIOS ? NativeModules.PushPrompt.getHasShownPushPrompt() : Promise.resolve(false)
-const checkPermissionsFromNative = () => new Promise(resolve => PushNotifications.checkPermissions(resolve))
-const monsterStorageKey = 'shownMonsterPushPrompt'
-
-const neverShowMonsterAgain = async (state: Container.TypedState) => {
-  if (!state.push.showPushPrompt) {
-    await RPCTypes.configGuiSetValueRpcPromise({
-      path: `ui.${monsterStorageKey}`,
-      value: {b: true, isNull: false},
-    })
+const requestPermissionsFromNative: () => Promise<{
+  alert: boolean
+  badge: boolean
+  sound: boolean
+}> = async () => {
+  if (isIOS) {
+    const perm = await (PushNotificationIOS.requestPermissions() as any)
+    return perm
+  } else {
+    const on = await androidRequestPushPermissions()
+    const perm = {alert: on, badge: on, sound: on}
+    return perm
   }
 }
 
-function* requestPermissions() {
+const askNativeIfSystemPushPromptHasBeenShown = async () =>
+  isIOS ? iosGetHasShownPushPrompt() ?? Promise.resolve(false) : Promise.resolve(false)
+const checkPermissionsFromNative = async () =>
+  new Promise<{alert?: boolean; badge?: boolean; sound?: boolean}>((resolve, reject) => {
+    if (isIOS) {
+      PushNotificationIOS.checkPermissions(perms => resolve(perms))
+    } else {
+      androidCheckPushPermissions()
+        .then(on => resolve({alert: on, badge: on, sound: on}))
+        .catch(() => reject())
+    }
+  })
+const monsterStorageKey = 'shownMonsterPushPrompt'
+
+const neverShowMonsterAgain = async (
+  state: Container.TypedState,
+  action: PushGen.ShowPermissionsPromptPayload | PushGen.RejectPermissionsPayload
+) => {
+  if (state.push.showPushPrompt) {
+    return
+  }
+
+  if (action.type === PushGen.showPermissionsPrompt && !action.payload.persistSkip) {
+    return
+  }
+
+  await RPCTypes.configGuiSetValueRpcPromise({
+    path: `ui.${monsterStorageKey}`,
+    value: {b: true, isNull: false},
+  })
+}
+
+const requestPermissions = async (_s: unknown, _a: unknown, listenerApi: Container.ListenerApi) => {
   if (isIOS) {
-    const shownPushPrompt = yield askNativeIfSystemPushPromptHasBeenShown()
+    const shownPushPrompt = await askNativeIfSystemPushPromptHasBeenShown()
     if (shownPushPrompt) {
       // we've already shown the prompt, take them to settings
-      yield Saga.put(ConfigGen.createOpenAppSettings())
-      yield Saga.put(PushGen.createShowPermissionsPrompt({show: false}))
+      listenerApi.dispatch(ConfigGen.createOpenAppSettings())
+      listenerApi.dispatch(PushGen.createShowPermissionsPrompt({persistSkip: true, show: false}))
       return
     }
   }
   try {
-    yield Saga.put(WaitingGen.createIncrementWaiting({key: Constants.permissionsRequestingWaitingKey}))
+    listenerApi.dispatch(ConfigGen.createOpenAppSettings())
+    listenerApi.dispatch(WaitingGen.createIncrementWaiting({key: Constants.permissionsRequestingWaitingKey}))
     logger.info('[PushRequesting] asking native')
-    const permissions = yield requestPermissionsFromNative()
+    await requestPermissionsFromNative()
+    const permissions = await checkPermissionsFromNative()
     logger.info('[PushRequesting] after prompt:', permissions)
     if (permissions && (permissions.alert || permissions.badge)) {
       logger.info('[PushRequesting] enabled')
-      yield Saga.put(PushGen.createUpdateHasPermissions({hasPermissions: true}))
+      listenerApi.dispatch(PushGen.createUpdateHasPermissions({hasPermissions: true}))
     } else {
       logger.info('[PushRequesting] disabled')
-      yield Saga.put(PushGen.createUpdateHasPermissions({hasPermissions: false}))
+      listenerApi.dispatch(PushGen.createUpdateHasPermissions({hasPermissions: false}))
     }
   } finally {
-    yield Saga.put(WaitingGen.createDecrementWaiting({key: Constants.permissionsRequestingWaitingKey}))
-    yield Saga.put(PushGen.createShowPermissionsPrompt({show: false}))
+    listenerApi.dispatch(WaitingGen.createDecrementWaiting({key: Constants.permissionsRequestingWaitingKey}))
+    listenerApi.dispatch(PushGen.createShowPermissionsPrompt({persistSkip: true, show: false}))
   }
 }
 
-function* initialPermissionsCheck() {
-  const hasPermissions = yield _checkPermissions(null)
+const initialPermissionsCheck = async (listenerApi: Container.ListenerApi) => {
+  const hasPermissions = await _checkPermissions(null, listenerApi)
   if (hasPermissions) {
     // Get the token
-    yield Saga.spawn(requestPermissionsFromNative)
+    await requestPermissionsFromNative()
   } else {
-    const shownNativePushPromptTask = yield Saga._fork(askNativeIfSystemPushPromptHasBeenShown)
-    const shownMonsterPushPromptTask = yield Saga._fork(async () => {
-      try {
-        const v = await RPCTypes.configGuiGetValueRpcPromise({path: `ui.${monsterStorageKey}`})
-        return !!v.b
-      } catch (_) {
-        return false
-      }
-    })
-    const [shownNativePushPrompt, shownMonsterPushPrompt] = yield Saga.join(
-      shownNativePushPromptTask,
-      shownMonsterPushPromptTask
-    )
+    const shownNativePushPromptTask = askNativeIfSystemPushPromptHasBeenShown
+    const shownMonsterPushPromptTask = async () => {
+      const v = await RPCTypes.configGuiGetValueRpcPromise({path: `ui.${monsterStorageKey}`})
+      return !!v.b
+    }
+    const [shownNativePushPrompt, shownMonsterPushPrompt] = await Promise.all([
+      Container.neverThrowPromiseFunc(shownNativePushPromptTask),
+      Container.neverThrowPromiseFunc(shownMonsterPushPromptTask),
+    ])
     logger.info(
       '[PushInitialCheck] shownNativePushPrompt:',
       shownNativePushPrompt,
@@ -334,16 +369,23 @@ function* initialPermissionsCheck() {
     )
     if (!shownNativePushPrompt && !shownMonsterPushPrompt) {
       logger.info('[PushInitialCheck] no permissions, never shown prompt, now show prompt')
-      yield Saga.put(PushGen.createShowPermissionsPrompt({show: true}))
+      listenerApi.dispatch(PushGen.createShowPermissionsPrompt({show: true}))
     }
   }
 }
 
-function* checkPermissions(_: Container.TypedState, action: ConfigGen.MobileAppStatePayload) {
-  yield* _checkPermissions(action)
+const checkPermissions = async (
+  _: Container.TypedState,
+  action: ConfigGen.MobileAppStatePayload,
+  listenerApi: Container.ListenerApi
+) => {
+  await _checkPermissions(action, listenerApi)
 }
 // Call when we foreground and on app start, action is null on app start. Returns if you have permissions
-function* _checkPermissions(action: ConfigGen.MobileAppStatePayload | null) {
+const _checkPermissions = async (
+  action: ConfigGen.MobileAppStatePayload | null,
+  listenerApi: Container.ListenerApi
+) => {
   // Only recheck on foreground, not background
   if (action && action.payload.nextAppState !== 'active') {
     logger.info('[PushCheck] skip on backgrounding')
@@ -351,41 +393,55 @@ function* _checkPermissions(action: ConfigGen.MobileAppStatePayload | null) {
   }
 
   logger.debug(`[PushCheck] checking ${action ? 'on foreground' : 'on startup'}`)
-  const permissions = yield checkPermissionsFromNative()
+  const permissions = await checkPermissionsFromNative()
   if (permissions.alert || permissions.badge) {
-    const state: Container.TypedState = yield* Saga.selectState()
+    const state = listenerApi.getState()
     if (!state.push.hasPermissions) {
       logger.info('[PushCheck] enabled: getting token')
-      yield Saga.put(PushGen.createUpdateHasPermissions({hasPermissions: true}))
-      yield requestPermissionsFromNative()
+      listenerApi.dispatch(PushGen.createUpdateHasPermissions({hasPermissions: true}))
+      await requestPermissionsFromNative()
     } else {
       logger.info('[PushCheck] enabled already')
     }
     return true
   } else {
     logger.info('[PushCheck] disabled')
-    yield Saga.put(PushGen.createUpdateHasPermissions({hasPermissions: false}))
+    listenerApi.dispatch(PushGen.createUpdateHasPermissions({hasPermissions: false}))
     return false
   }
 }
 
-function* getStartupDetailsFromInitialPush() {
-  const {push, pushTimeout}: {push: PushGen.NotificationPayload; pushTimeout: boolean} = yield Saga.race({
-    push: isAndroid ? getInitialPushAndroid() : getInitialPushiOS(),
-    pushTimeout: Saga.delay(10),
-  })
-  if (pushTimeout || !push) {
+const getStartupDetailsFromInitialShare = async () => {
+  if (isAndroid) {
+    const fileUrl = await (androidGetInitialShareFileUrl() ?? Promise.resolve(''))
+    const text = await (androidGetInitialShareText() ?? Promise.resolve(''))
+    return {fileUrl, text}
+  } else {
+    return Promise.resolve(undefined)
+  }
+}
+
+const getStartupDetailsFromInitialPush = async () => {
+  const push = await Promise.race([
+    isAndroid ? getInitialPushAndroid() : getInitialPushiOS(),
+    Container.timeoutPromise(10),
+  ])
+  if (!push) {
     return null
   }
 
+  // TODO push is any here
   const notification = push.payload.notification
   if (notification.type === 'follow') {
     if (notification.username) {
-      return {startupFollowUser: notification.username}
+      return {startupFollowUser: notification.username as string}
     }
-  } else if (notification.type === 'chat.newmessage') {
+  } else if (notification.type === 'chat.newmessage' || notification.type === 'chat.newmessageSilent_2') {
     if (notification.conversationIDKey) {
-      return {startupConversation: notification.conversationIDKey}
+      return {
+        startupConversation: notification.conversationIDKey as ChatTypes.ConversationIDKey,
+        startupPushPayload: notification.unboxPayload as string,
+      }
     }
   }
 
@@ -393,40 +449,37 @@ function* getStartupDetailsFromInitialPush() {
 }
 
 const getInitialPushAndroid = async () => {
-  const n = await NativeModules.KeybaseEngine.getInitialIntent()
+  const n = await (androidGetInitialBundleFromNotification() ?? Promise.resolve({}))
   const notification = n && Constants.normalizePush(n)
   return notification && PushGen.createNotification({notification})
 }
 
-const getInitialPushiOS = () =>
-  new Promise(resolve =>
-    PushNotifications.popInitialNotification(n => {
-      const notification = Constants.normalizePush(n)
-      if (notification) {
-        resolve(PushGen.createNotification({notification}))
-      }
-      resolve(null)
-    })
-  )
+const getInitialPushiOS = async () =>
+  new Promise<Container.TypedActions | null | false>(resolve => {
+    isIOS &&
+      PushNotificationIOS.getInitialNotification().then((n: any) => {
+        const notification = Constants.normalizePush(n)
+        if (notification) {
+          resolve(PushGen.createNotification({notification}))
+        }
+        resolve(null)
+      })
+  })
 
-function* pushSaga() {
+export const initPushListener = () => {
   // Permissions
-  yield* Saga.chainGenerator<PushGen.RequestPermissionsPayload>(
-    PushGen.requestPermissions,
-    requestPermissions
-  )
-  yield* Saga.chainAction2([PushGen.showPermissionsPrompt, PushGen.rejectPermissions], neverShowMonsterAgain)
-  yield* Saga.chainGenerator<ConfigGen.MobileAppStatePayload>(ConfigGen.mobileAppState, checkPermissions)
+  Container.listenAction(PushGen.requestPermissions, requestPermissions)
+  Container.listenAction([PushGen.showPermissionsPrompt, PushGen.rejectPermissions], neverShowMonsterAgain)
+  Container.listenAction(ConfigGen.mobileAppState, checkPermissions)
 
   // Token handling
-  yield* Saga.chainAction2([PushGen.updatePushToken, ConfigGen.bootstrapStatusLoaded], uploadPushToken)
-  yield* Saga.chainGenerator<ConfigGen.LogoutHandshakePayload>(ConfigGen.logoutHandshake, deletePushToken)
+  Container.listenAction([PushGen.updatePushToken, ConfigGen.bootstrapStatusLoaded], uploadPushToken)
+  Container.listenAction(ConfigGen.logoutHandshake, deletePushToken)
 
-  yield* Saga.chainAction2(NotificationsGen.receivedBadgeState, updateAppBadge)
-  yield* Saga.chainGenerator<PushGen.NotificationPayload>(PushGen.notification, handlePush)
-  yield* Saga.chainGenerator<ConfigGen.DaemonHandshakePayload>(ConfigGen.daemonHandshake, setupPushEventLoop)
-  yield Saga.spawn(initialPermissionsCheck)
+  Container.listenAction(NotificationsGen.receivedBadgeState, updateAppBadge)
+  Container.listenAction(PushGen.notification, handlePush)
+  Container.listenAction(ConfigGen.daemonHandshake, setupPushEventLoop)
+  Container.spawn(initialPermissionsCheck, 'initialPermissionsCheck')
 }
 
-export default pushSaga
-export {getStartupDetailsFromInitialPush}
+export {getStartupDetailsFromInitialPush, getStartupDetailsFromInitialShare}

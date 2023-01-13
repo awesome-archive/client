@@ -1,10 +1,14 @@
 // Entry point to the chrome part of the app: ORDER IS IMPORTANT
-import '../../util/user-timings'
-import 'react-hot-loader'
+import './globals.desktop'
 import {_setSystemIsDarkMode, _setSystemSupported} from '../../styles/dark-mode'
-import {isDarwin} from '../../constants/platform'
-import * as SafeElectron from '../../util/safe-electron.desktop'
+import {isDarwin, isWindows} from '../../constants/platform'
+import {enableMapSet} from 'immer'
+import '../../why-did-you-render'
+import KB2, {waitOnKB2Loaded} from '../../util/electron.desktop'
 
-_setSystemIsDarkMode(isDarwin && SafeElectron.getSystemPreferences().isDarkMode())
-_setSystemSupported(isDarwin)
-require('./main2.desktop')
+enableMapSet()
+waitOnKB2Loaded(() => {
+  _setSystemIsDarkMode(KB2.constants.startDarkMode)
+  _setSystemSupported(isDarwin || isWindows)
+  require('./main2.desktop')
+})

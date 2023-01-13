@@ -1,6 +1,6 @@
 import * as Kb from '../../common-adapters'
-import * as React from 'react'
 import * as Styles from '../../styles/index'
+import {useSpring, animated} from 'react-spring'
 
 type Props = {
   degrees: number
@@ -9,7 +9,7 @@ type Props = {
   style?: Styles.StylesCrossPlatform
 }
 
-const PieSliceDefault = (props: Props) => {
+const Slice = (props: Props) => {
   const styleFilled = props.negative ? styles.filledNegative : styles.filledPositive
   const styleUnfilled = props.negative ? styles.unfilledNegative : styles.unfilledPositive
   const styleRotate = Styles.isMobile
@@ -18,7 +18,7 @@ const PieSliceDefault = (props: Props) => {
   return (
     <Kb.Box style={Styles.collapseStyles([styles.container, ...(props.style ? [props.style] : [])])}>
       <Kb.Box style={Styles.collapseStyles([styles.wholeUnfilled, styleUnfilled])} />
-      <Kb.Box style={Styles.collapseStyles([styles.rotateContainer, styleRotate])}>
+      <Kb.Box style={Styles.collapseStyles([styles.rotateContainer, styleRotate] as any)}>
         <Kb.Box style={Styles.collapseStyles([styles.leftFilled, styleFilled])} />
       </Kb.Box>
       <Kb.Box
@@ -30,13 +30,18 @@ const PieSliceDefault = (props: Props) => {
   )
 }
 
+const AnimatedSlice = animated(Slice)
+const AnimatedPieSlice = (props: Props) => {
+  const {degrees} = props
+  const ad = useSpring({to: {degrees}})
+  return <AnimatedSlice degrees={ad.degrees} style={props.style as any} negative={props.negative} />
+}
+
 const PieSlice = (props: Props) => {
   return props.animated ? (
-    <Kb.Animated to={{degrees: props.degrees}}>
-      {({degrees}) => <PieSliceDefault degrees={degrees} style={props.style} negative={props.negative} />}
-    </Kb.Animated>
+    <AnimatedPieSlice {...props} />
   ) : (
-    <PieSliceDefault degrees={props.degrees} style={props.style} negative={props.negative} />
+    <Slice degrees={props.degrees} style={props.style} negative={props.negative} />
   )
 }
 const pieSize = Styles.isMobile ? 16 : 12
@@ -70,18 +75,21 @@ const styles = Styles.styleSheetCreate(
         borderBottomLeftRadius: pieHalfSize,
         borderTopLeftRadius: pieHalfSize,
         left: 0,
+        overflow: 'hidden', // need to set this so it's fully round on mobile
       },
       leftUnfilled: {
         ...stylePieHalf,
         borderBottomLeftRadius: pieHalfSize,
         borderTopLeftRadius: pieHalfSize,
         left: 0,
+        overflow: 'hidden',
       },
       rightFilled: {
         ...stylePieHalf,
         borderBottomRightRadius: pieHalfSize,
         borderTopRightRadius: pieHalfSize,
         left: pieHalfSize,
+        overflow: 'hidden',
       },
       rotateContainer: {
         ...stylePieWhole,
@@ -96,6 +104,7 @@ const styles = Styles.styleSheetCreate(
       wholeUnfilled: {
         ...stylePieWhole,
         borderRadius: pieHalfSize,
+        overflow: 'hidden',
       },
     } as const)
 )

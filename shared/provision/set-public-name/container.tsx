@@ -1,35 +1,41 @@
+import * as React from 'react'
 import * as ProvisionGen from '../../actions/provision-gen'
 import * as RouteTreeGen from '../../actions/route-tree-gen'
 import * as Constants from '../../constants/provision'
-import SetPublicName from '.'
+import * as Platform from '../../constants/platform'
+import * as Devices from '../../constants/devices'
 import * as Container from '../../util/container'
-import * as LoginGen from '../../actions/login-gen'
-import HiddenString from '../../util/hidden-string'
+import SetPublicName from '.'
 
-const mapStateToProps = (state: Container.TypedState) => ({
-  _existingDevices: state.provision.existingDevices,
-  configuredAccounts: state.config.configuredAccounts,
-  error: state.provision.error.stringValue(),
-  waiting: Container.anyWaiting(state, Constants.waitingKey),
-})
+const PublicNameContainer = () => {
+  const devices = Container.useSelector(state => state.provision.devices)
+  const error = Container.useSelector(state => state.provision.error.stringValue())
+  const waiting = Container.useSelector(state => Container.anyWaiting(state, Constants.waitingKey))
+  const dispatch = Container.useDispatch()
 
-const mapDispatchToProps = (dispatch: Container.TypedDispatch) => ({
-  _onBack: () => dispatch(RouteTreeGen.createNavigateUp()),
-  onLogIn: (username: string) => dispatch(LoginGen.createLogin({password: new HiddenString(''), username})),
-  onSubmit: (name: string) => dispatch(ProvisionGen.createSubmitDeviceName({name})),
-})
+  const _onBack = React.useCallback(() => dispatch(RouteTreeGen.createNavigateUp()), [dispatch])
+  const onBack = Container.useSafeSubmit(_onBack, !!error)
+  const __onSubmit = React.useCallback(
+    (name: string) => dispatch(ProvisionGen.createSubmitDeviceName({name})),
+    [dispatch]
+  )
+  const _onSubmit = (name: string) => !waiting && __onSubmit(name)
+  const onSubmit = Container.useSafeSubmit(_onSubmit, !!error)
 
-export default Container.connect(mapStateToProps, mapDispatchToProps, (stateProps, dispatchProps) => {
-  const loggedInAccounts = stateProps.configuredAccounts
-    .filter(account => account.hasStoredSecret)
-    .map(ac => ac.username)
-  return {
-    error: stateProps.error,
-    onBack:
-      loggedInAccounts.length > 0
-        ? () => dispatchProps.onLogIn(loggedInAccounts[0] || '')
-        : dispatchProps._onBack,
-    onSubmit: dispatchProps.onSubmit,
-    waiting: stateProps.waiting,
-  }
-})(Container.safeSubmit(['onSubmit', 'onBack'], ['error'])(SetPublicName))
+  const deviceNumbers = devices
+    .filter(d => d.type === (Platform.isMobile ? 'mobile' : 'desktop'))
+    .map(d => d.deviceNumberOfType)
+  const maxDeviceNumber = deviceNumbers.length > 0 ? Math.max(...deviceNumbers) : -1
+  const deviceIconNumber = ((maxDeviceNumber + 1) % Devices.numBackgrounds) + 1
+
+  return (
+    <SetPublicName
+      onBack={onBack}
+      onSubmit={onSubmit}
+      deviceIconNumber={deviceIconNumber}
+      error={error}
+      waiting={waiting}
+    />
+  )
+}
+export default PublicNameContainer

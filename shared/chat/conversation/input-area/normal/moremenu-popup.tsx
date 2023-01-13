@@ -1,12 +1,10 @@
-import * as React from 'react'
-import * as Types from '../../../../constants/types/chat2'
 import * as Kb from '../../../../common-adapters/mobile.native'
-import * as Styles from '../../../../styles'
 import * as RouteTreeGen from '../../../../actions/route-tree-gen'
 import * as Container from '../../../../util/container'
 import * as Constants from '../../../../constants/chat2'
 import * as WalletsGen from '../../../../actions/wallets-gen'
 import * as Chat2Gen from '../../../../actions/chat2-gen'
+import type * as Types from '../../../../constants/types/chat2'
 import HiddenString from '../../../../util/hidden-string'
 
 type Props = {
@@ -17,37 +15,24 @@ type Props = {
 
 const MoreMenuPopup = (props: Props) => {
   const {conversationIDKey, onHidden, visible} = props
-  // state
-  const {meta, wallet, you} = Container.useSelector(state => ({
-    meta: Constants.getMeta(state, conversationIDKey),
-    wallet: Constants.shouldShowWalletsIcon(state, conversationIDKey),
-    you: state.config.username,
-  }))
-  // dispatch
+  const participantInfo = Container.useSelector(state =>
+    Constants.getParticipantInfo(state, conversationIDKey)
+  )
+  const wallet = Container.useSelector(state => Constants.shouldShowWalletsIcon(state, conversationIDKey))
+  const you = Container.useSelector(state => state.config.username)
   const dispatch = Container.useDispatch()
   const onLumens = (to: string, isRequest: boolean) => {
-    dispatch(
-      WalletsGen.createOpenSendRequestForm({
-        isRequest,
-        recipientType: 'keybaseUser',
-        to,
-      })
-    )
+    dispatch(WalletsGen.createOpenSendRequestForm({isRequest, recipientType: 'keybaseUser', to}))
   }
   const onSlashPrefill = (text: string) => {
-    dispatch(
-      Chat2Gen.createSetUnsentText({
-        conversationIDKey,
-        text: new HiddenString(text),
-      })
-    )
+    dispatch(Chat2Gen.createSetUnsentText({conversationIDKey, text: new HiddenString(text)}))
   }
   const onLocationShare = () => {
     dispatch(
       RouteTreeGen.createNavigateAppend({
         path: [
           {
-            props: {conversationIDKey, namespace: 'chat2'},
+            props: {conversationIDKey},
             selected: 'chatLocationPreview',
           },
         ],
@@ -57,8 +42,8 @@ const MoreMenuPopup = (props: Props) => {
   // merge
   let to = ''
   if (wallet) {
-    const otherParticipants = meta.participants.filter(u => u !== you)
-    to = otherParticipants.first()
+    const otherParticipants = participantInfo.name.filter(u => u !== you)
+    to = otherParticipants[0] || ''
   }
   const onSendLumens = wallet ? () => onLumens(to, false) : undefined
   const onRequestLumens = wallet ? () => onLumens(to, true) : undefined
@@ -67,10 +52,11 @@ const MoreMenuPopup = (props: Props) => {
   const onInsertSlashCommand = () => onSlashPrefill('/')
 
   // render
-  const items = [
+  const items: Kb.MenuItems = [
     ...(onSendLumens
       ? [
           {
+            icon: 'iconfont-stellar-send',
             onClick: onSendLumens,
             title: 'Send Lumens (XLM)',
           },
@@ -79,67 +65,41 @@ const MoreMenuPopup = (props: Props) => {
     ...(onRequestLumens
       ? [
           {
+            icon: 'iconfont-stellar-request',
             onClick: onRequestLumens,
             title: 'Request Lumens (XLM)',
           },
         ]
       : []),
     {
+      icon: 'iconfont-gif',
       onClick: onGiphy,
-      title: 'gif',
-      view: (
-        <Kb.Box2 direction="vertical" centerChildren={true}>
-          <Kb.Text type="BodyBig" style={styles.item}>
-            Share a GIF
-          </Kb.Text>
-          <Kb.Text type="BodySmall">/giphy</Kb.Text>
-        </Kb.Box2>
-      ),
+      subTitle: '/giphy',
+      title: 'Share a GIF',
     },
     {
+      icon: 'iconfont-coin-flip',
       onClick: onCoinFlip,
-      title: 'coin',
-      view: (
-        <Kb.Box2 direction="vertical" centerChildren={true}>
-          <Kb.Text type="BodyBig" style={styles.item}>
-            Flip a coin
-          </Kb.Text>
-          <Kb.Text type="BodySmall">/flip</Kb.Text>
-        </Kb.Box2>
-      ),
+      subTitle: '/flip',
+      title: 'Flip a coin',
     },
     {
+      icon: 'iconfont-location',
       onClick: onLocationShare,
-      title: 'location',
-      view: (
-        <Kb.Box2 direction="vertical" centerChildren={true}>
-          <Kb.Text type="BodyBig" style={styles.item}>
-            Share your location
-          </Kb.Text>
-          <Kb.Text type="BodySmall">/location</Kb.Text>
-        </Kb.Box2>
-      ),
+      subTitle: '/location',
+      title: 'Share your location',
     },
     {
+      icon: 'iconfont-ellipsis',
       onClick: onInsertSlashCommand,
-      title: 'slash',
-      view: (
-        <Kb.Box2 direction="vertical" centerChildren={true}>
-          <Kb.Text type="BodyBig" style={styles.item}>
-            Other commands
-          </Kb.Text>
-          <Kb.Text type="BodySmall">/...</Kb.Text>
-        </Kb.Box2>
-      ),
+      subTitle: '/...',
+      title: 'Other commands',
     },
-  ]
+  ].reduce<Kb.MenuItems>((arr, i) => {
+    i && arr.push(i as Kb.MenuItem)
+    return arr
+  }, [])
   return <Kb.FloatingMenu closeOnSelect={true} items={items} onHidden={onHidden} visible={visible} />
 }
-
-const styles = Styles.styleSheetCreate(() => ({
-  item: {
-    color: Styles.globalColors.blueDark,
-  },
-}))
 
 export default MoreMenuPopup

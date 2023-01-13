@@ -1,12 +1,7 @@
 import * as React from 'react'
-import * as I from 'immutable'
 import * as Kb from '../../../../common-adapters'
-import * as Types from '../../../../constants/types/wallets'
 import * as Styles from '../../../../styles'
-import {Props} from '.'
-
-const makePickerItems = (currencies: I.List<Types.Currency>) =>
-  currencies.map(c => ({label: c.description, value: c.code})).toArray()
+import type {Props} from '.'
 
 const Prompt = () => (
   <Kb.Box2 direction="vertical" fullWidth={true} style={styles.promptContainer}>
@@ -20,28 +15,23 @@ const Prompt = () => (
 )
 
 const DisplayCurrencyDropdown = (props: Props) => {
+  const {currencies} = props
   const selectedFromProps = props.selected.code
   const [selected, setSelected] = React.useState(selectedFromProps)
   const [showingMenu, setShowingMenu] = React.useState(false)
   const [showingToast, setShowingToast] = React.useState(false)
-  const onceRef = React.useRef(false)
   const setShowingToastFalseLater = Kb.useTimeout(() => setShowingToast(false), 1000)
-
-  React.useEffect(() => {
-    const justSaved = selectedFromProps === selected && onceRef.current
-    if (justSaved) {
-      setShowingToast(true)
-      setShowingToastFalseLater()
-    }
-    onceRef.current = true
-  }, [selected, selectedFromProps, onceRef, setShowingToast, setShowingToastFalseLater])
 
   React.useEffect(() => {
     setSelected(selectedFromProps)
   }, [selectedFromProps])
 
   const onDone = () => {
-    props.onCurrencyChange(selected)
+    if (selected !== selectedFromProps) {
+      props.onCurrencyChange(selected)
+      setShowingToast(true)
+      setShowingToastFalseLater()
+    }
     setShowingMenu(false)
   }
   const onClose = () => {
@@ -49,25 +39,32 @@ const DisplayCurrencyDropdown = (props: Props) => {
     setSelected(props.selected.code)
   }
   const toggleShowingMenu = () => setShowingMenu(s => !s)
+
+  const items = React.useMemo(
+    () => currencies.map(c => ({label: c.description, value: c.code})),
+    [currencies]
+  )
+
   return (
     <>
       <Kb.DropdownButton
         disabled={props.waiting}
         selected={
           props.selected.description && !props.waiting ? (
-            <Kb.Text center={true} type="BodyBig">
+            <Kb.Text type="BodyBig" style={styles.selectedText}>
               {props.selected.description}
             </Kb.Text>
           ) : (
             <Kb.ProgressIndicator type="Small" style={styles.progressIndicator} />
           )
         }
+        style={styles.dropdown}
         toggleOpen={toggleShowingMenu}
       />
       <Kb.FloatingPicker
-        items={makePickerItems(props.currencies)}
+        items={items}
         selectedValue={selected}
-        onSelect={setSelected}
+        onSelect={s => s !== null && setSelected(s)}
         prompt={<Prompt />}
         promptString="Pick a display currency"
         onHidden={onClose}
@@ -81,6 +78,14 @@ const DisplayCurrencyDropdown = (props: Props) => {
 }
 
 const styles = Styles.styleSheetCreate(() => ({
+  dropdown: Styles.platformStyles({
+    common: {
+      alignSelf: 'flex-start',
+    },
+    isElectron: {
+      ...Styles.globalStyles.fullWidth,
+    },
+  }),
   progressIndicator: {
     height: 22,
     width: 22,
@@ -88,6 +93,10 @@ const styles = Styles.styleSheetCreate(() => ({
   promptContainer: {
     paddingLeft: Styles.globalMargins.medium,
     paddingRight: Styles.globalMargins.medium,
+  },
+  selectedText: {
+    paddingLeft: Styles.globalMargins.xsmall,
+    width: '100%',
   },
   toastText: {color: Styles.globalColors.white},
 }))

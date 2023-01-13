@@ -1,174 +1,242 @@
-import React, {PureComponent} from 'react'
-import {Text, Markdown, Box, Box2, Meta, Icon} from '../../../../common-adapters'
-import {AllowedColors} from '../../../../common-adapters/text'
-import {
-  globalStyles,
-  globalColors,
-  globalMargins,
-  styleSheetCreate,
-  collapseStyles,
-  platformStyles,
-} from '../../../../styles'
-import {isMobile} from '../../../../constants/platform'
+import * as React from 'react'
+import * as Kb from '../../../../common-adapters'
+import * as Container from '../../../../util/container'
+import * as Styles from '../../../../styles'
+import * as RPCChatTypes from '../../../../constants/types/rpc-chat-gen'
+import type * as Types from '../../../../constants/types/chat2'
 
 type Props = {
+  conversationIDKey: Types.ConversationIDKey
   backgroundColor?: string
-  participantNeedToRekey: boolean
-  showBold: boolean
-  snippet: string | null
-  snippetDecoration: string | null
-  subColor: AllowedColors
-  youNeedToRekey: boolean
-  youAreReset: boolean
-  hasResetUsers: boolean
-  isSelected: boolean
-  isDecryptingSnippet: boolean
-  isTypingSnippet: boolean
-  draft?: string
+  layoutSnippet?: string
+  isSelected?: boolean
+  isInWidget?: boolean
 }
 
-class BottomLine extends PureComponent<Props> {
-  render() {
-    let content
-    const style = collapseStyles([
-      styles.bottomLine,
-      {
-        color: this.props.subColor,
-        ...(this.props.showBold ? globalStyles.fontBold : {}),
-      },
-      this.props.isTypingSnippet ? styles.typingSnippet : null,
-    ])
-    if (this.props.youNeedToRekey) {
-      content = null
-    } else if (this.props.youAreReset) {
-      content = (
-        <Text
-          type="BodySmallSemibold"
-          negative={true}
-          style={collapseStyles([
-            styles.youAreResetText,
-            {
-              color: this.props.isSelected ? globalColors.white : globalColors.red,
-            },
-          ])}
-        >
-          You are locked out.
-        </Text>
-      )
-    } else if (this.props.participantNeedToRekey) {
-      content = (
-        <Text type="BodySmall" negative={true} style={{color: this.props.subColor}}>
-          Waiting for participants to rekey...
-        </Text>
-      )
-    } else if (this.props.draft) {
-      content = (
-        <Box2 direction="horizontal" gap="xtiny" style={styles.contentBox}>
-          <Text
-            type="BodySmall"
-            style={collapseStyles([
-              styles.draftLabel,
-              this.props.isSelected ? {color: globalColors.white} : null,
-            ])}
-          >
-            Draft:
-          </Text>
-          <Markdown preview={true} style={style}>
-            {this.props.draft}
-          </Markdown>
-        </Box2>
-      )
-    } else if (this.props.isDecryptingSnippet) {
-      content = <Meta title="decrypting..." style={styles.alertMeta} backgroundColor={globalColors.blue} />
-    } else if (this.props.snippet) {
-      let snippetDecoration
-      let exploded = false
+const SnippetDecoration = (type: Kb.IconType, color: string, tooltip?: string) => {
+  const icon = (
+    <Kb.Icon
+      color={color}
+      type={type}
+      fontSize={Styles.isMobile ? 16 : 12}
+      style={styles.snippetDecoration}
+    />
+  )
+  return tooltip ? <Kb.WithTooltip tooltip={tooltip}>{icon}</Kb.WithTooltip> : icon
+}
 
-      // `snippetDecoration` will either be an explosion emoji, bomb emoji, or empty string.
-      // We want to use these emojis to render the correct custom icon.
-      switch (this.props.snippetDecoration) {
-        case '\u{1F4A5}': // Explosion (Collision) emoji (💥)
-          snippetDecoration = (
-            <Text
-              type="BodySmall"
-              style={{color: this.props.isSelected ? globalColors.white : globalColors.black_50}}
-            >
-              Message exploded.
-            </Text>
-          )
-          exploded = true
-          break
-        case '\u{1F4A3}': // Bomb emoji (💣)
-          snippetDecoration = (
-            <Icon
-              color={this.props.isSelected ? globalColors.white : globalColors.black_50}
-              type="iconfont-timer"
-              fontSize={isMobile ? 16 : 12}
-              style={{alignSelf: 'flex-start'}}
-            />
-          )
-          break
-        default:
-          snippetDecoration =
-            !!this.props.snippetDecoration && !this.props.isTypingSnippet ? (
-              <Text type="BodySmall">{this.props.snippetDecoration}</Text>
-            ) : null
-      }
-      content = (
-        <Box2 direction="horizontal" gap="xtiny" style={styles.contentBox}>
-          {!!snippetDecoration && (
-            <Box2 direction="vertical" centerChildren={true}>
-              {snippetDecoration}
-            </Box2>
-          )}
-          {!exploded && !!this.props.snippet && (
-            <Markdown preview={true} style={style}>
-              {this.props.snippet}
-            </Markdown>
-          )}
-        </Box2>
-      )
-    } else {
-      return null
+const BottomLine = React.memo(function BottomLine(p: Props) {
+  const {isSelected, conversationIDKey, backgroundColor, isInWidget, layoutSnippet} = p
+
+  const hasUnread = Container.useSelector(state => (state.chat2.unreadMap.get(conversationIDKey) ?? 0) > 0)
+  const youAreReset = Container.useSelector(
+    state => state.chat2.metaMap.get(conversationIDKey)?.membershipType === 'youAreReset'
+  )
+  const participantNeedToRekey = Container.useSelector(
+    state => (state.chat2.metaMap.get(conversationIDKey)?.rekeyers?.size ?? 0) > 0
+  )
+  const youNeedToRekey = Container.useSelector(
+    state => state.chat2.metaMap.get(conversationIDKey)?.rekeyers?.has(state.config.username) ?? false
+  )
+  const hasResetUsers = Container.useSelector(
+    state => (state.chat2.metaMap.get(conversationIDKey)?.resetParticipants.size ?? 0) > 0
+  )
+
+  const storeSnippet = Container.useSelector(
+    state => state.chat2.metaMap.get(conversationIDKey)?.snippetDecorated
+  )
+
+  const typingSnippet = Container.useSelector(state => {
+    if (isInWidget) {
+      return ''
     }
-    return (
-      <Box
-        style={collapseStyles([
-          styles.outerBox,
+    const typers = state.chat2.typingMap.get(conversationIDKey)
+    if (typers?.size) {
+      return typers.size === 1
+        ? `${typers.values().next().value as string} is typing...`
+        : 'Multiple people typing...'
+    }
+    return ''
+  })
+
+  const snippet = typingSnippet || storeSnippet || layoutSnippet || ''
+
+  const draft = Container.useSelector(
+    state => (!isSelected && !hasUnread && state.chat2.draftMap.get(conversationIDKey)) || ''
+  )
+
+  const isDecryptingSnippet = Container.useSelector(state => {
+    if (conversationIDKey && !snippet) {
+      const trustedState = state.chat2.metaMap.get(conversationIDKey)?.trustedState
+      return !trustedState || trustedState === 'requesting' || trustedState === 'untrusted'
+    }
+    return false
+  })
+
+  const subColor = isSelected
+    ? Styles.globalColors.white
+    : hasUnread
+    ? Styles.globalColors.black
+    : Styles.globalColors.black_50
+  const showBold = !isSelected && hasUnread
+
+  let content: React.ReactNode
+  const style = Styles.collapseStyles([
+    styles.bottomLine,
+    {
+      color: subColor,
+      ...(showBold ? Styles.globalStyles.fontBold : {}),
+    },
+    typingSnippet ? styles.typingSnippet : null,
+  ])
+  if (youNeedToRekey) {
+    content = null
+  } else if (youAreReset) {
+    content = (
+      <Kb.Text
+        type="BodySmallSemibold"
+        fixOverdraw={Styles.isPhone}
+        negative={true}
+        style={Styles.collapseStyles([
+          styles.youAreResetText,
           {
-            backgroundColor: isMobile ? this.props.backgroundColor : undefined,
+            color: isSelected ? Styles.globalColors.white : Styles.globalColors.red,
           },
         ])}
       >
-        {this.props.hasResetUsers && (
-          <Meta title="reset" style={styles.alertMeta} backgroundColor={globalColors.red} />
-        )}
-        {this.props.youNeedToRekey && (
-          <Meta title="rekey needed" style={styles.alertMeta} backgroundColor={globalColors.red} />
-        )}
-        <Box style={styles.innerBox}>{content}</Box>
-      </Box>
+        You are locked out.
+      </Kb.Text>
     )
+  } else if (participantNeedToRekey) {
+    content = (
+      <Kb.Meta title="rekey needed" style={styles.alertMeta} backgroundColor={Styles.globalColors.red} />
+    )
+  } else if (draft) {
+    content = (
+      <Kb.Box2 direction="horizontal" gap="xtiny" style={styles.contentBox}>
+        <Kb.Text
+          type="BodySmall"
+          style={Styles.collapseStyles([
+            styles.draftLabel,
+            isSelected ? {color: Styles.globalColors.white} : null,
+          ])}
+        >
+          Draft:
+        </Kb.Text>
+        <Kb.Markdown preview={true} style={style}>
+          {draft}
+        </Kb.Markdown>
+      </Kb.Box2>
+    )
+  } else if (isDecryptingSnippet) {
+    content = (
+      <Kb.Meta title="decrypting..." style={styles.alertMeta} backgroundColor={Styles.globalColors.blue} />
+    )
+  } else if (snippet) {
+    let snippetDecoration: React.ReactNode
+    let exploded = false
+    const defaultIconColor = isSelected ? Styles.globalColors.white : Styles.globalColors.black_20
+
+    switch (snippetDecoration) {
+      case RPCChatTypes.SnippetDecoration.pendingMessage:
+        snippetDecoration = SnippetDecoration('iconfont-hourglass', defaultIconColor, 'Sending…')
+        break
+      case RPCChatTypes.SnippetDecoration.failedPendingMessage:
+        snippetDecoration = SnippetDecoration(
+          'iconfont-exclamation',
+          isSelected ? Styles.globalColors.white : Styles.globalColors.red,
+          'Failed to send'
+        )
+        break
+      case RPCChatTypes.SnippetDecoration.explodingMessage:
+        snippetDecoration = SnippetDecoration('iconfont-timer-solid', defaultIconColor)
+        break
+      case RPCChatTypes.SnippetDecoration.explodedMessage:
+        snippetDecoration = (
+          <Kb.Text
+            type="BodySmall"
+            style={{
+              color: isSelected ? Styles.globalColors.white : Styles.globalColors.black_50,
+            }}
+          >
+            Message exploded.
+          </Kb.Text>
+        )
+        exploded = true
+        break
+      case RPCChatTypes.SnippetDecoration.audioAttachment:
+        snippetDecoration = SnippetDecoration('iconfont-mic-solid', defaultIconColor)
+        break
+      case RPCChatTypes.SnippetDecoration.videoAttachment:
+        snippetDecoration = SnippetDecoration('iconfont-film-solid', defaultIconColor)
+        break
+      case RPCChatTypes.SnippetDecoration.photoAttachment:
+        snippetDecoration = SnippetDecoration('iconfont-camera-solid', defaultIconColor)
+        break
+      case RPCChatTypes.SnippetDecoration.fileAttachment:
+        snippetDecoration = SnippetDecoration('iconfont-file-solid', defaultIconColor)
+        break
+      case RPCChatTypes.SnippetDecoration.stellarReceived:
+        snippetDecoration = SnippetDecoration('iconfont-stellar-request', defaultIconColor)
+        break
+      case RPCChatTypes.SnippetDecoration.stellarSent:
+        snippetDecoration = SnippetDecoration('iconfont-stellar-send', defaultIconColor)
+        break
+      case RPCChatTypes.SnippetDecoration.pinnedMessage:
+        snippetDecoration = SnippetDecoration('iconfont-pin-solid', defaultIconColor)
+        break
+      default:
+        snippetDecoration = null
+    }
+    content = (
+      <Kb.Box2 direction="horizontal" gap="xtiny" style={styles.contentBox}>
+        {!!snippetDecoration && (
+          <Kb.Box2 direction="vertical" centerChildren={true}>
+            {snippetDecoration}
+          </Kb.Box2>
+        )}
+        {!exploded && !!snippet && (
+          <Kb.Markdown preview={true} style={style}>
+            {snippet}
+          </Kb.Markdown>
+        )}
+      </Kb.Box2>
+    )
+  } else {
+    return null
   }
-}
-const styles = styleSheetCreate(
+  return (
+    <Kb.Box
+      style={Styles.collapseStyles([
+        styles.outerBox,
+        {backgroundColor: Styles.isMobile ? backgroundColor : undefined},
+      ])}
+    >
+      {hasResetUsers && (
+        <Kb.Meta title="reset" style={styles.alertMeta} backgroundColor={Styles.globalColors.red} />
+      )}
+      {youNeedToRekey && (
+        <Kb.Meta title="rekey needed" style={styles.alertMeta} backgroundColor={Styles.globalColors.red} />
+      )}
+      <Kb.Box style={styles.innerBox}>{content}</Kb.Box>
+    </Kb.Box>
+  )
+})
+
+const styles = Styles.styleSheetCreate(
   () =>
     ({
-      alertMeta: platformStyles({
+      alertMeta: Styles.platformStyles({
         common: {
           alignSelf: 'center',
           marginRight: 6,
         },
-        isMobile: {
-          marginTop: 2,
-        },
+        isMobile: {marginTop: 2},
       }),
-      bottomLine: platformStyles({
-        isAndroid: {
-          lineHeight: undefined,
-        },
+      bottomLine: Styles.platformStyles({
+        isAndroid: {lineHeight: undefined},
         isElectron: {
-          color: globalColors.black_50,
+          color: Styles.globalColors.black_50,
           display: 'block',
           minHeight: 16,
           overflow: 'hidden',
@@ -178,8 +246,7 @@ const styles = styleSheetCreate(
           width: '100%',
         },
         isMobile: {
-          backgroundColor: globalColors.fastBlank,
-          color: globalColors.black_50,
+          color: Styles.globalColors.black_50,
           flex: 1,
           fontSize: 15,
           lineHeight: 19,
@@ -188,45 +255,27 @@ const styles = styleSheetCreate(
         },
       }),
       contentBox: {
-        ...globalStyles.fillAbsolute,
+        ...Styles.globalStyles.fillAbsolute,
         alignItems: 'center',
         width: '100%',
       },
-      draftLabel: {
-        color: globalColors.orange,
-      },
-      innerBox: {
-        ...globalStyles.flexBoxRow,
-        alignItems: 'center',
-        flexGrow: 1,
-        height: isMobile ? 21 : 17,
-        position: 'relative',
-      },
-      outerBox: {
-        ...globalStyles.flexBoxRow,
-      },
-      rekeyNeededContainer: {
-        alignSelf: 'center',
-        backgroundColor: globalColors.red,
-        borderRadius: 2,
-        paddingLeft: globalMargins.xtiny,
-        paddingRight: globalMargins.xtiny,
-      },
-      rekeyNeededText: platformStyles({
+      draftLabel: {color: Styles.globalColors.orange},
+      innerBox: Styles.platformStyles({
         common: {
-          color: globalColors.white,
+          ...Styles.globalStyles.flexBoxRow,
+          alignItems: 'center',
+          flexGrow: 1,
+          height: 17,
+          position: 'relative',
         },
-        isElectron: {
-          fontSize: 11,
-          lineHeight: 13,
-        },
-        isMobile: {
-          fontSize: 12,
-          lineHeight: 14,
-        },
+        isMobile: {height: 21},
       }),
+      outerBox: {
+        ...Styles.globalStyles.flexBoxRow,
+      },
+      snippetDecoration: {alignSelf: 'flex-start'},
       typingSnippet: {},
-      youAreResetText: platformStyles({
+      youAreResetText: Styles.platformStyles({
         isElectron: {
           fontSize: 12,
           lineHeight: 13,

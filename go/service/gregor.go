@@ -98,7 +98,7 @@ func (h *gregorFirehoseHandler) IsAlive() bool {
 }
 
 func (h *gregorFirehoseHandler) PushState(s gregor1.State, r keybase1.PushReason) {
-	defer h.G().Trace("gregorFirehoseHandler#PushState", func() error { return nil })()
+	defer h.G().Trace("gregorFirehoseHandler#PushState", nil)()
 	err := h.cli.PushState(context.Background(), keybase1.PushStateArg{State: s, Reason: r})
 	if err != nil {
 		h.G().Log.Error(fmt.Sprintf("Error in firehose push state: %s", err))
@@ -121,7 +121,7 @@ func (h *gregorFirehoseHandler) filterOOBMs(v []gregor1.OutOfBandMessage) []greg
 }
 
 func (h *gregorFirehoseHandler) PushOutOfBandMessages(v []gregor1.OutOfBandMessage) {
-	defer h.G().Trace("gregorFirehoseHandler#PushOutOfBandMessages", func() error { return nil })()
+	defer h.G().Trace("gregorFirehoseHandler#PushOutOfBandMessages", nil)()
 	nOrig := len(v)
 
 	// Filter OOBMs down to wanted systems if we have a filter installed
@@ -222,6 +222,7 @@ type gregorHandler struct {
 	broadcastCh chan gregor1.Message
 	replayCh    chan replayThreadArg
 	pushStateCh chan struct{}
+	forcePingCh chan struct{}
 
 	// Testing
 	testingEvents       *testingEvents
@@ -234,7 +235,7 @@ var _ libkb.GregorListener = (*gregorHandler)(nil)
 func newGregorHandler(g *globals.Context) *gregorHandler {
 	gh := &gregorHandler{
 		Contextified:      globals.NewContextified(g),
-		chatLog:           utils.NewDebugLabeler(g.GetLog(), "PushHandler", false),
+		chatLog:           utils.NewDebugLabeler(g.ExternalG(), "PushHandler", false),
 		firstConnect:      true,
 		pushStateFilter:   func(m gregor.Message) bool { return true },
 		badger:            nil,
@@ -243,6 +244,7 @@ func newGregorHandler(g *globals.Context) *gregorHandler {
 		connectHappened:   make(chan struct{}),
 		replayCh:          make(chan replayThreadArg, 10),
 		pushStateCh:       make(chan struct{}, 100),
+		forcePingCh:       make(chan struct{}, 5),
 	}
 	return gh
 }
@@ -272,7 +274,10 @@ func (g *gregorHandler) monitorAppState() {
 		select {
 		case state = <-g.G().MobileAppState.NextUpdate(&state):
 			switch state {
-			case keybase1.MobileAppState_FOREGROUND, keybase1.MobileAppState_BACKGROUNDACTIVE:
+			case keybase1.MobileAppState_FOREGROUND:
+				g.forcePing(context.Background())
+				monitorAction = monitorConnect
+			case keybase1.MobileAppState_BACKGROUNDACTIVE:
 				monitorAction = monitorConnect
 			case keybase1.MobileAppState_BACKGROUND, keybase1.MobileAppState_INACTIVE:
 				monitorAction = monitorDisconnect
@@ -359,7 +364,7 @@ func (g *gregorHandler) shutdownGregorClient(ctx context.Context) {
 }
 
 func (g *gregorHandler) resetGregorClient(ctx context.Context, uid gregor1.UID, deviceID gregor1.DeviceID) (gcli *grclient.Client, err error) {
-	defer g.G().Trace("gregorHandler#newGregorClient", func() error { return err })()
+	defer g.G().Trace("gregorHandler#newGregorClient", &err)()
 	// Create client object if we are logged in
 	if uid != nil && deviceID != nil {
 		gcli = grclient.NewClient(uid, deviceID, func() gregor.StateMachine {
@@ -427,7 +432,7 @@ func (g *gregorHandler) setReachability(r *reachability) {
 
 func (g *gregorHandler) Connect(uri *rpc.FMPURI) (err error) {
 
-	defer g.G().Trace("gregorHandler#Connect", func() error { return err })()
+	defer g.G().Trace("gregorHandler#Connect", &err)()
 
 	g.connMutex.Lock()
 	defer g.connMutex.Unlock()
@@ -462,7 +467,7 @@ func (g *gregorHandler) HandlerName() string {
 // when an external entity (like Electron) connects to the service, and we can
 // safely send Gregor information to it
 func (g *gregorHandler) PushHandler(handler libkb.GregorInBandMessageHandler) {
-	defer g.chatLog.Trace(context.Background(), func() error { return nil }, "PushHandler")()
+	defer g.chatLog.Trace(context.Background(), nil, "PushHandler")()
 
 	g.G().Log.Debug("pushing inband handler %s to position %d", handler.Name(), len(g.ibmHandlers))
 
@@ -496,7 +501,7 @@ func (g *gregorHandler) PushHandler(handler libkb.GregorInBandMessageHandler) {
 // get the "firehose" of gregor events. They're removed lazily as their underlying
 // connections die.
 func (g *gregorHandler) PushFirehoseHandler(handler libkb.GregorFirehoseHandler) {
-	defer g.chatLog.Trace(context.Background(), func() error { return nil }, "PushFirehoseHandler")()
+	defer g.chatLog.Trace(context.Background(), nil, "PushFirehoseHandler")()
 	g.Lock()
 	g.firehoseHandlers = append(g.firehoseHandlers, handler)
 	g.Unlock()
@@ -672,7 +677,7 @@ func (g *gregorHandler) syncReplayThread() {
 // to be called with gregorHandler locked.
 func (g *gregorHandler) serverSync(ctx context.Context,
 	cli gregor1.IncomingInterface, gcli *grclient.Client, syncRes *chat1.SyncAllNotificationRes) (res []gregor.InBandMessage, err error) {
-	defer g.chatLog.Trace(ctx, func() error { return err }, "serverSync")()
+	defer g.chatLog.Trace(ctx, &err, "serverSync")()
 
 	// Get time of the last message we synced (unless this is our first time syncing)
 	var t time.Time
@@ -759,7 +764,7 @@ func (g *gregorHandler) OnConnect(ctx context.Context, conn *rpc.Connection,
 
 	ctx = libkb.WithLogTag(ctx, "GRGRONCONN")
 
-	defer g.chatLog.Trace(ctx, func() error { return err }, "OnConnect")()
+	defer g.chatLog.Trace(ctx, &err, "OnConnect")()
 
 	// If we get a random OnConnect on some other connection that is not g.conn, then
 	// just reject it.
@@ -805,6 +810,7 @@ func (g *gregorHandler) OnConnect(ctx context.Context, conn *rpc.Connection,
 		ProtVers:         chat1.SyncAllProtVers_V1,
 		HostName:         g.GetURI().Host,
 		SummarizeMaxMsgs: true,
+		ParticipantsMode: chat1.InboxParticipantsMode_SKIP_TEAMS,
 	})
 	if err != nil {
 		// This will cause us to try and refresh session on the next attempt
@@ -887,7 +893,7 @@ func (g *gregorHandler) OnConnect(ctx context.Context, conn *rpc.Connection,
 }
 
 func (g *gregorHandler) OnConnectError(err error, reconnectThrottleDuration time.Duration) {
-	defer g.chatLog.Trace(context.Background(), func() error { return nil }, "OnConnectError")()
+	defer g.chatLog.Trace(context.Background(), nil, "OnConnectError")()
 	g.chatLog.Debug(context.Background(), "OnConnectError: err: %s, reconnect throttle duration: %s", err,
 		reconnectThrottleDuration)
 
@@ -950,7 +956,7 @@ func (g *gregorHandler) ShouldRetryOnConnect(err error) bool {
 }
 
 func (g *gregorHandler) broadcastMessageOnce(ctx context.Context, m gregor1.Message) (err error) {
-	defer g.chatLog.Trace(ctx, func() error { return err }, "broadcastMessageOnce")()
+	defer g.chatLog.Trace(ctx, &err, "broadcastMessageOnce")()
 
 	// Handle the message
 	var obm gregor.OutOfBandMessage
@@ -1040,7 +1046,7 @@ func (g *gregorHandler) BroadcastMessage(ctx context.Context, m gregor1.Message)
 func (g *gregorHandler) handleInBandMessage(ctx context.Context, cli gregor1.IncomingInterface,
 	ibm gregor.InBandMessage) (err error) {
 
-	defer g.G().Trace(fmt.Sprintf("gregorHandler#handleInBandMessage with %d handlers", len(g.ibmHandlers)), func() error { return err })()
+	defer g.G().Trace(fmt.Sprintf("gregorHandler#handleInBandMessage with %d handlers", len(g.ibmHandlers)), &err)()
 	ctx = libkb.WithLogTag(ctx, "GRGIBM")
 
 	var freshHandlers []libkb.GregorInBandMessageHandler
@@ -1313,7 +1319,7 @@ func (g *gregorHandler) handleOutOfBandMessage(ctx context.Context, obm gregor.O
 }
 
 func (g *gregorHandler) Shutdown() {
-	defer g.chatLog.Trace(context.Background(), func() error { return nil }, "Shutdown")()
+	defer g.chatLog.Trace(context.Background(), nil, "Shutdown")()
 	g.connMutex.Lock()
 	defer g.connMutex.Unlock()
 
@@ -1444,8 +1450,72 @@ func (g *gregorHandler) Reconnect(ctx context.Context) (didShutdown bool, err er
 	return didShutdown, nil
 }
 
-func (g *gregorHandler) pingLoop() {
+func (g *gregorHandler) forcePing(ctx context.Context) {
+	select {
+	case g.forcePingCh <- struct{}{}:
+	default:
+		g.Debug(ctx, "forcePing: failed to write to channel, its full")
+	}
+}
 
+func (g *gregorHandler) pingOnce(ctx context.Context, id []byte, shutdownCancel context.CancelFunc) {
+	var err error
+	doneCh := make(chan error)
+	timeout := g.G().Env.GetGregorPingTimeout()
+	go func(ctx context.Context) {
+		if g.IsConnected() {
+			// If we are connected, subject the ping call to a fairly
+			// aggressive timeout so our chat stuff can be responsive
+			// to changes in connectivity
+			var timeoutCancel context.CancelFunc
+			var timeoutCtx context.Context
+			timeoutCtx, timeoutCancel = context.WithTimeout(ctx, timeout)
+			_, err = gregor1.IncomingClient{Cli: g.pingCli}.Ping(timeoutCtx)
+			timeoutCancel()
+		} else {
+			// If we are not connected, we don't want to timeout anything
+			// Just hook into the normal reconnect chan stuff in the RPC
+			// library
+			g.chatLog.Debug(ctx, "ping loop: id: %x normal ping, not connected", id)
+			_, err = gregor1.IncomingClient{Cli: g.pingCli}.Ping(ctx)
+			g.chatLog.Debug(ctx, "ping loop: id: %x normal ping success", id)
+		}
+		select {
+		case <-ctx.Done():
+			g.chatLog.Debug(ctx, "ping loop: id: %x context cancelled, so not sending err", id)
+		default:
+			doneCh <- err
+		}
+	}(ctx)
+
+	select {
+	case err = <-doneCh:
+	case <-g.shutdownCh:
+		g.chatLog.Debug(ctx, "ping loop: id: %x shutdown received", id)
+		shutdownCancel()
+		return
+	}
+	if err != nil {
+		g.Debug(ctx, "ping loop: id: %x error: %s", id, err)
+		if err == context.DeadlineExceeded {
+			g.chatLog.Debug(ctx, "ping loop: timeout: terminating connection")
+			var didShutdown bool
+			var err error
+			if didShutdown, err = g.Reconnect(ctx); err != nil {
+				g.chatLog.Debug(ctx, "ping loop: id: %x error reconnecting: %s", id, err)
+			}
+			// It is possible that we have already reconnected by the time we call Reconnect
+			// above. If that is the case, we don't want to terminate the ping loop. Only
+			// if Reconnect has actually reset the connection do we stop this ping loop.
+			if didShutdown {
+				shutdownCancel()
+				return
+			}
+		}
+	}
+}
+
+func (g *gregorHandler) pingLoop() {
 	ctx := context.Background()
 	id, _ := libkb.RandBytes(4)
 	duration := g.G().Env.GetGregorPingInterval()
@@ -1455,71 +1525,18 @@ func (g *gregorHandler) pingLoop() {
 		g.chatLog.Debug(ctx, "ping loop: failed to parse server uri, exiting: %s", err.Error())
 		return
 	}
-
 	g.chatLog.Debug(ctx, "ping loop: starting up: id: %x duration: %v timeout: %v url: %s",
 		id, duration, timeout, url.Host)
 	defer g.chatLog.Debug(ctx, "ping loop: id: %x terminating", id)
-
 	ticker := time.NewTicker(duration)
 	for {
 		ctx, shutdownCancel := context.WithCancel(context.Background())
 		select {
+		case <-g.forcePingCh:
+			g.chatLog.Debug(ctx, "ping loop: forced attempt")
+			g.pingOnce(ctx, id, shutdownCancel)
 		case <-ticker.C:
-			var err error
-
-			doneCh := make(chan error)
-			go func(ctx context.Context) {
-				if g.IsConnected() {
-					// If we are connected, subject the ping call to a fairly
-					// aggressive timeout so our chat stuff can be responsive
-					// to changes in connectivity
-					var timeoutCancel context.CancelFunc
-					var timeoutCtx context.Context
-					timeoutCtx, timeoutCancel = context.WithTimeout(ctx, timeout)
-					_, err = gregor1.IncomingClient{Cli: g.pingCli}.Ping(timeoutCtx)
-					timeoutCancel()
-				} else {
-					// If we are not connected, we don't want to timeout anything
-					// Just hook into the normal reconnect chan stuff in the RPC
-					// library
-					g.chatLog.Debug(ctx, "ping loop: id: %x normal ping, not connected", id)
-					_, err = gregor1.IncomingClient{Cli: g.pingCli}.Ping(ctx)
-					g.chatLog.Debug(ctx, "ping loop: id: %x normal ping success", id)
-				}
-				select {
-				case <-ctx.Done():
-					g.chatLog.Debug(ctx, "ping loop: id: %x context cancelled, so not sending err", id)
-				default:
-					doneCh <- err
-				}
-			}(ctx)
-
-			select {
-			case err = <-doneCh:
-			case <-g.shutdownCh:
-				g.chatLog.Debug(ctx, "ping loop: id: %x shutdown received", id)
-				shutdownCancel()
-				return
-			}
-			if err != nil {
-				g.Debug(ctx, "ping loop: id: %x error: %s", id, err.Error())
-				if err == context.DeadlineExceeded {
-					g.chatLog.Debug(ctx, "ping loop: timeout: terminating connection")
-					var didShutdown bool
-					var err error
-					if didShutdown, err = g.Reconnect(ctx); err != nil {
-						g.chatLog.Debug(ctx, "ping loop: id: %x error reconnecting: %s", id,
-							err.Error())
-					}
-					// It is possible that we have already reconnected by the time we call Reconnect
-					// above. If that is the case, we don't want to terminate the ping loop. Only
-					// if Reconnect has actually reset the connection do we stop this ping loop.
-					if didShutdown {
-						shutdownCancel()
-						return
-					}
-				}
-			}
+			g.pingOnce(ctx, id, shutdownCancel)
 		case <-g.shutdownCh:
 			g.chatLog.Debug(ctx, "ping loop: id: %x shutdown received", id)
 			shutdownCancel()
@@ -1561,6 +1578,7 @@ func (g *gregorHandler) connectTLS() error {
 	g.conn = rpc.NewTLSConnectionWithDialable(rpc.NewFixedRemote(uri.HostPort),
 		[]byte(rawCA), libkb.NewContextifiedErrorUnwrapper(g.G().ExternalG()),
 		g, libkb.NewRPCLogFactory(g.G().ExternalG()),
+		g.G().ExternalG().RemoteNetworkInstrumenterStorage,
 		logger.LogOutputWithDepthAdder{Logger: g.G().Log},
 		rpc.DefaultMaxFrameLength, opts,
 		libkb.NewProxyDialable(g.G().Env))
@@ -1628,7 +1646,7 @@ func (g *gregorHandler) DismissItem(ctx context.Context, cli gregor1.IncomingInt
 	}
 	var err error
 	defer g.G().CTrace(ctx, fmt.Sprintf("gregorHandler.dismissItem(%s)", id.String()),
-		func() error { return err },
+		&err,
 	)()
 	defer g.pushState(keybase1.PushReason_NEW_DATA)
 	dismissal, err := grutils.FormMessageForDismissItem(ctx, g.currentUID(), id)
@@ -1647,7 +1665,7 @@ func (g *gregorHandler) LocalDismissItem(ctx context.Context, id gregor.MsgID) (
 		return nil
 	}
 	defer g.G().CTrace(ctx, fmt.Sprintf("gregorHandler.localDismissItem(%s)", id.String()),
-		func() error { return err },
+		&err,
 	)()
 	defer g.pushState(keybase1.PushReason_NEW_DATA)
 
@@ -1661,21 +1679,15 @@ func (g *gregorHandler) LocalDismissItem(ctx context.Context, id gregor.MsgID) (
 func (g *gregorHandler) DismissCategory(ctx context.Context, category gregor1.Category) error {
 	var err error
 	defer g.G().CTrace(ctx, fmt.Sprintf("gregorHandler.DismissCategory(%s)", category.String()),
-		func() error { return err },
+		&err,
 	)()
 	defer g.pushState(keybase1.PushReason_NEW_DATA)
 
-	dismissal, err := grutils.TemplateMessage(g.currentUID())
+	dismissal, err := grutils.FormMessageForDismissCategory(ctx, g.currentUID(), category)
 	if err != nil {
 		return err
 	}
 
-	dismissal.Ibm_.StateUpdate_.Dismissal_ = &gregor1.Dismissal{
-		Ranges_: []gregor1.MsgRange{
-			{
-				Category_: category,
-			}},
-	}
 	gcli, err := g.getGregorCli()
 	if err != nil {
 		return err
@@ -1686,7 +1698,7 @@ func (g *gregorHandler) DismissCategory(ctx context.Context, category gregor1.Ca
 func (g *gregorHandler) InjectItem(ctx context.Context, cat string, body []byte, dtime gregor1.TimeOrOffset) (gregor1.MsgID, error) {
 	var err error
 	defer g.G().CTrace(ctx, fmt.Sprintf("gregorHandler.InjectItem(%s)", cat),
-		func() error { return err },
+		&err,
 	)()
 	defer g.pushState(keybase1.PushReason_NEW_DATA)
 
@@ -1706,7 +1718,7 @@ func (g *gregorHandler) InjectItem(ctx context.Context, cat string, body []byte,
 func (g *gregorHandler) UpdateItem(ctx context.Context, msgID gregor1.MsgID, cat string, body []byte, dtime gregor1.TimeOrOffset) (gregor1.MsgID, error) {
 	var err error
 	defer g.G().CTrace(ctx, fmt.Sprintf("gregorHandler.UpdateItem(%s,%s)", msgID.String(), cat),
-		func() error { return err },
+		&err,
 	)()
 	defer g.pushState(keybase1.PushReason_NEW_DATA)
 
@@ -1733,7 +1745,7 @@ func (g *gregorHandler) UpdateItem(ctx context.Context, msgID gregor1.MsgID, cat
 func (g *gregorHandler) UpdateCategory(ctx context.Context, cat string, body []byte,
 	dtime gregor1.TimeOrOffset) (res gregor1.MsgID, err error) {
 	defer g.G().CTrace(ctx, fmt.Sprintf("gregorHandler.UpdateCategory(%s)", cat),
-		func() error { return err },
+		&err,
 	)()
 	defer g.pushState(keybase1.PushReason_NEW_DATA)
 
@@ -1765,7 +1777,7 @@ func (g *gregorHandler) UpdateCategory(ctx context.Context, cat string, body []b
 func (g *gregorHandler) InjectOutOfBandMessage(ctx context.Context, system string, body []byte) error {
 	var err error
 	defer g.G().CTrace(ctx, fmt.Sprintf("gregorHandler.InjectOutOfBandMessage(%s)", system),
-		func() error { return err },
+		&err,
 	)()
 
 	uid := g.G().Env.GetUID()
@@ -1835,7 +1847,7 @@ func (g *gregorHandler) getState(ctx context.Context) (res gregor1.State, err er
 }
 
 func (g *gregorHandler) State(ctx context.Context) (res gregor.State, err error) {
-	defer g.G().CTraceTimed(ctx, "gregorHandler#State", func() error { return err })()
+	defer g.G().CTrace(ctx, "gregorHandler#State", &err)()
 	gcli, err := g.getGregorCli()
 	if err != nil {
 		return res, err
@@ -1844,7 +1856,7 @@ func (g *gregorHandler) State(ctx context.Context) (res gregor.State, err error)
 }
 
 func (g *gregorRPCHandler) GetState(ctx context.Context) (res gregor1.State, err error) {
-	defer g.G().CTraceTimed(ctx, "gregorRPCHandler#GetState", func() error { return err })()
+	defer g.G().CTrace(ctx, "gregorRPCHandler#GetState", &err)()
 	if res, err = g.gh.getState(ctx); err != nil {
 		return res, err
 	}
@@ -1853,27 +1865,27 @@ func (g *gregorRPCHandler) GetState(ctx context.Context) (res gregor1.State, err
 }
 
 func (g *gregorRPCHandler) InjectItem(ctx context.Context, arg keybase1.InjectItemArg) (res gregor1.MsgID, err error) {
-	defer g.G().CTraceTimed(ctx, "gregorRPCHandler#InjectItem", func() error { return err })()
+	defer g.G().CTrace(ctx, "gregorRPCHandler#InjectItem", &err)()
 	return g.gh.InjectItem(ctx, arg.Cat, []byte(arg.Body), arg.Dtime)
 }
 
 func (g *gregorRPCHandler) UpdateItem(ctx context.Context, arg keybase1.UpdateItemArg) (res gregor1.MsgID, err error) {
-	defer g.G().CTraceTimed(ctx, "gregorRPCHandler#UpdateItem", func() error { return err })()
+	defer g.G().CTrace(ctx, "gregorRPCHandler#UpdateItem", &err)()
 	return g.gh.UpdateItem(ctx, arg.MsgID, arg.Cat, []byte(arg.Body), arg.Dtime)
 }
 
 func (g *gregorRPCHandler) UpdateCategory(ctx context.Context, arg keybase1.UpdateCategoryArg) (res gregor1.MsgID, err error) {
-	defer g.G().CTraceTimed(ctx, "gregorRPCHandler#UpdateCategory", func() error { return err })()
+	defer g.G().CTrace(ctx, "gregorRPCHandler#UpdateCategory", &err)()
 	return g.gh.UpdateCategory(ctx, arg.Category, []byte(arg.Body), arg.Dtime)
 }
 
 func (g *gregorRPCHandler) DismissCategory(ctx context.Context, category gregor1.Category) (err error) {
-	defer g.G().CTraceTimed(ctx, "gregorRPCHandler#DismissCategory", func() error { return err })()
+	defer g.G().CTrace(ctx, "gregorRPCHandler#DismissCategory", &err)()
 	return g.gh.DismissCategory(ctx, category)
 }
 
 func (g *gregorRPCHandler) DismissItem(ctx context.Context, id gregor1.MsgID) (err error) {
-	defer g.G().CTraceTimed(ctx, "gregorRPCHandler#DismissItem", func() error { return err })()
+	defer g.G().CTrace(ctx, "gregorRPCHandler#DismissItem", &err)()
 	return g.gh.DismissItem(ctx, nil, id)
 }
 
@@ -1889,33 +1901,35 @@ type timeoutClient struct {
 
 var _ rpc.GenericClient = (*timeoutClient)(nil)
 
-func (t *timeoutClient) Call(ctx context.Context, method string, arg interface{}, res interface{}) error {
-	var timeoutCancel context.CancelFunc
-	ctx, timeoutCancel = context.WithTimeout(ctx, t.timeout)
-	defer timeoutCancel()
-	err := t.inner.Call(ctx, method, arg, res)
+func (t *timeoutClient) Call(ctx context.Context, method string, arg interface{},
+	res interface{}, timeout time.Duration) error {
+	if timeout == 0 {
+		timeout = t.timeout
+	}
+	err := t.inner.Call(ctx, method, arg, res, timeout)
 	if err == context.DeadlineExceeded {
 		return t.timeoutErr
 	}
 	return err
 }
 
-func (t *timeoutClient) CallCompressed(ctx context.Context, method string, arg interface{}, res interface{}, ctype rpc.CompressionType) error {
-	var timeoutCancel context.CancelFunc
-	ctx, timeoutCancel = context.WithTimeout(ctx, t.timeout)
-	defer timeoutCancel()
-	err := t.inner.CallCompressed(ctx, method, arg, res, ctype)
+func (t *timeoutClient) CallCompressed(ctx context.Context, method string, arg interface{},
+	res interface{}, ctype rpc.CompressionType, timeout time.Duration) error {
+	if timeout == 0 {
+		timeout = t.timeout
+	}
+	err := t.inner.CallCompressed(ctx, method, arg, res, ctype, timeout)
 	if err == context.DeadlineExceeded {
 		return t.timeoutErr
 	}
 	return err
 }
 
-func (t *timeoutClient) Notify(ctx context.Context, method string, arg interface{}) error {
-	var timeoutCancel context.CancelFunc
-	ctx, timeoutCancel = context.WithTimeout(ctx, t.timeout)
-	defer timeoutCancel()
-	err := t.inner.Notify(ctx, method, arg)
+func (t *timeoutClient) Notify(ctx context.Context, method string, arg interface{}, timeout time.Duration) error {
+	if timeout == 0 {
+		timeout = t.timeout
+	}
+	err := t.inner.Notify(ctx, method, arg, timeout)
 	if err == context.DeadlineExceeded {
 		return t.timeoutErr
 	}

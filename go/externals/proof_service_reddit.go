@@ -13,7 +13,7 @@ import (
 	jsonw "github.com/keybase/go-jsonw"
 )
 
-//=============================================================================
+// =============================================================================
 // Reddit
 //
 
@@ -41,7 +41,7 @@ func (rc *RedditChecker) CheckStatus(mctx libkb.MetaContext, h libkb.SigHint, _ 
 }
 
 //
-//=============================================================================
+// =============================================================================
 
 func urlReencode(s string) string {
 	// Reddit interprets plusses in the query string differently depending
@@ -142,7 +142,7 @@ func (t *RedditServiceType) FormatProofText(mctx libkb.MetaContext, ppr *libkb.P
 		return trustedDefault
 	}
 	var host string
-	if mctx.G().GetAppType() == libkb.MobileAppType {
+	if mctx.G().IsMobileAppType() {
 		hostHint, err := ppr.Metadata.AtKey("mobile_host").GetString()
 		if err != nil {
 			hostHint = ""

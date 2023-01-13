@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 
@@ -29,10 +28,7 @@ const AccountPageHeader = (props: Props) => (
 )
 
 const styles = Styles.styleSheetCreate(() => ({
-  container: {
-    ...Styles.globalStyles.fillAbsolute,
-    flex: 1,
-  },
+  container: {flex: 1},
 }))
 
 export default AccountPageHeader

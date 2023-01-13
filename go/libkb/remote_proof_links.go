@@ -181,3 +181,13 @@ func (p ProofLinkWithState) ToKeyValuePair() (string, string) {
 }
 
 func (p ProofLinkWithState) GetProofType() keybase1.ProofType { return p.link.GetProofType() }
+
+func (r *RemoteProofLinks) toServiceSummary() (ret UserServiceSummary) {
+	ret = make(UserServiceSummary, len(r.links))
+	activeProofs := r.Active()
+	for _, proof := range activeProofs {
+		key, val := proof.ToKeyValuePair()
+		ret[key] = val
+	}
+	return ret
+}

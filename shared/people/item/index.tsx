@@ -2,6 +2,17 @@ import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import {formatTimeForPeopleItem} from '../../util/timestamp'
+import type {Props as ButtonProps} from '../../common-adapters/button'
+
+export type TaskButton =
+  | {
+      label: string
+      onClick: () => void
+      type?: ButtonProps['type']
+      mode?: ButtonProps['mode']
+      waiting?: ButtonProps['waiting']
+    }
+  | React.ReactElement
 
 export type Props = {
   badged: boolean
@@ -11,12 +22,13 @@ export type Props = {
   contentStyle?: any
   format?: 'single' | 'multi'
   iconContainerStyle?: Styles.StylesCrossPlatform
+  buttons?: Array<TaskButton>
 }
 
-export default (props: Props) => (
+const PeopleItem = (props: Props) => (
   <Kb.Box style={Styles.collapseStyles([styles.container, props.badged && styles.containerBadged])}>
     {!!props.icon && (
-      <Kb.Box style={Styles.collapseStyles([styles.iconContainer, props.iconContainerStyle])}>
+      <Kb.Box key="icon" style={Styles.collapseStyles([styles.iconContainer, props.iconContainerStyle])}>
         {props.icon}
       </Kb.Box>
     )}
@@ -27,6 +39,19 @@ export default (props: Props) => (
       style={Styles.collapseStyles([styles.childrenContainer, props.contentStyle])}
     >
       {props.children}
+      <Kb.Box2 direction="horizontal" style={styles.actionContainer} alignItems="center" fullWidth={true}>
+        {props.buttons &&
+          props.buttons.length > 0 &&
+          props.buttons.map((b, idx) =>
+            React.isValidElement(b) ? (
+              <Kb.Box key={idx} style={styles.button}>
+                {b}
+              </Kb.Box>
+            ) : (
+              <Kb.Button key={b.label} small={true} style={styles.button} {...b} />
+            )
+          )}
+      </Kb.Box2>
     </Kb.Box2>
     <Kb.Box
       style={Styles.collapseStyles([
@@ -35,15 +60,23 @@ export default (props: Props) => (
       ])}
     >
       {!!props.when && <Kb.Text type="BodyTiny">{formatTimeForPeopleItem(props.when.getTime())}</Kb.Text>}
-      {props.badged && <Kb.Badge badgeStyle={styles.badge} height={Styles.globalMargins.tiny} />}
+      {props.badged && (
+        <Kb.Badge badgeStyle={styles.badge} height={Styles.globalMargins.tiny} leftRightPadding={0} />
+      )}
     </Kb.Box>
   </Kb.Box>
 )
+export default PeopleItem
 
 const styles = Styles.styleSheetCreate(() => ({
+  actionContainer: {
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
   badge: {
     marginLeft: Styles.globalMargins.xtiny,
   },
+  button: {marginBottom: Styles.globalMargins.xtiny, marginRight: Styles.globalMargins.tiny},
   childrenContainer: {
     flex: 1,
     overflow: 'hidden',
@@ -71,15 +104,24 @@ const styles = Styles.styleSheetCreate(() => ({
     marginRight: Styles.globalMargins.xsmall,
     width: 48,
   },
-  timestampContainer: {
-    ...Styles.globalStyles.flexBoxRow,
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginLeft: 'auto',
-    marginRight: Styles.globalMargins.small,
-    marginTop: 6,
-  },
+  timestampContainer: Styles.platformStyles({
+    common: {
+      ...Styles.globalStyles.flexBoxRow,
+      alignItems: 'center',
+      alignSelf: 'center',
+      marginLeft: 'auto',
+      marginRight: Styles.globalMargins.small,
+      marginTop: 6,
+    },
+    isElectron: {alignSelf: 'baseline'},
+    isMobile: {
+      position: 'relative',
+      top: -5,
+    },
+  }),
   timestampContainerMulti: {
     alignSelf: 'flex-start',
+    position: 'relative',
+    top: -2,
   },
 }))

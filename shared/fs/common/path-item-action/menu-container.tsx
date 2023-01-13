@@ -3,11 +3,11 @@ import * as Constants from '../../../constants/fs'
 import * as FsGen from '../../../actions/fs-gen'
 import * as Chat2Gen from '../../../actions/chat2-gen'
 import * as Container from '../../../util/container'
+import {anyWaiting} from '../../../constants/waiting'
 import {isMobile} from '../../../constants/platform'
 import {memoize} from '../../../util/memoize'
-import flags from '../../../util/feature-flags'
 import Menu from './menu'
-import {FloatingMenuProps} from './types'
+import type {FloatingMenuProps} from './types'
 import {getRootLayout, getShareLayout} from './layout'
 import * as RouteTreeGen from '../../../actions/route-tree-gen'
 import * as Util from '../../../util/kbfs'
@@ -21,7 +21,9 @@ type OwnProps = {
 const mapStateToProps = (state: Container.TypedState, {path}: OwnProps) => ({
   _downloadID: state.fs.pathItemActionMenu.downloadID,
   _downloads: state.fs.downloads,
-  _pathItem: state.fs.pathItems.get(path, Constants.unknownPathItem),
+  _fileContext: state.fs.fileContext.get(path) || Constants.emptyFileContext,
+  _ignoreNeedsToWait: anyWaiting(state, Constants.folderListWaitingKey, Constants.statWaitingKey),
+  _pathItem: Constants.getPathItem(state.fs.pathItems, path),
   _pathItemActionMenu: state.fs.pathItemActionMenu,
   _sfmiEnabled: state.fs.sfmi.driverStatus.type === Types.DriverStatusType.Enabled,
   _username: state.config.username,
@@ -68,11 +70,18 @@ const mapDispatchToProps = (dispatch: Container.TypedDispatch, {mode, path}: Own
         ...Util.tlfToParticipantsOrTeamname(Types.pathToString(path)),
       })
     ),
+  _rename: () => dispatch(FsGen.createStartRename({path})),
   _saveMedia: () => {
     dispatch(FsGen.createSaveMedia({path}))
   },
-  _sendAttachmentToChat: () =>
-    Constants.makeActionsForShowSendAttachmentToChat(path).forEach(action => dispatch(action)),
+  _sendAttachmentToChat: () => {
+    path &&
+      dispatch(
+        RouteTreeGen.createNavigateAppend({
+          path: [{props: {sendPaths: [path]}, selected: 'sendToChat'}],
+        })
+      )
+  },
   _sendToOtherApp: () => {
     dispatch(FsGen.createShareNative({path}))
   },
@@ -88,7 +97,7 @@ const getDownloadingState = memoize(
     if (!downloadID) {
       return {done: true, saving: false, sharing: false}
     }
-    const downloadState = downloads.state.get(downloadID, Constants.emptyDownloadState)
+    const downloadState = downloads.state.get(downloadID) || Constants.emptyDownloadState
     const intent = pathItemActionMenu.downloadIntent
     const done = downloadState !== Constants.emptyDownloadState && !Constants.downloadIsOngoing(downloadState)
     if (!intent) {
@@ -109,15 +118,6 @@ const addCancelIfNeeded = (action: () => void, cancel: (arg0: string) => void, t
         cancel(toCancel)
       }
     : action
-
-const shouldAutoHide = stateProps => {
-  const {saving, sharing, done} = getDownloadingState(
-    stateProps._downloads,
-    stateProps._downloadID,
-    stateProps._pathItemActionMenu
-  )
-  return (saving || sharing) && done
-}
 
 const getSendToOtherApp = (stateProps, dispatchProps, c) => {
   const {sharing} = getDownloadingState(
@@ -156,23 +156,33 @@ const mergeProps = (
 ) => {
   const getLayout = stateProps._view === 'share' ? getShareLayout : getRootLayout
   const {mode, ...rest} = ownProps
-  const layout = getLayout(mode, ownProps.path, stateProps._pathItem, stateProps._username)
+  const layout = getLayout(
+    mode,
+    ownProps.path,
+    stateProps._pathItem,
+    stateProps._fileContext,
+    stateProps._username
+  )
   const c = action =>
     isMobile ? addCancelIfNeeded(action, dispatchProps._cancel, stateProps._downloadID) : action
   return {
     ...rest,
-    shouldAutoHide: shouldAutoHide(stateProps),
     // menu items
-    // eslint-disable-next-line sort-keys
+
     delete: layout.delete ? c(dispatchProps._delete) : null,
     download: layout.download ? c(dispatchProps._download) : null,
-    ignoreTlf: layout.ignoreTlf ? c(dispatchProps._ignoreTlf) : null,
+    ignoreTlf: layout.ignoreTlf
+      ? stateProps._ignoreNeedsToWait
+        ? 'disabled'
+        : c(dispatchProps._ignoreTlf)
+      : null,
     me: stateProps._username,
-    moveOrCopy: flags.moveOrCopy && layout.moveOrCopy ? c(dispatchProps._moveOrCopy) : null,
+    moveOrCopy: null,
     newFolder: layout.newFolder ? c(dispatchProps._newFolder) : null,
     openChatNonTeam: layout.openChatNonTeam ? c(dispatchProps._openChat) : null,
     openChatTeam: layout.openChatTeam ? c(dispatchProps._openChat) : null,
     pathItemType: stateProps._pathItem.type,
+    rename: layout.rename ? c(dispatchProps._rename) : null,
     saveMedia: layout.saveMedia ? getSaveMedia(stateProps, dispatchProps, c) : null,
     showInSystemFileManager:
       layout.showInSystemFileManager && stateProps._sfmiEnabled
@@ -186,6 +196,4 @@ const mergeProps = (
   }
 }
 
-export default Container.namedConnect(mapStateToProps, mapDispatchToProps, mergeProps, 'PathItemActionMenu')(
-  Menu
-)
+export default Container.connect(mapStateToProps, mapDispatchToProps, mergeProps)(Menu)

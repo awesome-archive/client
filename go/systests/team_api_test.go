@@ -1,7 +1,6 @@
 package systests
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +22,7 @@ func TestTeamAPI(t *testing.T) {
 
 	assertTeamAPIOutput(t, tt.users[0],
 		`{"method": "list-self-memberships"}`,
-		`{"result":{"teams":null,"annotatedActiveInvites":{}}}`)
+		`{"result":{"teams":null}}`)
 
 	teamName, err := libkb.RandHexString("t", 6)
 	require.NoError(t, err)
@@ -34,12 +33,12 @@ func TestTeamAPI(t *testing.T) {
 
 	assertTeamAPIOutput(t, tt.users[0],
 		`{"method": "add-members", "params": {"options": {"team": "`+teamName+`", "usernames": [{"username": "`+tt.users[1].username+`", "role": "reader"}]}}}`,
-		`{"result":[{"invited":false,"user":{"uid":"`+tt.users[1].uid.String()+`","username":"`+tt.users[1].username+`"},"emailSent":false,"chatSending":false}]}`)
+		`{"result":[{"invited":false,"user":{"uid":"`+tt.users[1].uid.String()+`","username":"`+tt.users[1].username+`"},"chatSending":false}]}`)
 	assertTeamAPIOutput(t, tt.users[0],
 		`{"method": "add-members", "params": {"options": {"team": "`+teamName+`", "usernames": [{"username": "`+tt.users[2].username+`", "role": "bot"}]}}}`,
-		`{"result":[{"invited":false,"user":{"uid":"`+tt.users[2].uid.String()+`","username":"`+tt.users[2].username+`"},"emailSent":false,"chatSending":false}]}`)
+		`{"result":[{"invited":false,"user":{"uid":"`+tt.users[2].uid.String()+`","username":"`+tt.users[2].username+`"},"chatSending":false}]}`)
 	// TODO HOTPOT-227 reenable
-	//assertTeamAPIOutput(t, tt.users[0],
+	// assertTeamAPIOutput(t, tt.users[0],
 	//	`{"method": "add-members", "params": {"options": {"team": "`+teamName+`", "usernames": [{"username": "`+tt.users[3].username+`", "role": "restrictedbot"}]}}}`,
 	//	`{"result":[{"invited":false,"user":{"uid":"`+tt.users[3].uid.String()+`","username":"`+tt.users[3].username+`"},"emailSent":false,"chatSending":false}]}`)
 
@@ -62,7 +61,7 @@ func TestTeamAPI(t *testing.T) {
 		`{"method": "remove-member", "params": {"options": {"team": "`+teamName+`", "username": "`+tt.users[2].username+`"}}}`,
 		`{}`)
 	// TODO HOTPOT-227 reenable
-	//assertTeamAPIOutput(t, tt.users[0],
+	// assertTeamAPIOutput(t, tt.users[0],
 	//	`{"method": "remove-member", "params": {"options": {"team": "`+teamName+`", "username": "`+tt.users[3].username+`"}}}`,
 	//	`{}`)
 }
@@ -97,7 +96,7 @@ func runTeamAPI(t *testing.T, u *userPlusDevice, json string) (string, error) {
 	if err := cmd.Run(); err != nil {
 		return "", err
 	}
-	out, err := ioutil.ReadFile(filename)
+	out, err := os.ReadFile(filename)
 	if err != nil {
 		return "", err
 	}

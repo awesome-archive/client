@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -135,7 +134,7 @@ func TestChatSrvUnfurl(t *testing.T) {
 		sender := NewNonblockingSender(tc.Context(),
 			NewBlockingSender(tc.Context(), NewBoxer(tc.Context()),
 				func() chat1.RemoteInterface { return ri }))
-		store := attachments.NewStoreTesting(tc.Context().GetLog(), nil, etc.G)
+		store := attachments.NewStoreTesting(tc.Context(), nil)
 		s3signer := &ptsigner{}
 		unfurler := unfurl.NewUnfurler(tc.Context(), store, s3signer, storage, sender,
 			func() chat1.RemoteInterface { return ri })
@@ -219,7 +218,7 @@ func TestChatSrvUnfurl(t *testing.T) {
 					var buf bytes.Buffer
 					_, err = io.Copy(&buf, resp.Body)
 					require.NoError(t, err)
-					refBytes, err := ioutil.ReadFile(filepath.Join("unfurl", "testcases", "nytimes_sol.ico"))
+					refBytes, err := os.ReadFile(filepath.Join("unfurl", "testcases", "nytimes_sol.ico"))
 					require.NoError(t, err)
 					require.True(t, bytes.Equal(refBytes, buf.Bytes()))
 					require.Equal(t, "MIKE", generic.Title)

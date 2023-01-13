@@ -1,9 +1,7 @@
 package ephemeral
 
 import (
-	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -216,7 +214,7 @@ func TestNewTeamEKNeeded(t *testing.T) {
 	assertKeyGenerations(expectedDeviceEKGen, expectedUserEKGen, expectedTeamEKGen, false /*created*/, false /* teamEKCreationInProgress */)
 
 	// Now let's kill our deviceEK as well, and we should generate all new keys
-	err = rawDeviceEKStorage.Delete(mctx, expectedDeviceEKGen)
+	err = rawDeviceEKStorage.Delete(mctx, expectedDeviceEKGen, "")
 	require.NoError(t, err)
 	tc.G.GetDeviceEKStorage().ClearCache()
 	expectedDeviceEKGen++
@@ -240,7 +238,7 @@ func TestNewTeamEKNeeded(t *testing.T) {
 	key, err := rawDeviceEKStorage.key(mctx, expectedDeviceEKGen)
 	require.NoError(t, err)
 	noiseFilePath := getNoiseFilePath(tc, key)
-	noise, err := ioutil.ReadFile(noiseFilePath)
+	noise, err := os.ReadFile(noiseFilePath)
 	require.NoError(t, err)
 
 	// flip one bit
@@ -248,7 +246,7 @@ func TestNewTeamEKNeeded(t *testing.T) {
 	copy(corruptedNoise, noise)
 	corruptedNoise[0] ^= 0x01
 
-	err = ioutil.WriteFile(noiseFilePath, corruptedNoise, libkb.PermFile)
+	err = os.WriteFile(noiseFilePath, corruptedNoise, libkb.PermFile)
 	require.NoError(t, err)
 	tc.G.GetDeviceEKStorage().ClearCache()
 
@@ -409,7 +407,7 @@ func TestLoginOneshotWithEphemeral(t *testing.T) {
 	err := engine.RunEngine2(mctx, eng)
 	require.NoError(t, err)
 	require.NotZero(t, len(eng.Passphrase()))
-	require.NoError(t, tc.G.Logout(context.TODO()))
+	require.NoError(t, tc.Logout())
 
 	keygenWithOneshot := func() (keybase1.DeviceEk, keybase1.UserEk, keybase1.TeamEphemeralKey) {
 		tc := libkb.SetupTest(t, "ephemeral", 2)

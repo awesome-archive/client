@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
@@ -68,7 +67,7 @@ func (e *PGPVerify) SubConsumers() []libkb.UIConsumer {
 // Run starts the engine.
 func (e *PGPVerify) Run(m libkb.MetaContext) error {
 	var err error
-	defer m.Trace("PGPVerify#Run", func() error { return err })()
+	defer m.Trace("PGPVerify#Run", &err)()
 	var sc libkb.StreamClassification
 	sc, e.source, err = libkb.ClassifyStream(e.arg.Source)
 
@@ -103,7 +102,7 @@ func (e *PGPVerify) Signer() *libkb.User {
 func (e *PGPVerify) runAttached(m libkb.MetaContext) error {
 	arg := &PGPDecryptArg{
 		Source:       e.source,
-		Sink:         libkb.NopWriteCloser{W: ioutil.Discard},
+		Sink:         libkb.NopWriteCloser{W: io.Discard},
 		AssertSigned: true,
 		SignedBy:     e.arg.SignedBy,
 	}
@@ -131,9 +130,24 @@ func (e *PGPVerify) runDetached(m libkb.MetaContext) error {
 	if err != nil {
 		return err
 	}
+	hashMethod, _, err := libkb.ExtractPGPSignatureHashMethod(sk, e.arg.Signature)
+	if err != nil {
+		return err
+	}
 
 	e.signer = sk.KeyOwnerByEntity(signer)
 	e.signStatus = &libkb.SignatureStatus{IsSigned: true}
+
+	if !libkb.IsHashSecure(hashMethod) {
+		e.signStatus.Warnings = append(
+			e.signStatus.Warnings,
+			libkb.NewHashSecurityWarning(
+				libkb.HashSecurityWarningSignatureHash,
+				hashMethod,
+				nil,
+			),
+		)
+	}
 
 	if signer != nil {
 		if len(signer.UnverifiedRevocations) > 0 {
@@ -164,10 +178,21 @@ func (e *PGPVerify) runDetached(m libkb.MetaContext) error {
 
 		if val, ok := p.(*packet.Signature); ok {
 			e.signStatus.SignatureTime = val.CreationTime
+		} else if val, ok := p.(*packet.SignatureV3); ok {
+			e.signStatus.SignatureTime = val.CreationTime
+		}
+
+		if warnings := libkb.NewPGPKeyBundle(signer).SecurityWarnings(
+			libkb.HashSecurityWarningSignersIdentityHash,
+		); len(warnings) > 0 {
+			e.signStatus.Warnings = append(
+				e.signStatus.Warnings,
+				warnings...,
+			)
 		}
 
 		fingerprint := libkb.PGPFingerprint(signer.PrimaryKey.Fingerprint)
-		err = OutputSignatureSuccess(m, fingerprint, e.signer, e.signStatus.SignatureTime)
+		err = OutputSignatureSuccess(m, fingerprint, e.signer, e.signStatus.SignatureTime, e.signStatus.Warnings)
 		if err != nil {
 			return err
 		}
@@ -180,7 +205,7 @@ func (e *PGPVerify) runDetached(m libkb.MetaContext) error {
 func (e *PGPVerify) runClearsign(m libkb.MetaContext) error {
 	// clearsign decode only works with the whole data slice, not a reader
 	// so have to read it all here:
-	msg, err := ioutil.ReadAll(e.source)
+	msg, err := io.ReadAll(e.source)
 	if err != nil {
 		return err
 	}
@@ -189,7 +214,7 @@ func (e *PGPVerify) runClearsign(m libkb.MetaContext) error {
 		return errors.New("Unable to decode clearsigned message")
 	}
 
-	sigBody, err := ioutil.ReadAll(b.ArmoredSignature.Body)
+	sigBody, err := io.ReadAll(b.ArmoredSignature.Body)
 	if err != nil {
 		return err
 	}
@@ -203,9 +228,24 @@ func (e *PGPVerify) runClearsign(m libkb.MetaContext) error {
 	if err != nil {
 		return fmt.Errorf("Check sig error: %s", err)
 	}
+	hashMethod, _, err := libkb.ExtractPGPSignatureHashMethod(sk, sigBody)
+	if err != nil {
+		return err
+	}
 
 	e.signer = sk.KeyOwnerByEntity(signer)
 	e.signStatus = &libkb.SignatureStatus{IsSigned: true}
+
+	if !libkb.IsHashSecure(hashMethod) {
+		e.signStatus.Warnings = append(
+			e.signStatus.Warnings,
+			libkb.NewHashSecurityWarning(
+				libkb.HashSecurityWarningSignatureHash,
+				hashMethod,
+				nil,
+			),
+		)
+	}
 
 	if signer != nil {
 		if len(signer.UnverifiedRevocations) > 0 {
@@ -227,10 +267,21 @@ func (e *PGPVerify) runClearsign(m libkb.MetaContext) error {
 
 		if val, ok := p.(*packet.Signature); ok {
 			e.signStatus.SignatureTime = val.CreationTime
+		} else if val, ok := p.(*packet.SignatureV3); ok {
+			e.signStatus.SignatureTime = val.CreationTime
+		}
+
+		if warnings := libkb.NewPGPKeyBundle(signer).SecurityWarnings(
+			libkb.HashSecurityWarningSignersIdentityHash,
+		); len(warnings) > 0 {
+			e.signStatus.Warnings = append(
+				e.signStatus.Warnings,
+				warnings...,
+			)
 		}
 
 		fingerprint := libkb.PGPFingerprint(signer.PrimaryKey.Fingerprint)
-		err = OutputSignatureSuccess(m, fingerprint, e.signer, e.signStatus.SignatureTime)
+		err = OutputSignatureSuccess(m, fingerprint, e.signer, e.signStatus.SignatureTime, e.signStatus.Warnings)
 		if err != nil {
 			return err
 		}

@@ -1,23 +1,21 @@
-import {namedConnect} from '../../util/container'
+import * as Container from '../../util/container'
 import * as Types from '../../constants/types/fs'
 import * as Constants from '../../constants/fs'
-import {TypedState} from '../../constants/reducer'
 import * as Kb from '../../common-adapters'
 import * as FsGen from '../../actions/fs-gen'
-import * as React from 'react'
-import * as Styles from '../../styles'
 import * as Platforms from '../../constants/platform'
+import type * as Styles from '../../styles'
 
 type OwnProps = {
   path: Types.Path
   style?: Styles.StylesCrossPlatform | null
 }
 
-const mapStateToProps = (state: TypedState, ownProps: OwnProps) => ({
-  _pathItem: state.fs.pathItems.get(ownProps.path, Constants.unknownPathItem),
+const mapStateToProps = (state: Container.TypedState, ownProps: OwnProps) => ({
+  _pathItem: Constants.getPathItem(state.fs.pathItems, ownProps.path),
 })
 
-const mapDispatchToProps = (dispatch, ownProps: OwnProps) => ({
+const mapDispatchToProps = (dispatch: Container.TypedDispatch, ownProps: OwnProps) => ({
   openAndUploadBoth: Platforms.isDarwin
     ? () => dispatch(FsGen.createOpenAndUpload({parentPath: ownProps.path, type: Types.OpenDialogType.Both}))
     : null,
@@ -56,7 +54,25 @@ const mergeProps = (
 
 type UploadButtonProps = ReturnType<typeof mergeProps>
 
-const UploadButton = Kb.OverlayParentHOC((props: Kb.PropsWithOverlay<UploadButtonProps>) => {
+const UploadButton = (props: UploadButtonProps) => {
+  const {toggleShowingPopup, showingPopup, popup, popupAnchor} = Kb.usePopup(attachTo => (
+    <Kb.FloatingMenu
+      attachTo={attachTo}
+      visible={showingPopup}
+      onHidden={toggleShowingPopup}
+      items={[
+        ...(props.pickAndUploadPhoto ? [{onClick: props.pickAndUploadPhoto, title: 'Upload photo'}] : []),
+        ...(props.pickAndUploadVideo ? [{onClick: props.pickAndUploadVideo, title: 'Upload video'}] : []),
+        ...(props.openAndUploadDirectory
+          ? [{onClick: props.openAndUploadDirectory, title: 'Upload directory'}]
+          : []),
+        ...(props.openAndUploadFile ? [{onClick: props.openAndUploadFile, title: 'Upload file'}] : []),
+      ]}
+      position="bottom left"
+      closeOnSelect={true}
+    />
+  ))
+
   if (!props.canUpload) {
     return null
   }
@@ -72,58 +88,13 @@ const UploadButton = Kb.OverlayParentHOC((props: Kb.PropsWithOverlay<UploadButto
   return (
     <>
       {Platforms.isMobile ? (
-        <Kb.Icon type="iconfont-upload" padding="tiny" onClick={props.toggleShowingMenu} />
+        <Kb.Icon type="iconfont-upload" padding="tiny" onClick={toggleShowingPopup} />
       ) : (
-        <Kb.Button
-          onClick={props.toggleShowingMenu}
-          label="Upload"
-          ref={props.setAttachmentRef}
-          style={props.style}
-        />
+        <Kb.Button onClick={toggleShowingPopup} label="Upload" ref={popupAnchor} style={props.style} />
       )}
-      <Kb.FloatingMenu
-        attachTo={props.getAttachmentRef}
-        visible={props.showingMenu}
-        onHidden={props.toggleShowingMenu}
-        items={[
-          ...(props.pickAndUploadPhoto
-            ? [
-                {
-                  onClick: props.pickAndUploadPhoto,
-                  title: 'Upload photo',
-                },
-              ]
-            : []),
-          ...(props.pickAndUploadVideo
-            ? [
-                {
-                  onClick: props.pickAndUploadVideo,
-                  title: 'Upload video',
-                },
-              ]
-            : []),
-          ...(props.openAndUploadDirectory
-            ? [
-                {
-                  onClick: props.openAndUploadDirectory,
-                  title: 'Upload directory',
-                },
-              ]
-            : []),
-          ...(props.openAndUploadFile
-            ? [
-                {
-                  onClick: props.openAndUploadFile,
-                  title: 'Upload file',
-                },
-              ]
-            : []),
-        ]}
-        position="bottom left"
-        closeOnSelect={true}
-      />
+      {popup}
     </>
   )
-})
+}
 
-export default namedConnect(mapStateToProps, mapDispatchToProps, mergeProps, 'UploadButton')(UploadButton)
+export default Container.connect(mapStateToProps, mapDispatchToProps, mergeProps)(UploadButton)

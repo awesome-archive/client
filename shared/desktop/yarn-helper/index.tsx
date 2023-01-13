@@ -27,15 +27,49 @@ const commands = {
   },
   postinstall: {
     code: () => {
-      // storybook uses react-docgen which really cr*ps itself with flow
-      // I couldn't find a good way to override this effectively (yarn resolutions didn't work) so we're just killing it with fire
-      makeShims()
-      fixTypes()
+      fixModules()
       checkFSEvents()
       clearTSCache()
+      clearAndroidBuild()
+      getMsgPack()
+      patch()
+      patchIosKBLib()
+      prepareSubmodules()
     },
     help: '',
   },
+  test: {
+    code: () => {
+      const update = process.argv[3] === '-u'
+      const updateLabel = update ? ' (updating storyshots)' : ''
+      const updateStr = update ? ' -u Storyshots' : ''
+
+      console.log(`Electron test${updateLabel}`)
+      exec(`cross-env-shell BABEL_ENV=test jest${updateStr}`)
+      console.log(`React Native test${updateLabel}`)
+      exec(`cross-env-shell BABEL_ENV=test-rn jest --config .storybook-rn/jest.config.js${updateStr}`)
+    },
+    help: 'Run various tests. pass -u to update storyshots',
+  },
+}
+
+const patch = () => {
+  exec('patch-package')
+}
+
+const prepareSubmodules = () => {
+  if (process.platform === 'darwin') {
+    const root = path.resolve(__dirname, '..', '..', '..', 'rnmodules')
+    const tsOverride = path.resolve(__dirname, '..', '..', 'override-d.ts')
+    fs.readdirSync(root, {withFileTypes: true}).forEach(f => {
+      if (f.isDirectory()) {
+        const full = path.resolve(root, f.name)
+        exec(`cd ${full} && yarn`)
+        // need top bring our TS over, hacky but other things were more complex
+        exec(`cp ${full}/lib/typescript/index.d.ts ${tsOverride}/${f.name}`)
+      }
+    })
+  }
 }
 
 const checkFSEvents = () => {
@@ -48,26 +82,9 @@ const checkFSEvents = () => {
   }
 }
 
-const fixTypes = () => {
-  // couldn't figure out an effective way to patch this file up, so just blowing it away
-  const files = ['@types/react-native/index.d.ts']
-
-  files.forEach(file => {
-    const p = path.resolve(__dirname, '..', '..', 'node_modules', file)
-    try {
-      fs.unlinkSync(p)
-    } catch (_) {}
-  })
-
-  try {
-    fs.copyFileSync(
-      path.resolve(__dirname, '..', '..', 'override-d.ts', 'react-native', 'kb-custom'),
-      path.resolve(__dirname, '..', '..', 'node_modules', '@types', 'react-native', 'index.d.ts')
-    )
-  } catch (_) {}
-}
-
-function makeShims() {
+function fixModules() {
+  // storybook uses react-docgen which really cr*ps itself with flow
+  // I couldn't find a good way to override this effectively (yarn resolutions didn't work) so we're just killing it with fire
   const root = path.resolve(__dirname, '..', '..', 'node_modules', 'babel-plugin-react-docgen')
 
   try {
@@ -80,7 +97,7 @@ function makeShims() {
   } catch (_) {}
 }
 
-function exec(command, env, options) {
+function exec(command: string, env?: any, options?: Object) {
   console.log(
     execSync(command, {
       encoding: 'utf8',
@@ -92,7 +109,7 @@ function exec(command, env, options) {
 }
 
 const decorateInfo = info => {
-  let temp = {
+  const temp = {
     ...info,
     env: {
       ...process.env,
@@ -111,8 +128,77 @@ const decorateInfo = info => {
   return temp
 }
 
-const warnFail = err => console.warn(`Error cleaning tscache ${err}, tsc may be inaccurate.`)
+const getMsgPack = () => {
+  if (process.platform === 'darwin') {
+    const ver = '4.1.1'
+    const shasum = '3b64e37641520ea0c9d1f52f80de61ea1868b42c'
+    const file = `msgpack-cxx-${ver}.tar.gz`
+    const url = `https://github.com/msgpack/msgpack-c/releases/download/cpp-${ver}/${file}`
+    const prefix = path.resolve(__dirname, '..', '..', 'node_modules')
+    const dlpath = path.resolve(prefix, '.cache')
+    const shacheckcmd = `echo '${shasum} *.cache/${file}' | shasum -c`
+    const checkAndUntar = `cd node_modules ; ${shacheckcmd} && tar -xf .cache/${file}`
+    const downloadMP = `curl -L -o ${dlpath}/${file} ${url}`
+
+    try {
+      fs.mkdirSync(dlpath)
+    } catch {}
+    if (!fs.existsSync(path.resolve(dlpath, file))) {
+      console.log('Missing msgpack-cpp, downloading')
+      exec(downloadMP)
+    }
+    if (!fs.existsSync(path.resolve(prefix, file))) {
+      try {
+        exec(checkAndUntar)
+      } catch {
+        console.log('untar failed, deleting, try building again. trying one more time')
+        exec(`cd node_modules ; rm .cache/${file}`)
+        exec(downloadMP)
+        exec(checkAndUntar)
+      }
+    }
+  }
+}
+
+const patchIosKBLib = () => {
+  if (process.platform === 'darwin') {
+    const prefixes = [
+      'ios/keybase.xcframework/ios-arm64',
+      'ios/keybase.xcframework/ios-arm64_x86_64-simulator',
+    ]
+    const files = ['Keybase.objc.h', 'Universe.objc.h']
+    for (const prefix of prefixes) {
+      for (const file of files) {
+        const path = `${prefix}/Keybase.framework/Versions/Current/Headers/${file}`
+        try {
+          console.log('Patching go libs', path)
+          exec(`sed -i -e 's/@import Foundation;/#include <Foundation\\/Foundation.h>/' ${path}`)
+        } catch {
+          console.log('Patching skipped')
+        }
+      }
+    }
+  }
+}
+
+const clearAndroidBuild = () => {
+  const warnFail = err => err && console.warn(`Error cleaning android build dir, likely fine`)
+  const paths = [
+    '../../android/build',
+    '../../../rnmodules/react-native-kb/android/build',
+    '../../../rnmodules/react-native-kb/android/.cxx',
+    '../../../rnmodules/react-native-drop-view/android/build',
+  ]
+  for (const p of paths) {
+    try {
+      const glob = path.resolve(__dirname, p)
+      rimraf(glob, {}, warnFail)
+    } catch {}
+  }
+}
+
 const clearTSCache = () => {
+  const warnFail = err => err && console.warn(`Error cleaning tscache ${err}, tsc may be inaccurate.`)
   const glob = path.resolve(__dirname, '..', '..', '.tsOuts', '.tsOut*')
   rimraf(glob, {}, warnFail)
 }

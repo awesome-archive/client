@@ -4,8 +4,8 @@ import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import * as TeamBuildingGen from '../../actions/team-building-gen'
 import * as Constants from '../../constants/team-building'
-import * as Types from '../../constants/types/team-building'
-import {AllowedNamespace} from '../../constants/types/team-building'
+import type * as Types from '../../constants/types/team-building'
+import type {AllowedNamespace} from '../../constants/types/team-building'
 import {validateEmailAddress} from '../../util/email-address'
 import {UserMatchMention} from '../phone-search'
 import ContinueButton from '../continue-button'
@@ -14,24 +14,18 @@ type EmailSearchProps = {
   continueLabel: string
   namespace: AllowedNamespace
   search: (query: string, service: 'email') => void
-  teamBuildingSearchResults: {[query: string]: {[service in Types.ServiceIdWithContact]: Array<Types.User>}}
 }
 
-const EmailSearch = ({continueLabel, namespace, search, teamBuildingSearchResults}: EmailSearchProps) => {
+const EmailSearch = ({continueLabel, namespace, search}: EmailSearchProps) => {
+  const teamBuildingSearchResults = Container.useSelector(
+    state => state[namespace].teamBuilding.searchResults
+  )
   const [isEmailValid, setEmailValidity] = React.useState(false)
   const [emailString, setEmailString] = React.useState('')
   const waiting = Container.useAnyWaiting(Constants.searchWaitingKey)
   const dispatch = Container.useDispatch()
 
-  let user: Types.User | undefined
-  if (
-    teamBuildingSearchResults &&
-    teamBuildingSearchResults[emailString] &&
-    teamBuildingSearchResults[emailString].email &&
-    teamBuildingSearchResults[emailString].email[0]
-  ) {
-    user = teamBuildingSearchResults[emailString].email[0]
-  }
+  const user: Types.User | undefined = teamBuildingSearchResults.get(emailString)?.get('email')?.[0]
   const canSubmit = !!user && !waiting && isEmailValid
 
   const onChange = React.useCallback(
@@ -59,8 +53,8 @@ const EmailSearch = ({continueLabel, namespace, search, teamBuildingSearchResult
   }, [dispatch, canSubmit, user, namespace, onChange])
 
   return (
-    <Kb.Box2 direction="vertical" fullHeight={true} fullWidth={true} style={styles.background}>
-      <Kb.Box2 direction="vertical" fullWidth={true} gap="tiny">
+    <Kb.Box2 direction="vertical" fullWidth={true} style={styles.background}>
+      <Kb.Box2 direction="vertical" fullWidth={true} gap="tiny" style={styles.flexGrow}>
         <Kb.NewInput
           autoFocus={true}
           containerStyle={styles.input}
@@ -76,16 +70,36 @@ const EmailSearch = ({continueLabel, namespace, search, teamBuildingSearchResult
             <Kb.ProgressIndicator type="Small" />
           </Kb.Box2>
         )}
-        {!!user && canSubmit && !!user.serviceMap.keybase && (
+        {!!user && canSubmit && !!user.serviceMap.keybase ? (
           <UserMatchMention username={user.serviceMap.keybase} />
+        ) : (
+          <Kb.Box2
+            alignSelf="center"
+            centerChildren={!Styles.isMobile}
+            direction="vertical"
+            fullWidth={true}
+            gap="tiny"
+            style={styles.emptyContainer}
+          >
+            {!Styles.isMobile && (
+              <Kb.Icon color={Styles.globalColors.black_20} fontSize={48} type="iconfont-mention" />
+            )}
+            {namespace == 'chat2' ? (
+              <Kb.Text type="BodySmall" style={styles.helperText}>
+                Start a chat with any email contact, then tell them to install Keybase. Your messages will
+                unlock after they sign up.
+              </Kb.Text>
+            ) : (
+              <Kb.Text type="BodySmall" style={styles.helperText}>
+                Add any email contact, then tell them to install Keybase. They will automatically join the
+                team after they sign up.
+              </Kb.Text>
+            )}
+          </Kb.Box2>
         )}
         {/* TODO: add support for multiple emails  */}
       </Kb.Box2>
-      <Kb.Box2 direction="verticalReverse" fullWidth={true} style={styles.bottomContainer}>
-        <Kb.Box2 direction="vertical" centerChildren={true} fullWidth={true}>
-          <ContinueButton label={continueLabel} onClick={onSubmit} disabled={!canSubmit} />
-        </Kb.Box2>
-      </Kb.Box2>
+      <ContinueButton label={continueLabel} onClick={onSubmit} disabled={!canSubmit} />
     </Kb.Box2>
   )
 }
@@ -106,6 +120,24 @@ const styles = Styles.styleSheetCreate(
       bottomContainer: {
         flexGrow: 1,
       },
+      emptyContainer: Styles.platformStyles({
+        common: {flex: 1},
+        isElectron: {
+          maxWidth: 290,
+          paddingBottom: 40,
+        },
+        isMobile: {maxWidth: '90%'},
+      }),
+      flexGrow: {
+        flex: 1,
+      },
+      helperText: Styles.platformStyles({
+        common: {textAlign: 'center'},
+        isMobile: {
+          paddingBottom: Styles.globalMargins.small,
+          paddingTop: Styles.globalMargins.small,
+        },
+      }),
       input: Styles.platformStyles({
         common: {},
         isElectron: {

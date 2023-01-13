@@ -1,7 +1,7 @@
 import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import * as Types from '../../constants/types/wallets'
+import type * as Types from '../../constants/types/wallets'
 import {WalletBackButton} from '../common'
 import {AssetPathIntermediate} from '../send-form/asset-input/asset-input-advanced'
 import AssetInput from './asset-input-container'
@@ -18,8 +18,11 @@ type Props = {
   amount: string | null
   assetCode: string
   availableToSendNative: string
+  builtPaymentAdvancedWaitingKey: string
   callbackURL: string | null
   displayAmountFiat: string
+  findPathError: string
+  fromQRCode: boolean
   loading: boolean
   memo: string | null
   memoType: string | null
@@ -32,13 +35,14 @@ type Props = {
   onLookupPath: () => void
   operation: 'pay' | 'tx'
   originDomain: string
-  path: Types._BuiltPaymentAdvanced
+  path: Types.BuiltPaymentAdvanced
   readyToSend: boolean
   recipient: string | null
+  sendError: string
+  sep7WaitingKey: string
   signed: boolean | null
   summary: Summary
   userAmount: string | null
-  waitingKey: string
 }
 
 type CallbackURLBannerProps = {
@@ -79,7 +83,7 @@ const InfoRow = (props: InfoRowProps) => (
       </Kb.Text>
       {props.showStellarIcon ? (
         <Kb.Box2 direction="horizontal" gap="xtiny" alignSelf="flex-start">
-          <Kb.Icon type="iconfont-identity-stellar" style={Kb.iconCastPlatformStyles(styles.stellarIcon)} />
+          <Kb.Icon type="iconfont-identity-stellar" style={styles.stellarIcon} />
           <Kb.Text lineClamp={2} selectable={true} type="Body" style={styles.bodyTextWithIcon}>
             {props.bodyText}
           </Kb.Text>
@@ -94,18 +98,28 @@ const InfoRow = (props: InfoRowProps) => (
 )
 
 type HeaderProps = {
-  requester: string | null
+  findPathError: string
+  fromQRCode: boolean
   isPayment: boolean
+  requester: string | null
+  sendError: string
   signed: boolean | null
 }
 const Header = (props: HeaderProps) => (
   <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.header}>
     <Kb.Box2 direction="vertical" fullWidth={true} style={styles.headerContent}>
-      {!props.signed && (
+      {(!!props.sendError || !!props.findPathError) && (
         <Kb.Box2 direction="vertical" fullWidth={true}>
           <Kb.Banner color="red">
+            <Kb.BannerParagraph bannerColor="red" content={props.sendError || props.findPathError} />
+          </Kb.Banner>
+        </Kb.Box2>
+      )}
+      {!props.signed && !props.fromQRCode && (
+        <Kb.Box2 direction="vertical" fullWidth={true}>
+          <Kb.Banner color="yellow">
             <Kb.BannerParagraph
-              bannerColor="red"
+              bannerColor="yellow"
               content="This link does not have an attached signature! Ensure that you trust the source of this link."
             />
           </Kb.Banner>
@@ -125,7 +139,7 @@ const Header = (props: HeaderProps) => (
         </Kb.Text>
         {props.signed && (
           <Kb.Box2 direction="horizontal" style={styles.verifiedIconBox}>
-            <Kb.Icon sizeType="Small" style={styles.verifiedIcon} type="iconfont-success" />
+            <Kb.Icon sizeType="Small" type="iconfont-success" color={Styles.globalColors.green} />
           </Kb.Box2>
         )}
       </Kb.Box2>
@@ -144,6 +158,7 @@ const Header = (props: HeaderProps) => (
 
 type PaymentInfoProps = {
   amount: string
+  anyError: boolean
   assetCode: string
   availableToSendNative: string
   displayAmountFiat: string
@@ -161,39 +176,38 @@ const PaymentInfo = (props: PaymentInfoProps) => (
       <Kb.Text type="BodyTinySemibold" style={styles.headingText}>
         Amount
       </Kb.Text>
-      {!!props.amount &&
-        (props.assetCode ? (
-          <>
-            <Kb.Text type="HeaderBigExtrabold" style={styles.purpleText}>
-              {props.amount} {props.assetCode}
-            </Kb.Text>
-            {props.exchangeRate ? (
-              <Kb.Box2 direction="vertical" fullWidth={true} gap="xtiny" gapStart={true} gapEnd={false}>
-                <Kb.Text type="BodySmallSemibold" style={styles.headingText}>
-                  (Exchange rate: {props.exchangeRate})
-                </Kb.Text>
-              </Kb.Box2>
-            ) : (
-              <Kb.Box2 direction="vertical" centerChildren={true} fullWidth={true} fullHeight={true}>
-                <Kb.ProgressIndicator type="Small" />
-              </Kb.Box2>
-            )}
-          </>
-        ) : (
-          <>
-            <Kb.Text type="HeaderBigExtrabold" style={styles.purpleText}>
-              {props.amount} XLM
-            </Kb.Text>
+      {!!props.amount && props.assetCode ? (
+        <>
+          <Kb.Text type="HeaderBigExtrabold" style={styles.purpleText}>
+            {props.amount} {props.assetCode}
+          </Kb.Text>
+          {props.exchangeRate ? (
             <Kb.Box2 direction="vertical" fullWidth={true} gap="xtiny" gapStart={true} gapEnd={false}>
               <Kb.Text type="BodySmallSemibold" style={styles.headingText}>
-                (Approximately {props.displayAmountFiat})
-              </Kb.Text>
-              <Kb.Text type="BodySmallSemibold" style={styles.headingText}>
-                Your primary account has {props.availableToSendNative} available to send.
+                (Exchange rate: {props.exchangeRate})
               </Kb.Text>
             </Kb.Box2>
-          </>
-        ))}
+          ) : !props.anyError ? (
+            <Kb.Box2 direction="vertical" centerChildren={true} fullWidth={true} fullHeight={true}>
+              <Kb.ProgressIndicator type="Small" />
+            </Kb.Box2>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <Kb.Text type="HeaderBigExtrabold" style={styles.purpleText}>
+            {props.amount} XLM
+          </Kb.Text>
+          <Kb.Box2 direction="vertical" fullWidth={true} gap="xtiny" gapStart={true} gapEnd={false}>
+            <Kb.Text type="BodySmallSemibold" style={styles.headingText}>
+              (Approximately {props.displayAmountFiat})
+            </Kb.Text>
+            <Kb.Text type="BodySmallSemibold" style={styles.headingText}>
+              Your primary account has {props.availableToSendNative} available to send.
+            </Kb.Text>
+          </Kb.Box2>
+        </>
+      )}
     </Kb.Box2>
     {!!props.assetCode && <AssetPathIntermediate forSEP7={true} />}
     {!props.amount && <AssetInput amount={props.userAmount} onChangeAmount={props.onChangeAmount} />}
@@ -249,19 +263,23 @@ const SEP7Confirm = (props: Props) => (
         alwaysBounceVertical={false}
       >
         <Header
+          fromQRCode={props.fromQRCode}
           isPayment={props.operation === 'pay'}
           requester={props.signed ? props.originDomain : TrimString(props.recipient)}
+          sendError={props.sendError}
+          findPathError={props.findPathError}
           signed={props.signed}
         />
         {!!props.callbackURL && <CallbackURLBanner callbackURL={props.callbackURL} />}
         {props.operation === 'pay' ? (
           <PaymentInfo
             amount={props.amount || ''}
+            anyError={!!props.findPathError || !!props.sendError}
             assetCode={props.assetCode}
             availableToSendNative={props.availableToSendNative}
             displayAmountFiat={props.displayAmountFiat}
             exchangeRate={props.path.exchangeRate}
-            memo={props.memoType === 'MEMO_TEXT' ? props.memo : ''}
+            memo={props.memoType === 'MEMO_TEXT' || props.memoType === 'MEMO_ID' ? props.memo : ''}
             message={props.message}
             onChangeAmount={props.onChangeAmount}
             recipient={props.recipient || ''}
@@ -292,7 +310,7 @@ const SEP7Confirm = (props: Props) => (
                 : () => props.onAcceptPay(props.amount || props.userAmount || '')
               : props.onAcceptTx
           }
-          waitingKey={props.waitingKey}
+          waitingKey={[props.sep7WaitingKey, props.builtPaymentAdvancedWaitingKey]}
           fullWidth={true}
           style={styles.button}
           label={props.operation === 'pay' ? 'Pay' : 'Sign'}
@@ -306,17 +324,20 @@ const SEP7Confirm = (props: Props) => (
 
 const SEP7ConfirmWrapper = (props: Omit<Props, 'onChangeAmount' | 'readyToSend' | 'userAmount'>) => {
   const [userAmount, onChangeAmount] = React.useState('')
+  const {assetCode, path, onLookupPath, amount, onBack} = props
   React.useEffect(() => {
-    props.assetCode && !props.path.exchangeRate && props.onLookupPath()
-  }, [props.assetCode, props.path.exchangeRate])
+    assetCode && !path.exchangeRate && onLookupPath()
+  }, [assetCode, path.exchangeRate, onLookupPath])
   return props.loading ? (
-    <Loading onBack={props.onBack} />
+    <Loading onBack={onBack} />
   ) : (
     <SEP7Confirm
       {...props}
       onChangeAmount={onChangeAmount}
       userAmount={userAmount}
-      readyToSend={props.assetCode ? !!props.path.exchangeRate : !!props.amount || !!userAmount}
+      readyToSend={
+        props.operation === 'tx' ? true : assetCode ? !!path.exchangeRate : !!amount || !!userAmount
+      }
     />
   )
 }
@@ -411,9 +432,7 @@ const styles = Styles.styleSheetCreate(
         paddingRight: Styles.globalMargins.small,
         paddingTop: Styles.globalMargins.tiny,
       },
-      purpleText: Styles.platformStyles({
-        common: {color: Styles.globalColors.purple},
-      }),
+      purpleText: {color: Styles.globalColors.purpleDark},
       scrollView: Styles.platformStyles({
         common: {
           backgroundColor: Styles.globalColors.purpleDark,
@@ -445,11 +464,6 @@ const styles = Styles.styleSheetCreate(
         color: Styles.globalColors.white_75,
         paddingTop: Styles.globalMargins.tiny,
       },
-      verifiedIcon: Styles.platformStyles({
-        common: {
-          color: Styles.globalColors.green,
-        },
-      }),
       verifiedIconBox: {
         backgroundColor: Styles.globalColors.transparent,
         marginLeft: Styles.globalMargins.xtiny,

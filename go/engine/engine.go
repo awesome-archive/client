@@ -46,17 +46,29 @@ func requiresUI(c libkb.UIConsumer, kind libkb.UIKind) bool {
 // Under the hood, IsLoggedIn is going through the BootstrapActiveDevice
 // flow and therefore will try its best to unlocked locked keys if it can
 // without user interaction.
+//
+// If the user is intentionally not logged into any user,  don't try to
+// bootstrap from the secret store and just check if there is an active device.
 func isLoggedInWithUIDAndError(m libkb.MetaContext) (ret bool, uid keybase1.UID, err error) {
+	if m.G().Env.GetStayLoggedOut() {
+		return m.ActiveDevice().Valid(), m.G().Env.GetUID(), nil
+	}
 	ret, uid, err = libkb.BootstrapActiveDeviceWithMetaContext(m)
 	return ret, uid, err
 }
 
 func isLoggedIn(m libkb.MetaContext) (ret bool, uid keybase1.UID) {
+	if m.G().Env.GetStayLoggedOut() {
+		return m.ActiveDevice().Valid(), m.G().Env.GetUID()
+	}
 	ret, uid, _ = libkb.BootstrapActiveDeviceWithMetaContext(m)
 	return ret, uid
 }
 
 func isLoggedInAs(m libkb.MetaContext, uid keybase1.UID) (ret bool) {
+	if m.G().Env.GetStayLoggedOut() {
+		return m.ActiveDevice().Valid() && uid == m.G().Env.GetUID()
+	}
 	ret, err := libkb.BootstrapActiveDeviceWithMetaContextAndAssertUID(m, uid)
 	if err != nil {
 		m.Debug("isLoggedAs error: %s", err)
@@ -94,7 +106,7 @@ func runPrereqs(m libkb.MetaContext, e Engine2) error {
 
 func RunEngine2(m libkb.MetaContext, e Engine2) (err error) {
 	m = m.WithLogTag("ENG")
-	defer m.Trace(fmt.Sprintf("RunEngine(%s)", e.Name()), func() error { return err })()
+	defer m.Trace(fmt.Sprintf("RunEngine(%s)", e.Name()), &err)()
 
 	if m, err = delegateUIs(m, e); err != nil {
 		return err

@@ -1,78 +1,71 @@
 import * as React from 'react'
-import {intersperseFn} from '../util/arrays'
-import {Box2Props} from './box'
+import * as Styles from '../styles'
+import type {Box2Props} from './box'
 import './box.css'
 
-class Box extends React.PureComponent<any> {
+export class Box extends React.PureComponent<any> {
   render() {
-    const {forwardedRef, ...rest} = this.props
+    const {forwardedRef, onLayout, ...rest} = this.props
     return <div {...rest} ref={this.props.forwardedRef} />
   }
 }
 
-const injectGaps = (component, _children, gap, gapStart, gapEnd) => {
-  let children = _children
-  if (gap) {
-    children = intersperseFn(index => component(index, gap), React.Children.toArray(_children))
-    if (gapStart) {
-      children.unshift(component('gapStart', gap))
-    }
-    if (gapEnd) {
-      children.push(component('gapEnd', gap))
-    }
-  }
+export const Box2 = React.forwardRef<HTMLDivElement, Box2Props>(function Box2(
+  props: Box2Props,
+  ref: React.Ref<HTMLDivElement>
+) {
+  const {direction, fullHeight, fullWidth, centerChildren, alignSelf, alignItems, noShrink} = props
+  const {onMouseDown, onMouseLeave, onMouseUp, onMouseOver, onCopyCapture, children, style} = props
+  const {gap, gapStart, gapEnd, pointerEvents, onDragLeave, onDragOver, onDrop, className} = props
+  const {onContextMenu} = props
+  const horizontal = direction === 'horizontal' || direction === 'horizontalReverse'
+  const reverse = direction === 'verticalReverse' || direction === 'horizontalReverse'
 
-  return children
-}
-
-const box2 = (props: Box2Props) => {
-  let horizontal = props.direction === 'horizontal' || props.direction === 'horizontalReverse'
-
-  const className = [
-    `box2_${props.direction}`,
-    props.fullHeight && 'box2_fullHeight',
-    props.fullWidth && 'box2_fullWidth',
-    !props.fullHeight && !props.fullWidth && 'box2_centered',
-    props.centerChildren && 'box2_centeredChildren',
-    props.alignSelf && `box2_alignSelf_${props.alignSelf}`,
-    props.alignItems && `box2_alignItems_${props.alignItems}`,
-    props.noShrink && 'box2_no_shrink',
-    props.pointerEvents === 'none' && 'box2_pointerEvents_none',
-    props.className,
-  ]
-    .filter(Boolean)
-    .join(' ')
-
-  let style = props.style
+  // let style = props.style
   // uncomment this to get debugging colors
   // style = {
   //   ...style,
   //   backgroundColor: `rgb(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255})`,
   // }
+
+  const collapsedStyle = Styles.collapseStyles([style]) as unknown as React.CSSProperties
+
   return (
     <div
-      onDragLeave={props.onDragLeave}
-      onDragOver={props.onDragOver}
-      onDrop={props.onDrop}
-      onMouseLeave={props.onMouseLeave}
-      onMouseOver={props.onMouseOver}
-      onCopyCapture={props.onCopyCapture}
-      className={className}
-      style={(style as unknown) as React.CSSProperties}
+      ref={ref}
+      onDragLeave={onDragLeave}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onMouseDown={onMouseDown}
+      onMouseLeave={onMouseLeave}
+      onMouseUp={onMouseUp}
+      onMouseOver={onMouseOver}
+      onCopyCapture={onCopyCapture}
+      onContextMenu={onContextMenu}
+      className={Styles.classNames(
+        {
+          [`box2_alignItems_${alignItems ?? ''}`]: alignItems,
+          [`box2_alignSelf_${alignSelf ?? ''}`]: alignSelf,
+          [`box2_gapEnd_${gap ?? ''}`]: gapEnd,
+          [`box2_gapStart_${gap ?? ''}`]: gapStart,
+          [`box2_gap_${gap ?? ''}`]: gap,
+          box2_centered: !fullHeight && !fullWidth,
+          box2_centeredChildren: centerChildren,
+          box2_fullHeight: fullHeight,
+          box2_fullWidth: fullWidth,
+          box2_horizontal: horizontal,
+          box2_no_shrink: noShrink,
+          box2_pointerEvents_none: pointerEvents === 'none',
+          box2_reverse: reverse,
+          box2_vertical: !horizontal,
+        },
+        className
+      )}
+      style={collapsedStyle}
     >
-      {injectGaps(horizontal ? hBoxGap : vBoxGap, props.children, props.gap, props.gapStart, props.gapEnd)}
+      {children}
     </div>
   )
-}
-
-class Box2 extends React.Component<Box2Props> {
-  render() {
-    return box2(this.props)
-  }
-}
-
-const vBoxGap = (key, gap) => <div key={key} className={`box2_gap_vertical_${gap}`} />
-const hBoxGap = (key, gap) => <div key={key} className={`box2_gap_horizontal_${gap}`} />
+})
 
 export default Box
-export {Box, Box2}

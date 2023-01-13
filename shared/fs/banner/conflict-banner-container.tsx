@@ -1,5 +1,5 @@
 import * as Constants from '../../constants/fs'
-import * as Types from '../../constants/types/fs'
+import type * as Types from '../../constants/types/fs'
 import * as SettingsConstants from '../../constants/settings'
 import * as FsGen from '../../actions/fs-gen'
 import * as Container from '../../util/container'
@@ -32,22 +32,20 @@ const mapDispatchToProps = (dispatch: Container.TypedDispatch, ownProps: OwnProp
   onGoToSamePathInDifferentTlf: (tlfPath: Types.Path) =>
     dispatch(
       RouteTreeGen.createNavigateAppend({
-        path: [{props: {path: Constants.rebasePathToDifferentTlf(ownProps.path, tlfPath)}, selected: 'main'}],
+        path: [
+          {props: {path: Constants.rebasePathToDifferentTlf(ownProps.path, tlfPath)}, selected: 'fsRoot'},
+        ],
       })
     ),
-  onHelp: () => openUrl('https://keybase.io/docs/kbfs/understanding_kbfs#conflict_resolution'),
+  onHelp: () => openUrl('https://book.keybase.io/docs/files/details#conflict-resolution'),
   onStartResolving: () => dispatch(FsGen.createStartManualConflictResolution({tlfPath: ownProps.path})),
+  openInSystemFileManager: (path: Types.Path) => dispatch(FsGen.createOpenPathInSystemFileManager({path})),
 })
 
-const ConnectedBanner = Container.namedConnect(
-  mapStateToProps,
-  mapDispatchToProps,
-  (s, d, o: OwnProps) => ({
-    ...d,
-    conflictState: s._tlf.conflictState,
-    tlfPath: Constants.getTlfPath(o.path),
-  }),
-  'ConflictBanner'
-)(ConflictBanner)
+const ConnectedBanner = Container.connect(mapStateToProps, mapDispatchToProps, (s, d, o: OwnProps) => ({
+  ...d,
+  conflictState: s._tlf.conflictState,
+  tlfPath: Constants.getTlfPath(o.path),
+}))(ConflictBanner)
 
 export default ConnectedBanner

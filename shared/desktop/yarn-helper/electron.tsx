@@ -14,6 +14,11 @@ const commands = {
     help: '[Path to sourcemaps]: Copy sourcemaps into currently installed Keybase app',
     shell: "a(){ cp '$1'/* /Applications/Keybase.app/Contents/Resources/app/desktop/dist; };a",
   },
+  profile: {
+    env: {PROFILE: 'true'},
+    help: 'Start electron with profiling react',
+    shell: 'yarn run build-profile && yarn run start-profile',
+  },
   start: {
     help: 'Do a simple dev build',
     shell: 'yarn run build-dev && yarn run start-cold',
@@ -25,12 +30,16 @@ const commands = {
   },
   'start-hot': {
     code: startHot,
-    env: {BABEL_ENV: 'yarn', HOT: 'true'},
+    env: {HOT: 'true'},
     help: 'Start electron with hot reloading (needs yarn run hot-server)',
   },
   'start-prod': {
     help: 'Launch installed Keybase app with console output',
     shell: '/Applications/Keybase.app/Contents/MacOS/Electron',
+  },
+  'start-profile': {
+    help: 'Start electron with profile',
+    shell: `electron ${path.resolve(__dirname, '../dist/node.profile.bundle.js')}`,
   },
 }
 
@@ -60,7 +69,7 @@ function startHot() {
   }
 
   const hitServer = () => {
-    var req = http.get('http://localhost:4000/dist/node.dev.bundle.js', () => {
+    const req = http.get('http://localhost:4000/dist/node.dev.bundle.js', () => {
       // require in case we're trying to yarn install electron!
       const electron = require('electron')
       // @ts-ignore

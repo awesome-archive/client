@@ -1,81 +1,71 @@
 import * as React from 'react'
-import * as I from 'immutable'
 import * as Kb from '../../../../../common-adapters'
 import * as Styles from '../../../../../styles'
+import * as Constants from '../../../../../constants/chat2'
+import * as Container from '../../../../../util/container'
+import type * as Types from '../../../../../constants/types/chat2'
 
-const Names = ({names}: {names: I.Set<string>}) => {
+type Props = {
+  conversationIDKey: Types.ConversationIDKey
+}
+
+const Names = (props: {names: Set<string>}) => {
   const textType = 'BodyTinySemibold'
-  let ret
-  switch (names.size) {
+  const names = [...props.names]
+
+  switch (names.length) {
     case 0:
-      ret = ''
-      break
+      return <></>
     case 1:
-      ret = (
+      return (
         <>
-          <Kb.Text key={0} type={textType}>
-            {names.first()}
-          </Kb.Text>
+          <Kb.Text type={textType}>{names[0]}</Kb.Text>
           {' is typing'}
         </>
       )
-      break
     case 2:
-      ret = (
+      return (
         <>
-          <Kb.Text key={0} type={textType}>
-            {names.first()}
-          </Kb.Text>
+          <Kb.Text type={textType}>{names[0]}</Kb.Text>
           {' and '}
-          <Kb.Text key={1} type={textType}>
-            {names.skip(1).first()}
-          </Kb.Text>
+          <Kb.Text type={textType}>{names[1]}</Kb.Text>
           {' are typing'}
         </>
       )
-      break
     case 3:
-      ret = (
+      return (
         <>
-          <Kb.Text key={0} type={textType}>
-            {names.first()}
-          </Kb.Text>
+          <Kb.Text type={textType}>{names[0]}</Kb.Text>
           {', '}
-          <Kb.Text key={1} type={textType}>
-            {names.skip(1).first()}
-          </Kb.Text>
+          <Kb.Text type={textType}>{names[1]}</Kb.Text>
           {', and '}
-          <Kb.Text key={1} type={textType}>
-            {names.skip(2).first()}
-          </Kb.Text>
+          <Kb.Text type={textType}>{names[2]}</Kb.Text>
           {' are typing'}
         </>
       )
-      break
     default:
-      ret = 'multiple people are typing'
+      return <>multiple people are typing</>
   }
-  return ret
 }
 
-type Props = {
-  names: I.Set<string>
-}
-
-export const Typing = (props: Props) => (
-  <Kb.Box style={styles.isTypingContainer}>
-    {props.names.size > 0 && (
-      <Kb.Box style={styles.typingIconContainer}>
-        <Kb.Animation animationType="typing" containerStyle={styles.isTypingAnimation} />
-      </Kb.Box>
-    )}
-    {props.names.size > 0 && (
-      <Kb.Text lineClamp={1} type="BodyTiny" style={styles.isTypingText}>
-        <Names names={props.names} />
-      </Kb.Text>
-    )}
-  </Kb.Box>
-)
+const Typing = React.memo(function Typing(props: Props) {
+  const {conversationIDKey} = props
+  const names = Container.useSelector(state => Constants.getTyping(state, conversationIDKey))
+  return (
+    <Kb.Box style={styles.isTypingContainer}>
+      {names.size > 0 && (
+        <Kb.Box style={styles.typingIconContainer}>
+          <Kb.Animation animationType="typing" containerStyle={styles.isTypingAnimation} />
+        </Kb.Box>
+      )}
+      {names.size > 0 && (
+        <Kb.Text lineClamp={1} type="BodyTiny" style={styles.isTypingText}>
+          <Names names={names} />
+        </Kb.Text>
+      )}
+    </Kb.Box>
+  )
+})
 
 export const mobileTypingContainerHeight = 18
 const styles = Styles.styleSheetCreate(
@@ -141,3 +131,4 @@ const styles = Styles.styleSheetCreate(
       }),
     } as const)
 )
+export default Typing

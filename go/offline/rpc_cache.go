@@ -29,7 +29,7 @@ func newEncryptedDB(g *libkb.GlobalContext) *encrypteddb.EncryptedDB {
 		// function used to use chat/storage.GetSecretBoxKey in the past, and
 		// we didn't want users to lose encrypted data after we switched to
 		// more generic encrypteddb.GetSecretBoxKey.
-		return encrypteddb.GetSecretBoxKey(ctx, g, encrypteddb.DefaultSecretUI,
+		return encrypteddb.GetSecretBoxKey(ctx, g,
 			libkb.EncryptionReasonChatLocalStorage, "offline rpc cache")
 	}
 	dbFn := func(g *libkb.GlobalContext) *libkb.JSONLocalDb {
@@ -84,7 +84,7 @@ type Value struct {
 }
 
 func (c *RPCCache) get(mctx libkb.MetaContext, version Version, rpcName string, encrypted bool, arg interface{}, res interface{}) (found bool, err error) {
-	defer mctx.CTraceString(fmt.Sprintf("RPCCache#get(%d, %s, %v, %+v)", version, rpcName, encrypted, arg), func() string { return fmt.Sprintf("(%v,%v)", found, err) })()
+	defer mctx.Trace(fmt.Sprintf("RPCCache#get(%d, %s, %v, %+v)", version, rpcName, encrypted, arg), &err)()
 	c.Lock()
 	defer c.Unlock()
 
@@ -117,7 +117,7 @@ func (c *RPCCache) get(mctx libkb.MetaContext, version Version, rpcName string, 
 }
 
 func (c *RPCCache) put(mctx libkb.MetaContext, version Version, rpcName string, encrypted bool, arg interface{}, res interface{}) (err error) {
-	defer mctx.Trace(fmt.Sprintf("RPCCache#put(%d, %s, %v, %+v)", version, rpcName, encrypted, arg), func() error { return err })()
+	defer mctx.Trace(fmt.Sprintf("RPCCache#put(%d, %s, %v, %+v)", version, rpcName, encrypted, arg), &err)()
 	c.Lock()
 	defer c.Unlock()
 
@@ -163,7 +163,7 @@ func (c *RPCCache) Serve(mctx libkb.MetaContext, oa keybase1.OfflineAvailability
 		return handler(mctx)
 	}
 	mctx = mctx.WithLogTag("OFLN")
-	defer mctx.Trace(fmt.Sprintf("RPCCache#Serve(%d, %s, %v, %+v)", version, rpcName, encrypted, arg), func() error { return err })()
+	defer mctx.Trace(fmt.Sprintf("RPCCache#Serve(%d, %s, %v, %+v)", version, rpcName, encrypted, arg), &err)()
 
 	found, err := c.get(mctx, version, rpcName, encrypted, arg, resPtr)
 	if err != nil {

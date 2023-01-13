@@ -50,7 +50,8 @@ type ChatNotification struct {
 
 func HandlePostTextReply(strConvID, tlfName string, intMessageID int, body string) (err error) {
 	ctx := context.Background()
-	defer kbCtx.CTraceTimed(ctx, fmt.Sprintf("HandlePostTextReply()"), func() error { return flattenError(err) })()
+	defer kbCtx.CTrace(ctx, "HandlePostTextReply", &err)()
+	defer func() { err = flattenError(err) }()
 	outboxID, err := storage.NewOutboxID()
 	if err != nil {
 		return err
@@ -69,7 +70,7 @@ func HandlePostTextReply(strConvID, tlfName string, intMessageID int, body strin
 	}
 
 	msgID := chat1.MessageID(intMessageID)
-	if err = kbChatCtx.InboxSource.MarkAsRead(context.Background(), convID, uid, msgID); err != nil {
+	if err = kbChatCtx.InboxSource.MarkAsRead(context.Background(), convID, uid, &msgID); err != nil {
 		kbCtx.Log.CDebugf(ctx, "Failed to mark as read from QuickReply: convID: %s. Err: %s", strConvID, err)
 		// We don't want to fail this method call just because we couldn't mark it as aread
 		err = nil
@@ -80,17 +81,17 @@ func HandlePostTextReply(strConvID, tlfName string, intMessageID int, body strin
 
 func HandleBackgroundNotification(strConvID, body, serverMessageBody, sender string, intMembersType int,
 	displayPlaintext bool, intMessageID int, pushID string, badgeCount, unixTime int, soundName string,
-	pusher PushNotifier) (err error) {
-	if err := waitForInit(5 * time.Second); err != nil {
-		return nil
+	pusher PushNotifier, showIfStale bool) (err error) {
+	if err := waitForInit(10 * time.Second); err != nil {
+		return err
 	}
 	gc := globals.NewContext(kbCtx, kbChatCtx)
 	ctx := globals.ChatCtx(context.Background(), gc,
 		keybase1.TLFIdentifyBehavior_CHAT_GUI, nil, chat.NewCachingIdentifyNotifier(gc))
 
-	defer kbCtx.CTraceTimed(ctx, fmt.Sprintf("HandleBackgroundNotification(%s,%s,%v,%d,%d,%s,%d,%d)",
-		strConvID, sender, displayPlaintext, intMembersType, intMessageID, pushID, badgeCount, unixTime),
-		func() error { return flattenError(err) })()
+	defer kbCtx.CTrace(ctx, fmt.Sprintf("HandleBackgroundNotification(%s,%s,%v,%d,%d,%s,%d,%d)",
+		strConvID, sender, displayPlaintext, intMembersType, intMessageID, pushID, badgeCount, unixTime), &err)()
+	defer func() { err = flattenError(err) }()
 
 	// Unbox
 	if !kbCtx.ActiveDevice.HaveKeys() {
@@ -104,7 +105,7 @@ func HandleBackgroundNotification(strConvID, body, serverMessageBody, sender str
 		return err
 	}
 	membersType := chat1.ConversationMembersType(intMembersType)
-	conv, err := utils.GetVerifiedConv(ctx, gc, uid, convID, types.InboxSourceDataSourceAll)
+	conv, err := utils.GetVerifiedConv(ctx, gc, uid, convID, types.InboxSourceDataSourceLocalOnly)
 	if err != nil {
 		kbCtx.Log.CDebugf(ctx, "Failed to get conversation info", err)
 		return err
@@ -170,12 +171,17 @@ func HandleBackgroundNotification(strConvID, body, serverMessageBody, sender str
 		// and we don't want to accidentally ack the plaintext notification when we didn't really
 		// display it.
 		if len(serverMessageBody) == 0 {
-			return nil
+			return errors.New("Unbox failed; nothing to display")
 		}
 	}
 
 	age := time.Since(time.Unix(int64(unixTime), 0))
-	if age >= 2*time.Minute {
+
+	// On iOS we don't want to show stale notifications. Nonsilent notifications
+	// can come later and cause duplicate notifications. On Android, both silent
+	// and non-silent notifications go through this function; and Java checks if we
+	// have already seen a notification. We don't need this stale logic.
+	if !showIfStale && age >= 2*time.Minute {
 		kbCtx.Log.CDebugf(ctx, "HandleBackgroundNotification: stale notification: %v", age)
 		return errors.New("stale notification")
 	}

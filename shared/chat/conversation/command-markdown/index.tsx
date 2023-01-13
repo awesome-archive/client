@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
 
@@ -17,7 +16,7 @@ const CommandMarkdown = (props: Props) => {
       )}
       <Kb.ScrollView style={styles.scrollContainer}>
         <Kb.Box2 direction="vertical" style={styles.bodyContainer}>
-          <Kb.Markdown>{props.body}</Kb.Markdown>
+          <Kb.Markdown selectable={true}>{props.body}</Kb.Markdown>
         </Kb.Box2>
       </Kb.ScrollView>
     </Kb.Box>
@@ -44,12 +43,13 @@ const styles = Styles.styleSheetCreate(
         },
         isMobile: {
           backgroundColor: Styles.globalColors.white,
+          flexShrink: 1,
+          // if this is not constrained it pushes the rest of the input down
+          maxHeight: '70%',
         },
       }),
       scrollContainer: Styles.platformStyles({
-        isElectron: {
-          maxHeight: 300,
-        },
+        isElectron: {maxHeight: 300},
       }),
       title: {
         backgroundColor: Styles.globalColors.black_05,

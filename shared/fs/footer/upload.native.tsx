@@ -1,10 +1,11 @@
 import * as React from 'react'
 import * as Styles from '../../styles'
 import * as Kb from '../../common-adapters'
-import {UploadProps} from './upload'
+import type {UploadProps} from './upload'
 import {NativeAnimated, NativeEasing} from '../../common-adapters/native-wrappers.native'
 
-const patternRequire = require('../../images/upload-pattern-2-80.png')
+const lightPatternImage = require('../../images/upload-pattern-80.png')
+const darkPatternImage = require('../../images/dark-upload-pattern-80.png')
 
 type UploadState = {
   backgroundTop: NativeAnimated.AnimatedValue
@@ -39,6 +40,7 @@ class Upload extends React.PureComponent<UploadProps, UploadState> {
         duration: 2000,
         easing: NativeEasing.linear,
         toValue: -80, // pattern loops on multiples of 80
+        useNativeDriver: false,
       })
     )
     loop.start()
@@ -48,6 +50,7 @@ class Upload extends React.PureComponent<UploadProps, UploadState> {
       duration: 300,
       easing,
       toValue: 0,
+      useNativeDriver: false,
     })
     this._animations.in = ain
     ain.start()
@@ -57,6 +60,7 @@ class Upload extends React.PureComponent<UploadProps, UploadState> {
       duration: 300,
       easing,
       toValue: 48,
+      useNativeDriver: false,
     })
     this._animations.out = out
     out.start(({finished}) => finished && cbIfFinish())
@@ -128,7 +132,7 @@ class Upload extends React.PureComponent<UploadProps, UploadState> {
             <Kb.Box style={styles.backgroundBox}>
               <NativeAnimated.Image
                 resizeMode="repeat"
-                source={patternRequire}
+                source={Styles.isDarkMode() ? darkPatternImage : lightPatternImage}
                 style={{...styles.backgroundImage, marginTop: this.state.backgroundTop}}
               />
             </Kb.Box>
@@ -157,18 +161,13 @@ const styles = Styles.styleSheetCreate(
       backgroundBox: Styles.platformStyles({
         common: {
           height: 48,
-          width: '100%',
-        },
-        isAndroid: {
-          zIndex: -100, // Android doesn't support `overflow: 'hidden'`.
-        },
-        isIOS: {
           overflow: 'hidden',
+          width: '100%',
         },
       }),
       backgroundImage: {
         height: 160,
-        width: 600, // Android doesn't support resizeMode="repeat", so use a super wide image here. TODO it does now!
+        width: '100%',
       },
       box: {
         ...Styles.globalStyles.flexBoxColumn,
@@ -178,7 +177,7 @@ const styles = Styles.styleSheetCreate(
         marginTop: -48,
       },
       text: {
-        color: Styles.globalColors.white,
+        color: Styles.globalColors.whiteOrWhite,
       },
     } as const)
 )

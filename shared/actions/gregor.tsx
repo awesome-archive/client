@@ -3,11 +3,10 @@ import * as ConfigGen from './config-gen'
 import * as GregorGen from './gregor-gen'
 import * as EngineGen from './engine-gen-gen'
 import * as RPCTypes from '../constants/types/rpc-gen'
-import * as Saga from '../util/saga'
 import * as Container from '../util/container'
 
 const pushOutOfBandMessages = (
-  _: Container.TypedState,
+  _: unknown,
   action: EngineGen.Keybase1GregorUIPushOutOfBandMessagesPayload
 ) => {
   const {oobm} = action.payload.params
@@ -18,7 +17,7 @@ const pushOutOfBandMessages = (
   return false
 }
 
-const pushState = (_: Container.TypedState, action: EngineGen.Keybase1GregorUIPushStatePayload) => {
+const pushState = (_: unknown, action: EngineGen.Keybase1GregorUIPushStatePayload) => {
   const {reason, state} = action.payload.params
   const items = state.items || []
 
@@ -67,8 +66,19 @@ const startReachability = async () => {
   }
 }
 
-const checkReachability = async () => {
+let _lastOnline: undefined | boolean
+const checkReachability = async (
+  _: unknown,
+  action: GregorGen.CheckReachabilityPayload | ConfigGen.OsNetworkStatusChangedPayload
+) => {
   try {
+    if (action.type === ConfigGen.osNetworkStatusChanged) {
+      if (action.payload.online === _lastOnline) {
+        return false
+      }
+      _lastOnline = action.payload.online
+    }
+
     const reachability = await RPCTypes.reachabilityCheckReachabilityRpcPromise()
     return GregorGen.createUpdateReachable({reachable: reachability.reachable})
   } catch (_) {
@@ -76,7 +86,7 @@ const checkReachability = async () => {
   }
 }
 
-const updateCategory = async (_: Container.TypedState, action: GregorGen.UpdateCategoryPayload) => {
+const updateCategory = async (_: unknown, action: GregorGen.UpdateCategoryPayload) => {
   try {
     await RPCTypes.gregorUpdateCategoryRpcPromise({
       body: action.payload.body,
@@ -86,14 +96,14 @@ const updateCategory = async (_: Container.TypedState, action: GregorGen.UpdateC
   } catch (_) {}
 }
 
-function* gregorSaga() {
-  yield* Saga.chainAction2(GregorGen.updateCategory, updateCategory)
-  yield* Saga.chainAction2([GregorGen.checkReachability, ConfigGen.osNetworkStatusChanged], checkReachability)
-  yield* Saga.chainAction2(EngineGen.connected, registerForGregorNotifications)
-  yield* Saga.chainAction2(EngineGen.connected, startReachability)
-  yield* Saga.chainAction2(EngineGen.keybase1GregorUIPushOutOfBandMessages, pushOutOfBandMessages)
-  yield* Saga.chainAction2(EngineGen.keybase1GregorUIPushState, pushState)
-  yield* Saga.chainAction2(EngineGen.keybase1ReachabilityReachabilityChanged, reachabilityChanged)
+const initGregor = () => {
+  Container.listenAction(GregorGen.updateCategory, updateCategory)
+  Container.listenAction([GregorGen.checkReachability, ConfigGen.osNetworkStatusChanged], checkReachability)
+  Container.listenAction(EngineGen.connected, registerForGregorNotifications)
+  Container.listenAction(EngineGen.connected, startReachability)
+  Container.listenAction(EngineGen.keybase1GregorUIPushOutOfBandMessages, pushOutOfBandMessages)
+  Container.listenAction(EngineGen.keybase1GregorUIPushState, pushState)
+  Container.listenAction(EngineGen.keybase1ReachabilityReachabilityChanged, reachabilityChanged)
 }
 
-export default gregorSaga
+export default initGregor

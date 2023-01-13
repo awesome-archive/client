@@ -9,7 +9,7 @@ export type OwnProps = {
   mode: 'row' | 'default'
 }
 
-export default Container.namedConnect(
+export default Container.connect(
   (state, ownProps: OwnProps) => ({
     _tlf: Constants.getTlfFromPath(state.fs.tlfs, ownProps.path),
     _username: state.config.username,
@@ -17,8 +17,9 @@ export default Container.namedConnect(
   () => ({}),
   (stateProps, _, ownProps: OwnProps) => {
     const resetParticipants =
-      stateProps._tlf === Constants.unknownTlf ? undefined : stateProps._tlf.resetParticipants.toArray()
+      stateProps._tlf === Constants.unknownTlf ? undefined : stateProps._tlf.resetParticipants
     return {
+      isNew: stateProps._tlf.isNew,
       mixedMode: ownProps.mixedMode,
       mode: ownProps.mode,
       reset:
@@ -28,6 +29,5 @@ export default Container.namedConnect(
       tlfMtime: stateProps._tlf.tlfMtime,
       tlfType: Types.getPathVisibility(ownProps.path),
     }
-  },
-  'TlfInfoLine'
+  }
 )(TlfInfoLine)

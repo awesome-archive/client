@@ -1,8 +1,7 @@
-import * as React from 'react'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
 import {ParticipantsRow, AccountEntry} from '../../common'
-import {CounterpartyType, AccountID} from '../../../constants/types/wallets'
+import type {CounterpartyType, AccountID} from '../../../constants/types/wallets'
 
 export type ParticipantsProps = {
   recipientType: CounterpartyType
@@ -46,7 +45,7 @@ const Participants = (props: ParticipantsProps) => {
       }
       toFieldContent = (
         <Kb.Box2 direction="horizontal" gap="xtiny">
-          <Kb.Icon type="iconfont-identity-stellar" style={Kb.iconCastPlatformStyles(styles.stellarIcon)} />
+          <Kb.Icon type="iconfont-identity-stellar" style={styles.stellarIcon} />
           <Kb.Text selectable={true} type="BodySemibold" style={styles.stellarAddressConfirmText}>
             {props.recipientStellarAddress}
           </Kb.Text>

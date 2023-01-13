@@ -1,7 +1,7 @@
 package identify3
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sync"
 	"testing"
@@ -30,11 +30,12 @@ func SetupTest(tb libkb.TestingTB, name string) libkb.TestContext {
 }
 
 type id3results struct {
-	resultType   keybase1.Identify3ResultType
-	rows         []keybase1.Identify3Row
-	cards        []keybase1.UserCard
-	timedOut     bool
-	userWasReset bool
+	resultType       keybase1.Identify3ResultType
+	rows             []keybase1.Identify3Row
+	cards            []keybase1.UserCard
+	timedOut         bool
+	userWasReset     bool
+	numProofsToCheck int
 }
 
 func (r *id3results) pushRow(row keybase1.Identify3Row) {
@@ -91,6 +92,12 @@ func (f *fakeUI3) Identify3Result(_ context.Context, res keybase1.Identify3Resul
 	f.id3results.resultType = res.Result
 	f.Unlock()
 	f.resultCh <- res.Result
+	return nil
+}
+func (f *fakeUI3) Identify3Summary(_ context.Context, arg keybase1.Identify3Summary) error {
+	f.Lock()
+	f.id3results.numProofsToCheck = arg.NumProofsToCheck
+	f.Unlock()
 	return nil
 }
 
@@ -179,6 +186,7 @@ func TestCryptocurrency(t *testing.T) {
 
 	res = runID3(t, mctx, alice.Username, true)
 	assertTrackResult(res, true /* green */)
+	require.Equal(t, res.numProofsToCheck, 0)
 }
 
 func TestFollowUnfollowTracy(t *testing.T) {
@@ -192,7 +200,7 @@ func TestFollowUnfollowTracy(t *testing.T) {
 	require.Equal(t, res.resultType, keybase1.Identify3ResultType_OK)
 	require.Equal(t, len(res.rows), 9)
 	require.Equal(t, len(res.cards), 1)
-	require.False(t, res.cards[0].YouFollowThem)
+	require.Equal(t, res.numProofsToCheck, 4)
 
 	findRows(t, res.rows, []keybase1.Identify3Row{
 		{
@@ -228,7 +236,6 @@ func TestFollowUnfollowTracy(t *testing.T) {
 	require.Equal(t, res.resultType, keybase1.Identify3ResultType_OK)
 	require.Equal(t, len(res.rows), 9)
 	require.Equal(t, len(res.cards), 1)
-	require.True(t, res.cards[0].YouFollowThem)
 
 	findRows(t, res.rows, []keybase1.Identify3Row{
 		{
@@ -280,7 +287,9 @@ func runID3(t *testing.T, mctx libkb.MetaContext, user string, follow bool) id3r
 	res := fakeUI3.results()
 	for _, row := range res.rows {
 		checkIcon(t, row.Key, row.SiteIcon)
+		checkIcon(t, row.Key, row.SiteIconDarkmode)
 		checkIcon(t, row.Key, row.SiteIconFull)
+		checkIcon(t, row.Key, row.SiteIconFullDarkmode)
 		if row.Priority == 0 || row.Priority == 9999999 {
 			t.Fatalf("unexpected priority %v %v", row.Key, row.Priority)
 		}
@@ -332,7 +341,7 @@ func checkIcon(t testing.TB, service string, icon []keybase1.SizedImage) {
 			require.NoError(t, err, "%v", service)
 			require.Equal(t, 200, resp.StatusCode, "icon file should be reachable")
 			require.NoError(t, err)
-			body, err := ioutil.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			if len(body) < 150 {
 				t.Fatalf("unreasonable icon payload size")

@@ -5,11 +5,11 @@ import * as Kb from '../../common-adapters'
 import * as Kbfs from '../common'
 import * as Styles from '../../styles'
 import {memoize} from '../../util/memoize'
-import flags from '../../util/feature-flags'
+import * as Container from '../../util/container'
 
 type Props = {
   path: Types.Path
-  onOpenPath: (path: Types.Path) => void
+  inDestinationPicker?: boolean
 }
 
 // /keybase/b/c => [/keybase, /keybase/b, /keybase/b/c]
@@ -18,52 +18,61 @@ const getAncestors = memoize(path =>
     ? []
     : Types.getPathElements(path)
         .slice(1, -1)
-        .reduce((list, current) => [...list, Types.pathConcat(list[list.length - 1], current)], [
-          Constants.defaultPath,
-        ])
+        .reduce(
+          (list, current) => [...list, Types.pathConcat(list[list.length - 1], current)],
+          [Constants.defaultPath]
+        )
 )
 
-const withAncestors = f => ({path, ...rest}) => f({ancestors: getAncestors(path), ...rest})
+const Breadcrumb = (props: Props) => {
+  const ancestors = getAncestors(props.path || Constants.defaultPath)
 
-const Breadcrumb = Kb.OverlayParentHOC(
-  withAncestors(props => (
+  const dispatch = Container.useDispatch()
+  const nav = Container.useSafeNavigation()
+  const onOpenPath = (path: Types.Path) =>
+    props.inDestinationPicker
+      ? Constants.makeActionsForDestinationPickerOpen(0, path, nav.safeNavigateAppendPayload).forEach(
+          action => dispatch(action)
+        )
+      : dispatch(nav.safeNavigateAppendPayload({path: [{props: {path}, selected: 'fsRoot'}]}))
+
+  const {toggleShowingPopup, showingPopup, popup, popupAnchor} = Kb.usePopup(attachTo => (
+    <Kb.FloatingMenu
+      containerStyle={styles.floating}
+      attachTo={attachTo}
+      visible={showingPopup}
+      onHidden={toggleShowingPopup}
+      items={ancestors
+        .slice(0, -2)
+        .reverse()
+        .map(path => ({
+          onClick: () => onOpenPath(path),
+          title: Types.getPathName(path),
+          view: (
+            <Kb.Box2 direction="horizontal" gap="tiny" fullWidth={true}>
+              <Kbfs.ItemIcon path={path} size={16} />
+              <Kb.Text type="Body" lineClamp={1}>
+                {Types.getPathName(path)}
+              </Kb.Text>
+            </Kb.Box2>
+          ),
+        }))}
+      position="bottom left"
+      closeOnSelect={true}
+    />
+  ))
+
+  return (
     <Kb.Box2 direction="horizontal" fullWidth={true}>
-      {props.ancestors.length > 2 && (
+      {ancestors.length > 2 && (
         <React.Fragment key="dropdown">
-          <Kb.Text
-            key="dots"
-            type="BodyTinyLink"
-            onClick={props.toggleShowingMenu}
-            ref={props.setAttachmentRef}
-          >
+          <Kb.Text key="dots" type="BodyTinyLink" onClick={toggleShowingPopup} ref={popupAnchor as any}>
             •••
           </Kb.Text>
-          <Kb.FloatingMenu
-            containerStyle={styles.floating}
-            attachTo={props.getAttachmentRef}
-            visible={props.showingMenu}
-            onHidden={props.toggleShowingMenu}
-            items={props.ancestors
-              .slice(0, -2)
-              .reverse()
-              .map(path => ({
-                onClick: () => props.onOpenPath(path),
-                title: Types.getPathName(path),
-                view: (
-                  <Kb.Box2 direction="horizontal" gap="tiny" fullWidth={true}>
-                    <Kbfs.PathItemIcon path={path} size={16} />
-                    <Kb.Text type="Body" lineClamp={1}>
-                      {Types.getPathName(path)}
-                    </Kb.Text>
-                  </Kb.Box2>
-                ),
-              }))}
-            position="bottom left"
-            closeOnSelect={true}
-          />
+          {popup}
         </React.Fragment>
       )}
-      {props.ancestors.slice(-2).map(path => (
+      {ancestors.slice(-2).map(path => (
         <React.Fragment key={`text-${path}`}>
           <Kb.Text key={`slash-${Types.pathToString(path)}`} type="BodyTiny" style={styles.slash}>
             /
@@ -71,7 +80,7 @@ const Breadcrumb = Kb.OverlayParentHOC(
           <Kb.Text
             key={`name-${Types.pathToString(path)}`}
             type="BodyTinyLink"
-            onClick={() => props.onOpenPath(path)}
+            onClick={() => onOpenPath(path)}
           >
             {Types.getPathName(path)}
           </Kb.Text>
@@ -81,8 +90,8 @@ const Breadcrumb = Kb.OverlayParentHOC(
         /
       </Kb.Text>
     </Kb.Box2>
-  ))
-)
+  )
+}
 
 const MaybePublicTag = ({path}: {path: Types.Path}) =>
   Constants.hasPublicTag(path) ? (
@@ -93,7 +102,7 @@ const MaybePublicTag = ({path}: {path: Types.Path}) =>
 
 const MainTitle = (props: Props) => (
   <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" gap="tiny">
-    {flags.kbfsOfflineMode && Types.getPathLevel(props.path) > 2 && <Kbfs.SyncStatus path={props.path} />}
+    <Kbfs.PathStatusIcon path={props.path} />
     <Kbfs.Filename path={props.path} selectable={true} style={styles.mainTitleText} type="Header" />
     <MaybePublicTag path={props.path} />
   </Kb.Box2>
@@ -135,6 +144,7 @@ const styles = Styles.styleSheetCreate(
       },
       mainTitleText: Styles.platformStyles({isElectron: Styles.desktopStyles.windowDraggingClickable}),
       rootTitle: {
+        alignSelf: 'center',
         marginLeft: Styles.globalMargins.xsmall,
       },
       slash: {

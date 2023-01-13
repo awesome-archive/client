@@ -1,16 +1,25 @@
-import * as SafeElectron from '../../util/safe-electron.desktop'
+import * as Electron from 'electron'
 import {keybaseBinPath} from './paths.desktop'
 import exec from './exec.desktop'
 import {isWindows} from '../../constants/platform'
+import {spawn} from 'child_process'
 
 export function ctlStop(callback: any) {
   const binPath = keybaseBinPath()
-  var plat = 'darwin'
-  var args = ['ctl', 'stop', '--exclude=app']
   if (isWindows) {
-    args = ['ctl', 'stop']
-    plat = 'win32'
+    if (!binPath) {
+      if (callback) callback("cannot get keybaseBinPath which shouldn't happen")
+      return
+    }
+    spawn(binPath, ['ctl', 'stop'], {
+      detached: true,
+      stdio: 'inherit',
+    })
+    if (callback) callback(null)
+    return
   }
+  const plat = 'darwin'
+  const args = ['ctl', 'stop', '--exclude=app']
   exec(binPath, args, plat, 'prod', false, callback)
 }
 
@@ -20,7 +29,7 @@ function exitApp() {
   // The main window survives. This makes sure to keep exiting until we are actually out.
   // It seems to work even when we have a broken reference to a browser window.
   // (Which happens because our first exit killed the browser window w/o updating our book keeping state)
-  setInterval(() => SafeElectron.getApp().exit(0), 200)
+  setInterval(() => Electron.app.exit(0), 200)
   // If we haven't exited after trying, then let's ensure it happens
   setTimeout(() => exitProcess(), 500)
 }
@@ -30,7 +39,7 @@ function exitProcess() {
   process.exit(0)
 }
 
-export function quit(appOnly: boolean = false) {
+export function ctlQuit(appOnly: boolean = false) {
   if (appOnly || __DEV__) {
     console.log('Only quitting gui')
     exitApp()
@@ -38,7 +47,7 @@ export function quit(appOnly: boolean = false) {
   }
 
   console.log('Quit the app')
-  ctlStop(function(stopErr) {
+  ctlStop(function (stopErr: any) {
     console.log('Done with ctlstop')
     if (stopErr) {
       console.log('Error in ctl stop, when quitting:', stopErr)

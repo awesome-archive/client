@@ -65,31 +65,16 @@ func (c *DelegateChatUI) getChatUI(sessionID int) *chat1.ChatUiInterface {
 	return nil
 }
 
-func (c *DelegateChatUI) ChatAttachmentDownloadStart(ctx context.Context, sessionID int) error {
-	if chatUI := c.getChatUI(sessionID); chatUI != nil {
-		return (*chatUI).ChatAttachmentDownloadStart(ctx, sessionID)
-	}
-	return nil
-}
-
-func (c *DelegateChatUI) ChatAttachmentDownloadProgress(ctx context.Context,
-	arg chat1.ChatAttachmentDownloadProgressArg) error {
-	if chatUI := c.getChatUI(arg.SessionID); chatUI != nil {
-		return (*chatUI).ChatAttachmentDownloadProgress(ctx, arg)
-	}
-	return nil
-}
-
-func (c *DelegateChatUI) ChatAttachmentDownloadDone(ctx context.Context, sessionID int) error {
-	if chatUI := c.getChatUI(sessionID); chatUI != nil {
-		return (*chatUI).ChatAttachmentDownloadDone(ctx, sessionID)
-	}
-	return nil
-}
-
 func (c *DelegateChatUI) ChatInboxConversation(ctx context.Context, arg chat1.ChatInboxConversationArg) error {
 	if chatUI := c.getChatUI(arg.SessionID); chatUI != nil {
 		return (*chatUI).ChatInboxConversation(ctx, arg)
+	}
+	return nil
+}
+
+func (c *DelegateChatUI) ChatInboxLayout(ctx context.Context, arg chat1.ChatInboxLayoutArg) error {
+	if chatUI := c.getChatUI(arg.SessionID); chatUI != nil {
+		return (*chatUI).ChatInboxLayout(ctx, arg)
 	}
 	return nil
 }
@@ -181,6 +166,20 @@ func (c *DelegateChatUI) ChatSearchIndexStatus(ctx context.Context, arg chat1.Ch
 func (c *DelegateChatUI) ChatSearchConvHits(ctx context.Context, arg chat1.ChatSearchConvHitsArg) error {
 	if chatUI := c.getChatUI(arg.SessionID); chatUI != nil {
 		return (*chatUI).ChatSearchConvHits(ctx, arg)
+	}
+	return nil
+}
+
+func (c *DelegateChatUI) ChatSearchTeamHits(ctx context.Context, arg chat1.ChatSearchTeamHitsArg) error {
+	if chatUI := c.getChatUI(arg.SessionID); chatUI != nil {
+		return (*chatUI).ChatSearchTeamHits(ctx, arg)
+	}
+	return nil
+}
+
+func (c *DelegateChatUI) ChatSearchBotHits(ctx context.Context, arg chat1.ChatSearchBotHitsArg) error {
+	if chatUI := c.getChatUI(arg.SessionID); chatUI != nil {
+		return (*chatUI).ChatSearchBotHits(ctx, arg)
 	}
 	return nil
 }

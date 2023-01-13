@@ -1,6 +1,6 @@
 import * as React from 'react'
 import {StylesCrossPlatform} from '../../styles/css'
-import {Position} from '../relative-popup-hoc.types'
+import {Position} from '../../styles'
 
 // GatewayDests:
 // popup-root: At the root of the app. Sibling to root route renderer.
@@ -20,6 +20,7 @@ export type Props = {
   propagateOutsideClicks?: boolean
   containerStyle?: StylesCrossPlatform
   matchDimension?: boolean
+  remeasureHint?: number
   position?: Position
   positionFallbacks?: Position[]
   hideKeyboard?: boolean // if true, hide the keyboard on mount

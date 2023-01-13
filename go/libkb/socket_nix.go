@@ -1,7 +1,9 @@
 // Copyright 2015 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
+//go:build !windows
 // +build !windows
+
 // socket_nix.go
 
 package libkb
@@ -33,7 +35,7 @@ func (s SocketInfo) BindToSocket() (ret net.Listener, err error) {
 
 	bindFile := s.bindFile
 	what := fmt.Sprintf("SocketInfo#BindToSocket(unix:%s)", bindFile)
-	defer Trace(s.log, what, func() error { return err })()
+	defer Trace(s.log, what, &err)()
 
 	if err := MakeParentDirs(s.log, bindFile); err != nil {
 		return nil, err
@@ -100,7 +102,7 @@ func (s SocketInfo) dialSocket(dialFile string) (ret net.Conn, err error) {
 	defer bindLock.Unlock()
 
 	what := fmt.Sprintf("SocketInfo#dialSocket(unix:%s)", dialFile)
-	defer Trace(s.log, what, func() error { return err })()
+	defer Trace(s.log, what, &err)()
 
 	if dialFile == "" {
 		return nil, fmt.Errorf("Can't dial empty path")
@@ -144,6 +146,7 @@ func NewSocket(g *GlobalContext) (ret Socket, err error) {
 	if err != nil {
 		return
 	}
+	g.Log.Debug("Connecting to socket with dialFiles=%s, bindFiles=%s", dialFiles, bindFile)
 	log := g.Log
 	if log == nil {
 		log = logger.NewNull()

@@ -76,15 +76,15 @@ func TestTeamSigChainHighLinks(t *testing.T) {
 	ctx := context.TODO()
 
 	// Create some users. The owner is last so that it has the active session.
-	u2, err := kbtest.CreateAndSignupFakeUser("we", tc.G) //admin
+	u2, err := kbtest.CreateAndSignupFakeUser("we", tc.G) // admin
 	require.NoError(t, err)
-	u3, err := kbtest.CreateAndSignupFakeUser("ji", tc.G) //non-admin
+	u3, err := kbtest.CreateAndSignupFakeUser("ji", tc.G) // non-admin
 	require.NoError(t, err)
 	u4, err := kbtest.CreateAndSignupFakeUser("botua", tc.G) // bot
 	require.NoError(t, err)
 	u5, err := kbtest.CreateAndSignupFakeUser("rua", tc.G) // restricted_bot
 	require.NoError(t, err)
-	u1, err := kbtest.CreateAndSignupFakeUser("je", tc.G) //owner
+	u1, err := kbtest.CreateAndSignupFakeUser("je", tc.G) // owner
 	require.NoError(t, err)
 	t.Logf("create the team...")
 	// Create a team. This creates the first high link.
@@ -146,7 +146,7 @@ func TestTeamSigChainHighLinks(t *testing.T) {
 	// the same way on subteams (since there are places that default to a
 	// value of 1 for sequence number). It's overkill to test any more than
 	// just this on the subteam since it should work the same way.
-	_, err = AddMemberByID(ctx, tc.G, *subteamID, u3.Username, keybase1.TeamRole_ADMIN, nil)
+	_, err = AddMemberByID(ctx, tc.G, *subteamID, u3.Username, keybase1.TeamRole_ADMIN, nil, nil /* emailInviteMsg */)
 	require.NoError(t, err)
 	assertHighSeqForTeam(t, tc, subteamID, 2)
 	assertHighSeqForTeam(t, tc, teamID, 8)
@@ -178,8 +178,7 @@ func TestTeamSigChainHighLinks(t *testing.T) {
 
 	t.Logf("deleting subteam...")
 	// Deleting a subteam will not create a high link.
-	subteamName := teamName + "." + sub
-	err = Delete(ctx, tc.G, &teamsUI{}, subteamName)
+	err = Delete(ctx, tc.G, &teamsUI{}, *subteamID)
 	require.NoError(t, err)
 	assertHighSeqForTeam(t, tc, teamID, 10)
 }
@@ -415,8 +414,9 @@ func TestTeamSigChainWithInvites(t *testing.T) {
 	}
 	checkInvite := func(s string, f func(i *keybase1.TeamInvite)) {
 		var i *keybase1.TeamInvite
-		tmp, ok := state.inner.ActiveInvites[keybase1.TeamInviteID(s)]
+		tmpMD, ok := state.FindActiveInviteMDByID(keybase1.TeamInviteID(s))
 		if ok {
+			tmp := tmpMD.Invite
 			i = &tmp
 		}
 		f(i)

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import PlainInput, {PropsWithInput} from './plain-input'
+import PlainInput, {type PropsWithInput} from './plain-input'
 import {Box2} from './box'
 import Text, {getStyle as getTextStyle} from './text'
 import * as Styles from '../styles'
@@ -10,7 +10,8 @@ export type _Props = {
   containerStyle?: Styles.StylesCrossPlatform
   decoration?: React.ReactNode
   error?: boolean
-  placeholder: string
+  hoverPlaceholder?: string // placeholder while there is no text; if this is set then props.placholder is used as a label only.
+  placeholder: string // placeholder while unselected, label while selected
 }
 
 export type Props = PropsWithInput<_Props>
@@ -22,9 +23,12 @@ const ReflessLabeledInput = (props: Props & RefProps) => {
   const [focused, setFocused] = React.useState(false)
   const {onBlur, onFocus} = props
   const _onFocus = React.useCallback(() => {
+    if (props.disabled) {
+      return
+    }
     setFocused(true)
     onFocus && onFocus()
-  }, [onFocus])
+  }, [onFocus, props.disabled])
   const _onBlur = React.useCallback(() => {
     setFocused(false)
     onBlur && onBlur()
@@ -44,11 +48,15 @@ const ReflessLabeledInput = (props: Props & RefProps) => {
   // Style is supposed to switch when there's any input or its focused
   const actualValue = value !== undefined ? value : uncontrolledValue
   const populated = !!actualValue && actualValue.length > 0
-  const collapsed = focused || populated
+  const multiline = props.multiline
+  const collapsed = focused || populated || multiline
 
   // We're using fontSize to derive heights
   const textStyle = getTextStyle(props.textType || 'BodySemibold')
-  const computedHeight = textStyle.fontSize + (isMobile ? 52 : 38)
+  const computedHeight =
+    textStyle.fontSize * (props.rowsMax && multiline ? props.rowsMax * 1.3 : 1) + (isMobile ? 10 : 0)
+  const computedContainerSize =
+    textStyle.fontSize + (isMobile ? 48 : 38) + (multiline ? textStyle.fontSize : 0)
 
   const {containerStyle, error, forwardedRef, placeholder, ...plainInputProps} = props
   return (
@@ -59,7 +67,7 @@ const ReflessLabeledInput = (props: Props & RefProps) => {
       gapEnd={false}
       style={Styles.collapseStyles([
         styles.container,
-        {height: textStyle.fontSize + (isMobile ? 52 : 38)},
+        {height: !multiline ? computedContainerSize : undefined, minHeight: computedContainerSize},
         focused && styles.containerFocused,
         error && styles.containerError,
         containerStyle,
@@ -85,18 +93,19 @@ const ReflessLabeledInput = (props: Props & RefProps) => {
           {placeholder}
         </Text>
       </Box2>
-
       <PlainInput
         {...plainInputProps}
         onChangeText={_onChangeText}
         onFocus={_onFocus}
         onBlur={_onBlur}
+        placeholder={collapsed ? props.hoverPlaceholder : undefined}
         ref={props.forwardedRef}
         style={Styles.collapseStyles([
           styles.input,
           props.style,
-          {height: computedHeight, maxHeight: computedHeight},
+          {maxHeight: computedHeight},
           collapsed && styles.inputSmall,
+          multiline && styles.inputMultiline,
         ])}
       />
     </Box2>
@@ -108,9 +117,9 @@ ReflessLabeledInput.defaultProps = {
   textType: 'BodySemibold',
 }
 
-const LabeledInput = React.forwardRef<PlainInput, Props>((props, ref) => (
-  <ReflessLabeledInput {...props} forwardedRef={ref} />
-))
+const LabeledInput = React.forwardRef<PlainInput, Props>(function LabeledInput(props, ref) {
+  return <ReflessLabeledInput {...props} forwardedRef={ref} />
+})
 
 const styles = Styles.styleSheetCreate(
   () =>
@@ -144,14 +153,26 @@ const styles = Styles.styleSheetCreate(
       icon: {
         marginRight: Styles.globalMargins.xtiny,
       },
-      input: {
-        backgroundColor: Styles.globalColors.transparent,
-        height: '100%',
-        paddingLeft: Styles.globalMargins.xsmall,
-        paddingRight: Styles.globalMargins.xsmall,
-        width: '100%',
-        zIndex: 0,
-      },
+      input: Styles.platformStyles({
+        common: {
+          backgroundColor: Styles.globalColors.transparent,
+          flexGrow: 1,
+          marginTop: 14,
+          paddingBottom: 3,
+          paddingLeft: Styles.globalMargins.xsmall,
+          paddingRight: Styles.globalMargins.xsmall,
+          width: '100%',
+        },
+        isElectron: {
+          marginTop: 14 + Styles.globalMargins.xsmall,
+          zIndex: 0,
+        },
+      }),
+      inputMultiline: Styles.platformStyles({
+        isMobile: {
+          textAlignVertical: 'top',
+        } as const,
+      }), // not sure why this fails
       inputSmall: {
         paddingTop: 0,
       },
@@ -173,10 +194,10 @@ const styles = Styles.styleSheetCreate(
           height: '100%',
         },
         isElectron: {
-          paddingTop: Styles.globalMargins.tiny,
+          paddingTop: 6,
         },
         isMobile: {
-          paddingTop: 10,
+          paddingTop: Styles.globalMargins.tiny,
         },
       }),
       labelWrapper: {

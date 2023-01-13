@@ -1,36 +1,87 @@
-import * as ChatTypes from '../constants/types/chat2'
 import * as Chat2Gen from '../actions/chat2-gen'
-import {ChatPreview} from './chat.desktop'
-import {remoteConnect} from '../util/container'
-import {RemoteConvMeta} from '../chat/inbox/container/remote'
+import * as Container from '../util/container'
+import * as Kb from '../common-adapters'
+import * as Styles from '../styles'
+import type * as Types from '../constants/types/chat2'
+import type {DeserializeProps} from './remote-serializer.desktop'
+import {SmallTeam} from '../chat/inbox/row/small-team'
 
-type OwnProps = {
-  convLimit: number
+type RowProps = {
+  conversationIDKey: Types.ConversationIDKey
 }
 
-type State = {
-  conversations: Array<RemoteConvMeta>
+const RemoteSmallTeam = (props: RowProps) => {
+  const {conversationIDKey} = props
+  const state = Container.useRemoteStore<DeserializeProps>()
+  const {conversationsToSend} = state
+  const conversation = conversationsToSend.find(c => c.conversationIDKey === conversationIDKey)
+
+  return (
+    <SmallTeam
+      conversationIDKey={conversationIDKey}
+      isInWidget={true}
+      isSelected={false}
+      layoutIsTeam={conversation?.teamType !== 'adhoc'}
+      layoutName={conversation?.tlfname}
+      layoutSnippet={conversation?.snippetDecorated}
+    />
+  )
 }
 
-const mapStateToProps = ({conversations}: State) => ({conversations})
+const ChatPreview = (p: {convLimit?: number}) => {
+  const state = Container.useRemoteStore<DeserializeProps>()
+  const dispatch = Container.useDispatch()
+  const {convLimit} = p
+  const {conversationsToSend} = state
 
-const mapDispatchToProps = dispatch => ({
-  _onSelectConversation: (conversationIDKey: ChatTypes.ConversationIDKey) =>
-    dispatch(Chat2Gen.createOpenChatFromWidget({conversationIDKey})),
-  onViewAll: () => dispatch(Chat2Gen.createOpenChatFromWidget({})),
-})
-
-const mergeProps = (stateProps, dispatchProps, ownProps: OwnProps) => ({
-  convRows: __STORYBOOK__
+  const convRows = __STORYBOOK__
     ? []
-    : stateProps.conversations
-        .slice(0, ownProps.convLimit ? ownProps.convLimit : stateProps.conversations.length)
-        .map(c => ({
-          conversationIDKey: c.conversationIDKey,
-          onSelectConversation: () => dispatchProps._onSelectConversation(c.conversationIDKey),
-          ...c,
-        })),
-  onViewAll: dispatchProps.onViewAll,
-})
+    : conversationsToSend
+        .slice(0, convLimit ? convLimit : conversationsToSend.length)
+        .map(c => c.conversationIDKey)
 
-export default remoteConnect(mapStateToProps, mapDispatchToProps, mergeProps)(ChatPreview)
+  return (
+    <Kb.Box2 direction="vertical" fullWidth={true} style={styles.chatContainer}>
+      {convRows.map(id => (
+        <RemoteSmallTeam key={id} conversationIDKey={id} />
+      ))}
+      <Kb.Box2 direction="horizontal" fullWidth={true} centerChildren={true} style={styles.buttonContainer}>
+        <Kb.Button
+          label="Open inbox"
+          onClick={() => dispatch(Chat2Gen.createOpenChatFromWidget({}))}
+          small={true}
+          mode="Secondary"
+        />
+      </Kb.Box2>
+    </Kb.Box2>
+  )
+}
+
+const styles = Styles.styleSheetCreate(() => ({
+  buttonContainer: {
+    marginBottom: Styles.globalMargins.tiny,
+    marginTop: Styles.globalMargins.tiny,
+  },
+  chatContainer: {
+    backgroundColor: Styles.globalColors.white,
+    color: Styles.globalColors.black,
+  },
+  toggleButton: Styles.platformStyles({
+    common: {
+      backgroundColor: Styles.globalColors.black_05,
+      borderRadius: Styles.borderRadius,
+      marginBottom: Styles.globalMargins.xtiny,
+      marginTop: Styles.globalMargins.xtiny,
+      paddingBottom: Styles.globalMargins.xtiny,
+      paddingTop: Styles.globalMargins.xtiny,
+    },
+    isElectron: {
+      marginLeft: Styles.globalMargins.tiny,
+      marginRight: Styles.globalMargins.tiny,
+      paddingLeft: Styles.globalMargins.tiny,
+      paddingRight: Styles.globalMargins.tiny,
+    },
+  }),
+}))
+
+export default ChatPreview

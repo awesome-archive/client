@@ -1,11 +1,11 @@
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import * as Types from '../../constants/types/settings'
-import React, {Component} from 'react'
+import type * as Types from '../../constants/types/settings'
+import * as React from 'react'
 import SubHeading from '../subheading'
-import moment from 'moment'
-import {Props} from '.'
+import type {Props} from '.'
 import {intersperseFn} from '../../util/arrays'
+import * as dateFns from 'date-fns'
 
 type State = {
   inviteEmail: string
@@ -13,7 +13,7 @@ type State = {
   showMessageField: boolean
 }
 
-class Invites extends Component<Props, State> {
+class Invites extends React.Component<Props, State> {
   state: State
 
   constructor(props: Props) {
@@ -24,6 +24,11 @@ class Invites extends Component<Props, State> {
       showMessageField: props.showMessageField,
     }
   }
+
+  componentDidMount() {
+    this.props.onRefresh()
+  }
+
   componentWillUnmount() {
     if (this.props.error) this.props.onClearError()
   }
@@ -57,23 +62,16 @@ class Invites extends Component<Props, State> {
             padding: Styles.globalMargins.medium,
           }}
         >
-          <Kb.Box
-            style={{
-              ...Styles.globalStyles.flexBoxColumn,
-              alignItems: 'center',
-              marginTop: Styles.globalMargins.small,
-              minHeight: 269,
-            }}
-          >
-            <Kb.Input
-              hintText="Friend's email (optional)"
+          <Kb.Box2 direction="vertical" gap="small" style={styles.container}>
+            <Kb.LabeledInput
+              placeholder="Friend's email (optional)"
               value={this.state.inviteEmail}
               onChangeText={inviteEmail => this._handleChangeEmail(inviteEmail)}
               style={{marginBottom: 0}}
             />
             {this.state.showMessageField && (
-              <Kb.Input
-                hintText="Message (optional)"
+              <Kb.LabeledInput
+                placeholder="Message (optional)"
                 multiline={true}
                 value={this.state.inviteMessage}
                 onChangeText={inviteMessage => this.setState({inviteMessage})}
@@ -85,7 +83,7 @@ class Invites extends Component<Props, State> {
               waiting={props.waitingForResponse}
               style={{alignSelf: 'center', marginTop: Styles.globalMargins.medium}}
             />
-          </Kb.Box>
+          </Kb.Box2>
           {props.pendingInvites.length > 0 && (
             <Kb.Box style={{...Styles.globalStyles.flexBoxColumn, flexShrink: 0, marginBottom: 16}}>
               <SubHeading>Pending invites ({props.pendingInvites.length})</SubHeading>
@@ -165,7 +163,9 @@ function PendingEmailContent({
         <Kb.Text type="BodySemibold" onClick={() => onSelectPendingInvite(invite)}>
           {invite.email}
         </Kb.Text>
-        <Kb.Text type="BodySmall">Invited {moment.unix(invite.created).format('MMM D, YYYY')}</Kb.Text>
+        <Kb.Text type="BodySmall">
+          Invited {dateFns.format(dateFns.fromUnixTime(invite.created), 'MMM d, yyyy')}
+        </Kb.Text>
       </Kb.Box>
     </Kb.Box>
   )
@@ -204,13 +204,18 @@ function AcceptedInviteItem({
     >
       <Kb.Avatar username={invite.username} size={32} />
       <Kb.Box style={{...Styles.globalStyles.flexBoxColumn, marginLeft: Styles.globalMargins.small}}>
-        <Kb.ConnectedUsernames type="BodySemibold" usernames={[invite.username]} />
+        <Kb.ConnectedUsernames type="BodyBold" usernames={invite.username} />
       </Kb.Box>
     </Kb.Box>
   )
 }
 
 const styles = Styles.styleSheetCreate(() => ({
+  container: {
+    marginTop: Styles.globalMargins.small,
+    minHeight: 269,
+    width: 400,
+  },
   inviteItem: {
     ...Styles.globalStyles.flexBoxRow,
     alignItems: 'center',

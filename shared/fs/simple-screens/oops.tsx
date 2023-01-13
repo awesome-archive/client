@@ -1,8 +1,6 @@
-import * as React from 'react'
 import * as Types from '../../constants/types/fs'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import * as Flow from '../../util/flow'
 import * as Container from '../../util/container'
 import {isMobile} from '../../constants/platform'
 
@@ -14,8 +12,6 @@ type OwnProps = {
 type Props = OwnProps & {
   openParent: () => void
 }
-
-type OwnPropsWithSafeNavigation = Container.PropsWithSafeNavigation<OwnProps>
 
 const Explain = (props: Props) => {
   const elems = Types.getPathElements(props.path)
@@ -102,35 +98,26 @@ const NonExistent = (props: Props) => (
   </Kb.Box2>
 )
 
-const Oops = (props: Props) => {
+const Oops = (props: OwnProps) => {
+  const dispatch = Container.useDispatch()
+  const nav = Container.useSafeNavigation()
+  const openParent = () =>
+    dispatch(
+      nav.safeNavigateAppendPayload({
+        path: [{props: {path: Types.getPathParent(props.path)}, selected: 'fsRoot'}],
+      })
+    )
   switch (props.reason) {
     case Types.SoftError.NoAccess:
-      return <NoAccess {...props} />
+      return <NoAccess {...props} openParent={openParent} />
     case Types.SoftError.Nonexistent:
-      return <NonExistent {...props} />
+      return <NonExistent {...props} openParent={openParent} />
     default:
-      Flow.ifFlowComplainsAboutThisFunctionYouHaventHandledAllCasesInASwitch(props.reason)
       return null
   }
 }
 
-const mapDispatchToProps = (dispatch, ownProps: OwnPropsWithSafeNavigation) => ({
-  openParent: () =>
-    dispatch(
-      ownProps.safeNavigateAppendPayload({
-        path: [{props: {path: Types.getPathParent(ownProps.path)}, selected: 'main'}],
-      })
-    ),
-})
-
-export default Container.withSafeNavigation(
-  Container.namedConnect(
-    () => ({}),
-    mapDispatchToProps,
-    (s, d, o: OwnPropsWithSafeNavigation) => ({...o, ...s, ...d}),
-    'Oops'
-  )(Oops)
-) as any
+export default Oops
 
 const styles = Styles.styleSheetCreate(
   () =>

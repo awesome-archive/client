@@ -1,8 +1,9 @@
 import * as React from 'react'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
-import {backgroundImageFn} from '../../../common-adapters/emoji'
-import {Picker} from 'emoji-mart'
+import * as ChatConstants from '../../../constants/chat2'
+import {EmojiPickerDesktop} from '../../../chat/emoji-picker/container'
+import type {RenderableEmoji} from '../../../util/emoji'
 
 type SecretNoteProps = {
   secretNote: string // Initial value only
@@ -45,8 +46,9 @@ class SecretNote extends React.Component<SecretNoteProps, SecretNoteState> {
     this.setState(s => (s.secretNote === secretNote ? null : {secretNote}))
   }
 
-  _insertEmoji = (emoji: string) => {
+  _insertEmoji = (emojiStr: string, renderableEmoji: RenderableEmoji) => {
     if (this._note.current) {
+      const emoji = renderableEmoji.unicodeStock ?? emojiStr
       const noteInput = this._note.current
       const selection = noteInput.getSelection()
       if (!selection) {
@@ -85,11 +87,6 @@ class SecretNote extends React.Component<SecretNoteProps, SecretNoteState> {
     })
   }
 
-  _emojiPickerOnClick = emoji => {
-    this._insertEmoji(emoji.native)
-    this._emojiPickerToggle()
-  }
-
   render() {
     return (
       <>
@@ -100,7 +97,6 @@ class SecretNote extends React.Component<SecretNoteProps, SecretNoteState> {
               placeholder={`${
                 this.props.toSelf ? 'Add a note to yourself' : 'Add an encrypted note'
               } (in Keybase)`}
-              placeholderColor={Styles.globalColors.black_20}
               rowsMin={Styles.isMobile ? 2 : 3}
               rowsMax={8}
               style={styles.input}
@@ -115,12 +111,11 @@ class SecretNote extends React.Component<SecretNoteProps, SecretNoteState> {
                 position="bottom right"
                 onHidden={() => this.setState({emojiPickerOpen: false})}
               >
-                <Picker
-                  autoFocus={true}
-                  emoji="star-struck"
-                  title="reacjibase"
-                  onClick={this._emojiPickerOnClick}
-                  backgroundImageFn={backgroundImageFn}
+                <EmojiPickerDesktop
+                  disableCustomEmoji={true}
+                  conversationIDKey={ChatConstants.noConversationIDKey}
+                  onPickAction={this._insertEmoji}
+                  onDidPick={this._emojiPickerToggle}
                 />
               </Kb.Overlay>
             )}
@@ -137,7 +132,7 @@ class SecretNote extends React.Component<SecretNoteProps, SecretNoteState> {
               <Kb.Icon
                 boxStyle={styles.emojiIcon}
                 onClick={this._emojiPickerToggle}
-                style={Kb.iconCastPlatformStyles(styles.emojiIcon)}
+                style={styles.emojiIcon}
                 type="iconfont-emoji"
                 ref={this._emojiIcon}
               />
@@ -171,7 +166,6 @@ class PublicMemo extends React.Component<PublicMemoProps, PublicMemoState> {
             multiline={true}
             padding={0}
             placeholder="Add a public memo (on Stellar)"
-            placeholderColor={Styles.globalColors.black_20}
             style={this.props.publicMemoOverride ? styles.inputDisabled : styles.input}
             rowsMin={Styles.isMobile ? 1 : 2}
             rowsMax={6}
@@ -226,10 +220,18 @@ const styles = Styles.styleSheetCreate(
       flexOne: {
         flex: 1,
       },
-      input: {
-        backgroundColor: Styles.globalColors.white,
-        color: Styles.globalColors.black_on_white,
-      },
+      input: Styles.platformStyles({
+        common: {
+          backgroundColor: Styles.globalColors.white,
+          color: Styles.globalColors.black_on_white,
+        },
+        isElectron: {
+          // Line height change is so that emojis (unicode characters inside
+          // textarea) are not clipped at the top. This change is accompanied by
+          // a change in padding to offset the increased line height
+          lineHeight: '22px',
+        },
+      }),
       inputDisabled: {
         backgroundColor: Styles.globalColors.white,
         color: Styles.globalColors.greyDarker,

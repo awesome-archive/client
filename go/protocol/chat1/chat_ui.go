@@ -1,15 +1,17 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.2 (https://github.com/keybase/node-avdl-compiler)
+// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
 //   Input file: avdl/chat1/chat_ui.avdl
 
 package chat1
 
 import (
 	"errors"
+	"fmt"
 	gregor1 "github.com/keybase/client/go/protocol/gregor1"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	stellar1 "github.com/keybase/client/go/protocol/stellar1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	context "golang.org/x/net/context"
+	"time"
 )
 
 type UIPagination struct {
@@ -28,14 +30,260 @@ func (o UIPagination) DeepCopy() UIPagination {
 	}
 }
 
+type UIInboxSmallTeamRow struct {
+	ConvID            ConvIDStr         `codec:"convID" json:"convID"`
+	Name              string            `codec:"name" json:"name"`
+	Time              gregor1.Time      `codec:"time" json:"time"`
+	Snippet           *string           `codec:"snippet,omitempty" json:"snippet,omitempty"`
+	SnippetDecoration SnippetDecoration `codec:"snippetDecoration" json:"snippetDecoration"`
+	Draft             *string           `codec:"draft,omitempty" json:"draft,omitempty"`
+	IsMuted           bool              `codec:"isMuted" json:"isMuted"`
+	IsTeam            bool              `codec:"isTeam" json:"isTeam"`
+}
+
+func (o UIInboxSmallTeamRow) DeepCopy() UIInboxSmallTeamRow {
+	return UIInboxSmallTeamRow{
+		ConvID: o.ConvID.DeepCopy(),
+		Name:   o.Name,
+		Time:   o.Time.DeepCopy(),
+		Snippet: (func(x *string) *string {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x)
+			return &tmp
+		})(o.Snippet),
+		SnippetDecoration: o.SnippetDecoration.DeepCopy(),
+		Draft: (func(x *string) *string {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x)
+			return &tmp
+		})(o.Draft),
+		IsMuted: o.IsMuted,
+		IsTeam:  o.IsTeam,
+	}
+}
+
+type UIInboxBigTeamRowTyp int
+
+const (
+	UIInboxBigTeamRowTyp_LABEL   UIInboxBigTeamRowTyp = 1
+	UIInboxBigTeamRowTyp_CHANNEL UIInboxBigTeamRowTyp = 2
+)
+
+func (o UIInboxBigTeamRowTyp) DeepCopy() UIInboxBigTeamRowTyp { return o }
+
+var UIInboxBigTeamRowTypMap = map[string]UIInboxBigTeamRowTyp{
+	"LABEL":   1,
+	"CHANNEL": 2,
+}
+
+var UIInboxBigTeamRowTypRevMap = map[UIInboxBigTeamRowTyp]string{
+	1: "LABEL",
+	2: "CHANNEL",
+}
+
+func (e UIInboxBigTeamRowTyp) String() string {
+	if v, ok := UIInboxBigTeamRowTypRevMap[e]; ok {
+		return v
+	}
+	return fmt.Sprintf("%v", int(e))
+}
+
+type UIInboxBigTeamChannelRow struct {
+	ConvID      ConvIDStr `codec:"convID" json:"convID"`
+	Teamname    string    `codec:"teamname" json:"teamname"`
+	Channelname string    `codec:"channelname" json:"channelname"`
+	Draft       *string   `codec:"draft,omitempty" json:"draft,omitempty"`
+	IsMuted     bool      `codec:"isMuted" json:"isMuted"`
+}
+
+func (o UIInboxBigTeamChannelRow) DeepCopy() UIInboxBigTeamChannelRow {
+	return UIInboxBigTeamChannelRow{
+		ConvID:      o.ConvID.DeepCopy(),
+		Teamname:    o.Teamname,
+		Channelname: o.Channelname,
+		Draft: (func(x *string) *string {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x)
+			return &tmp
+		})(o.Draft),
+		IsMuted: o.IsMuted,
+	}
+}
+
+type UIInboxBigTeamLabelRow struct {
+	Name string   `codec:"name" json:"name"`
+	Id   TLFIDStr `codec:"id" json:"id"`
+}
+
+func (o UIInboxBigTeamLabelRow) DeepCopy() UIInboxBigTeamLabelRow {
+	return UIInboxBigTeamLabelRow{
+		Name: o.Name,
+		Id:   o.Id.DeepCopy(),
+	}
+}
+
+type UIInboxBigTeamRow struct {
+	State__   UIInboxBigTeamRowTyp      `codec:"state" json:"state"`
+	Label__   *UIInboxBigTeamLabelRow   `codec:"label,omitempty" json:"label,omitempty"`
+	Channel__ *UIInboxBigTeamChannelRow `codec:"channel,omitempty" json:"channel,omitempty"`
+}
+
+func (o *UIInboxBigTeamRow) State() (ret UIInboxBigTeamRowTyp, err error) {
+	switch o.State__ {
+	case UIInboxBigTeamRowTyp_LABEL:
+		if o.Label__ == nil {
+			err = errors.New("unexpected nil value for Label__")
+			return ret, err
+		}
+	case UIInboxBigTeamRowTyp_CHANNEL:
+		if o.Channel__ == nil {
+			err = errors.New("unexpected nil value for Channel__")
+			return ret, err
+		}
+	}
+	return o.State__, nil
+}
+
+func (o UIInboxBigTeamRow) Label() (res UIInboxBigTeamLabelRow) {
+	if o.State__ != UIInboxBigTeamRowTyp_LABEL {
+		panic("wrong case accessed")
+	}
+	if o.Label__ == nil {
+		return
+	}
+	return *o.Label__
+}
+
+func (o UIInboxBigTeamRow) Channel() (res UIInboxBigTeamChannelRow) {
+	if o.State__ != UIInboxBigTeamRowTyp_CHANNEL {
+		panic("wrong case accessed")
+	}
+	if o.Channel__ == nil {
+		return
+	}
+	return *o.Channel__
+}
+
+func NewUIInboxBigTeamRowWithLabel(v UIInboxBigTeamLabelRow) UIInboxBigTeamRow {
+	return UIInboxBigTeamRow{
+		State__: UIInboxBigTeamRowTyp_LABEL,
+		Label__: &v,
+	}
+}
+
+func NewUIInboxBigTeamRowWithChannel(v UIInboxBigTeamChannelRow) UIInboxBigTeamRow {
+	return UIInboxBigTeamRow{
+		State__:   UIInboxBigTeamRowTyp_CHANNEL,
+		Channel__: &v,
+	}
+}
+
+func (o UIInboxBigTeamRow) DeepCopy() UIInboxBigTeamRow {
+	return UIInboxBigTeamRow{
+		State__: o.State__.DeepCopy(),
+		Label__: (func(x *UIInboxBigTeamLabelRow) *UIInboxBigTeamLabelRow {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.Label__),
+		Channel__: (func(x *UIInboxBigTeamChannelRow) *UIInboxBigTeamChannelRow {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.Channel__),
+	}
+}
+
+type UIInboxReselectInfo struct {
+	OldConvID ConvIDStr  `codec:"oldConvID" json:"oldConvID"`
+	NewConvID *ConvIDStr `codec:"newConvID,omitempty" json:"newConvID,omitempty"`
+}
+
+func (o UIInboxReselectInfo) DeepCopy() UIInboxReselectInfo {
+	return UIInboxReselectInfo{
+		OldConvID: o.OldConvID.DeepCopy(),
+		NewConvID: (func(x *ConvIDStr) *ConvIDStr {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.NewConvID),
+	}
+}
+
+type UIInboxLayout struct {
+	TotalSmallTeams int                   `codec:"totalSmallTeams" json:"totalSmallTeams"`
+	SmallTeams      []UIInboxSmallTeamRow `codec:"smallTeams" json:"smallTeams"`
+	BigTeams        []UIInboxBigTeamRow   `codec:"bigTeams" json:"bigTeams"`
+	ReselectInfo    *UIInboxReselectInfo  `codec:"reselectInfo,omitempty" json:"reselectInfo,omitempty"`
+	WidgetList      []UIInboxSmallTeamRow `codec:"widgetList" json:"widgetList"`
+}
+
+func (o UIInboxLayout) DeepCopy() UIInboxLayout {
+	return UIInboxLayout{
+		TotalSmallTeams: o.TotalSmallTeams,
+		SmallTeams: (func(x []UIInboxSmallTeamRow) []UIInboxSmallTeamRow {
+			if x == nil {
+				return nil
+			}
+			ret := make([]UIInboxSmallTeamRow, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.SmallTeams),
+		BigTeams: (func(x []UIInboxBigTeamRow) []UIInboxBigTeamRow {
+			if x == nil {
+				return nil
+			}
+			ret := make([]UIInboxBigTeamRow, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.BigTeams),
+		ReselectInfo: (func(x *UIInboxReselectInfo) *UIInboxReselectInfo {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.ReselectInfo),
+		WidgetList: (func(x []UIInboxSmallTeamRow) []UIInboxSmallTeamRow {
+			if x == nil {
+				return nil
+			}
+			ret := make([]UIInboxSmallTeamRow, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.WidgetList),
+	}
+}
+
 type UnverifiedInboxUIItemMetadata struct {
-	ChannelName       string   `codec:"channelName" json:"channelName"`
-	Headline          string   `codec:"headline" json:"headline"`
-	HeadlineDecorated string   `codec:"headlineDecorated" json:"headlineDecorated"`
-	Snippet           string   `codec:"snippet" json:"snippet"`
-	SnippetDecoration string   `codec:"snippetDecoration" json:"snippetDecoration"`
-	WriterNames       []string `codec:"writerNames" json:"writerNames"`
-	ResetParticipants []string `codec:"resetParticipants" json:"resetParticipants"`
+	ChannelName       string            `codec:"channelName" json:"channelName"`
+	Headline          string            `codec:"headline" json:"headline"`
+	HeadlineDecorated string            `codec:"headlineDecorated" json:"headlineDecorated"`
+	Snippet           string            `codec:"snippet" json:"snippet"`
+	SnippetDecoration SnippetDecoration `codec:"snippetDecoration" json:"snippetDecoration"`
+	WriterNames       []string          `codec:"writerNames" json:"writerNames"`
+	ResetParticipants []string          `codec:"resetParticipants" json:"resetParticipants"`
 }
 
 func (o UnverifiedInboxUIItemMetadata) DeepCopy() UnverifiedInboxUIItemMetadata {
@@ -44,7 +292,7 @@ func (o UnverifiedInboxUIItemMetadata) DeepCopy() UnverifiedInboxUIItemMetadata 
 		Headline:          o.Headline,
 		HeadlineDecorated: o.HeadlineDecorated,
 		Snippet:           o.Snippet,
-		SnippetDecoration: o.SnippetDecoration,
+		SnippetDecoration: o.SnippetDecoration.DeepCopy(),
 		WriterNames: (func(x []string) []string {
 			if x == nil {
 				return nil
@@ -71,9 +319,11 @@ func (o UnverifiedInboxUIItemMetadata) DeepCopy() UnverifiedInboxUIItemMetadata 
 }
 
 type UnverifiedInboxUIItem struct {
-	ConvID          string                         `codec:"convID" json:"convID"`
+	ConvID          ConvIDStr                      `codec:"convID" json:"convID"`
+	TlfID           TLFIDStr                       `codec:"tlfID" json:"tlfID"`
 	TopicType       TopicType                      `codec:"topicType" json:"topicType"`
 	IsPublic        bool                           `codec:"isPublic" json:"isPublic"`
+	IsDefaultConv   bool                           `codec:"isDefaultConv" json:"isDefaultConv"`
 	Name            string                         `codec:"name" json:"name"`
 	Visibility      keybase1.TLFVisibility         `codec:"visibility" json:"visibility"`
 	Status          ConversationStatus             `codec:"status" json:"status"`
@@ -99,15 +349,17 @@ type UnverifiedInboxUIItem struct {
 
 func (o UnverifiedInboxUIItem) DeepCopy() UnverifiedInboxUIItem {
 	return UnverifiedInboxUIItem{
-		ConvID:       o.ConvID,
-		TopicType:    o.TopicType.DeepCopy(),
-		IsPublic:     o.IsPublic,
-		Name:         o.Name,
-		Visibility:   o.Visibility.DeepCopy(),
-		Status:       o.Status.DeepCopy(),
-		MembersType:  o.MembersType.DeepCopy(),
-		MemberStatus: o.MemberStatus.DeepCopy(),
-		TeamType:     o.TeamType.DeepCopy(),
+		ConvID:        o.ConvID.DeepCopy(),
+		TlfID:         o.TlfID.DeepCopy(),
+		TopicType:     o.TopicType.DeepCopy(),
+		IsPublic:      o.IsPublic,
+		IsDefaultConv: o.IsDefaultConv,
+		Name:          o.Name,
+		Visibility:    o.Visibility.DeepCopy(),
+		Status:        o.Status.DeepCopy(),
+		MembersType:   o.MembersType.DeepCopy(),
+		MemberStatus:  o.MemberStatus.DeepCopy(),
+		TeamType:      o.TeamType.DeepCopy(),
 		Notifications: (func(x *ConversationNotificationInfo) *ConversationNotificationInfo {
 			if x == nil {
 				return nil
@@ -183,9 +435,8 @@ func (o UnverifiedInboxUIItem) DeepCopy() UnverifiedInboxUIItem {
 }
 
 type UnverifiedInboxUIItems struct {
-	Items      []UnverifiedInboxUIItem `codec:"items" json:"items"`
-	Pagination *UIPagination           `codec:"pagination,omitempty" json:"pagination,omitempty"`
-	Offline    bool                    `codec:"offline" json:"offline"`
+	Items   []UnverifiedInboxUIItem `codec:"items" json:"items"`
+	Offline bool                    `codec:"offline" json:"offline"`
 }
 
 func (o UnverifiedInboxUIItems) DeepCopy() UnverifiedInboxUIItems {
@@ -201,13 +452,6 @@ func (o UnverifiedInboxUIItems) DeepCopy() UnverifiedInboxUIItems {
 			}
 			return ret
 		})(o.Items),
-		Pagination: (func(x *UIPagination) *UIPagination {
-			if x == nil {
-				return nil
-			}
-			tmp := (*x).DeepCopy()
-			return &tmp
-		})(o.Pagination),
 		Offline: o.Offline,
 	}
 }
@@ -241,20 +485,22 @@ func (e UIParticipantType) String() string {
 	if v, ok := UIParticipantTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UIParticipant struct {
 	Type        UIParticipantType `codec:"type" json:"type"`
 	Assertion   string            `codec:"assertion" json:"assertion"`
+	InConvName  bool              `codec:"inConvName" json:"inConvName"`
 	FullName    *string           `codec:"fullName,omitempty" json:"fullName,omitempty"`
 	ContactName *string           `codec:"contactName,omitempty" json:"contactName,omitempty"`
 }
 
 func (o UIParticipant) DeepCopy() UIParticipant {
 	return UIParticipant{
-		Type:      o.Type.DeepCopy(),
-		Assertion: o.Assertion,
+		Type:       o.Type.DeepCopy(),
+		Assertion:  o.Assertion,
+		InConvName: o.InConvName,
 		FullName: (func(x *string) *string {
 			if x == nil {
 				return nil
@@ -285,13 +531,16 @@ func (o UIPinnedMessage) DeepCopy() UIPinnedMessage {
 }
 
 type InboxUIItem struct {
-	ConvID            string                        `codec:"convID" json:"convID"`
+	ConvID            ConvIDStr                     `codec:"convID" json:"convID"`
+	TlfID             TLFIDStr                      `codec:"tlfID" json:"tlfID"`
 	TopicType         TopicType                     `codec:"topicType" json:"topicType"`
 	IsPublic          bool                          `codec:"isPublic" json:"isPublic"`
 	IsEmpty           bool                          `codec:"isEmpty" json:"isEmpty"`
+	IsDefaultConv     bool                          `codec:"isDefaultConv" json:"isDefaultConv"`
 	Name              string                        `codec:"name" json:"name"`
 	Snippet           string                        `codec:"snippet" json:"snippet"`
-	SnippetDecoration string                        `codec:"snippetDecoration" json:"snippetDecoration"`
+	SnippetDecorated  string                        `codec:"snippetDecorated" json:"snippetDecorated"`
+	SnippetDecoration SnippetDecoration             `codec:"snippetDecoration" json:"snippetDecoration"`
 	Channel           string                        `codec:"channel" json:"channel"`
 	Headline          string                        `codec:"headline" json:"headline"`
 	HeadlineDecorated string                        `codec:"headlineDecorated" json:"headlineDecorated"`
@@ -319,18 +568,22 @@ type InboxUIItem struct {
 	SupersededBy      []ConversationMetadata        `codec:"supersededBy" json:"supersededBy"`
 	Commands          ConversationCommandGroups     `codec:"commands" json:"commands"`
 	BotCommands       ConversationCommandGroups     `codec:"botCommands" json:"botCommands"`
+	BotAliases        map[string]string             `codec:"botAliases" json:"botAliases"`
 	PinnedMsg         *UIPinnedMessage              `codec:"pinnedMsg,omitempty" json:"pinnedMsg,omitempty"`
 }
 
 func (o InboxUIItem) DeepCopy() InboxUIItem {
 	return InboxUIItem{
-		ConvID:            o.ConvID,
+		ConvID:            o.ConvID.DeepCopy(),
+		TlfID:             o.TlfID.DeepCopy(),
 		TopicType:         o.TopicType.DeepCopy(),
 		IsPublic:          o.IsPublic,
 		IsEmpty:           o.IsEmpty,
+		IsDefaultConv:     o.IsDefaultConv,
 		Name:              o.Name,
 		Snippet:           o.Snippet,
-		SnippetDecoration: o.SnippetDecoration,
+		SnippetDecorated:  o.SnippetDecorated,
+		SnippetDecoration: o.SnippetDecoration.DeepCopy(),
 		Channel:           o.Channel,
 		Headline:          o.Headline,
 		HeadlineDecorated: o.HeadlineDecorated,
@@ -440,6 +693,18 @@ func (o InboxUIItem) DeepCopy() InboxUIItem {
 		})(o.SupersededBy),
 		Commands:    o.Commands.DeepCopy(),
 		BotCommands: o.BotCommands.DeepCopy(),
+		BotAliases: (func(x map[string]string) map[string]string {
+			if x == nil {
+				return nil
+			}
+			ret := make(map[string]string, len(x))
+			for k, v := range x {
+				kCopy := k
+				vCopy := v
+				ret[kCopy] = vCopy
+			}
+			return ret
+		})(o.BotAliases),
 		PinnedMsg: (func(x *UIPinnedMessage) *UIPinnedMessage {
 			if x == nil {
 				return nil
@@ -475,9 +740,8 @@ func (o InboxUIItemError) DeepCopy() InboxUIItemError {
 }
 
 type InboxUIItems struct {
-	Items      []InboxUIItem `codec:"items" json:"items"`
-	Pagination *UIPagination `codec:"pagination,omitempty" json:"pagination,omitempty"`
-	Offline    bool          `codec:"offline" json:"offline"`
+	Items   []InboxUIItem `codec:"items" json:"items"`
+	Offline bool          `codec:"offline" json:"offline"`
 }
 
 func (o InboxUIItems) DeepCopy() InboxUIItems {
@@ -493,26 +757,19 @@ func (o InboxUIItems) DeepCopy() InboxUIItems {
 			}
 			return ret
 		})(o.Items),
-		Pagination: (func(x *UIPagination) *UIPagination {
-			if x == nil {
-				return nil
-			}
-			tmp := (*x).DeepCopy()
-			return &tmp
-		})(o.Pagination),
 		Offline: o.Offline,
 	}
 }
 
 type UIChannelNameMention struct {
-	Name   string `codec:"name" json:"name"`
-	ConvID string `codec:"convID" json:"convID"`
+	Name   string    `codec:"name" json:"name"`
+	ConvID ConvIDStr `codec:"convID" json:"convID"`
 }
 
 func (o UIChannelNameMention) DeepCopy() UIChannelNameMention {
 	return UIChannelNameMention{
 		Name:   o.Name,
-		ConvID: o.ConvID,
+		ConvID: o.ConvID.DeepCopy(),
 	}
 }
 
@@ -636,6 +893,50 @@ func (o UIMessageUnfurlInfo) DeepCopy() UIMessageUnfurlInfo {
 	}
 }
 
+type UIReactionDesc struct {
+	Decorated string              `codec:"decorated" json:"decorated"`
+	Users     map[string]Reaction `codec:"users" json:"users"`
+}
+
+func (o UIReactionDesc) DeepCopy() UIReactionDesc {
+	return UIReactionDesc{
+		Decorated: o.Decorated,
+		Users: (func(x map[string]Reaction) map[string]Reaction {
+			if x == nil {
+				return nil
+			}
+			ret := make(map[string]Reaction, len(x))
+			for k, v := range x {
+				kCopy := k
+				vCopy := v.DeepCopy()
+				ret[kCopy] = vCopy
+			}
+			return ret
+		})(o.Users),
+	}
+}
+
+type UIReactionMap struct {
+	Reactions map[string]UIReactionDesc `codec:"reactions" json:"reactions"`
+}
+
+func (o UIReactionMap) DeepCopy() UIReactionMap {
+	return UIReactionMap{
+		Reactions: (func(x map[string]UIReactionDesc) map[string]UIReactionDesc {
+			if x == nil {
+				return nil
+			}
+			ret := make(map[string]UIReactionDesc, len(x))
+			for k, v := range x {
+				kCopy := k
+				vCopy := v.DeepCopy()
+				ret[kCopy] = vCopy
+			}
+			return ret
+		})(o.Reactions),
+	}
+}
+
 type UIMessageValid struct {
 	MessageID             MessageID              `codec:"messageID" json:"messageID"`
 	Ctime                 gregor1.Time           `codec:"ctime" json:"ctime"`
@@ -645,7 +946,7 @@ type UIMessageValid struct {
 	BodySummary           string                 `codec:"bodySummary" json:"bodySummary"`
 	SenderUsername        string                 `codec:"senderUsername" json:"senderUsername"`
 	SenderDeviceName      string                 `codec:"senderDeviceName" json:"senderDeviceName"`
-	SenderDeviceType      string                 `codec:"senderDeviceType" json:"senderDeviceType"`
+	SenderDeviceType      keybase1.DeviceTypeV2  `codec:"senderDeviceType" json:"senderDeviceType"`
 	SenderUID             gregor1.UID            `codec:"senderUID" json:"senderUID"`
 	SenderDeviceID        gregor1.DeviceID       `codec:"senderDeviceID" json:"senderDeviceID"`
 	Superseded            bool                   `codec:"superseded" json:"superseded"`
@@ -658,18 +959,18 @@ type UIMessageValid struct {
 	IsEphemeralExpired    bool                   `codec:"isEphemeralExpired" json:"isEphemeralExpired"`
 	ExplodedBy            *string                `codec:"explodedBy,omitempty" json:"explodedBy,omitempty"`
 	Etime                 gregor1.Time           `codec:"etime" json:"etime"`
-	Reactions             ReactionMap            `codec:"reactions" json:"reactions"`
+	Reactions             UIReactionMap          `codec:"reactions" json:"reactions"`
 	HasPairwiseMacs       bool                   `codec:"hasPairwiseMacs" json:"hasPairwiseMacs"`
 	PaymentInfos          []UIPaymentInfo        `codec:"paymentInfos" json:"paymentInfos"`
 	RequestInfo           *UIRequestInfo         `codec:"requestInfo,omitempty" json:"requestInfo,omitempty"`
 	Unfurls               []UIMessageUnfurlInfo  `codec:"unfurls" json:"unfurls"`
 	IsCollapsed           bool                   `codec:"isCollapsed" json:"isCollapsed"`
-	FlipGameID            *string                `codec:"flipGameID,omitempty" json:"flipGameID,omitempty"`
+	FlipGameID            *FlipGameIDStr         `codec:"flipGameID,omitempty" json:"flipGameID,omitempty"`
 	IsDeleteable          bool                   `codec:"isDeleteable" json:"isDeleteable"`
 	IsEditable            bool                   `codec:"isEditable" json:"isEditable"`
 	ReplyTo               *UIMessage             `codec:"replyTo,omitempty" json:"replyTo,omitempty"`
 	PinnedMessageID       *MessageID             `codec:"pinnedMessageID,omitempty" json:"pinnedMessageID,omitempty"`
-	BotUID                *gregor1.UID           `codec:"botUID,omitempty" json:"botUID,omitempty"`
+	BotUsername           string                 `codec:"botUsername" json:"botUsername"`
 }
 
 func (o UIMessageValid) DeepCopy() UIMessageValid {
@@ -694,7 +995,7 @@ func (o UIMessageValid) DeepCopy() UIMessageValid {
 		BodySummary:      o.BodySummary,
 		SenderUsername:   o.SenderUsername,
 		SenderDeviceName: o.SenderDeviceName,
-		SenderDeviceType: o.SenderDeviceType,
+		SenderDeviceType: o.SenderDeviceType.DeepCopy(),
 		SenderUID:        o.SenderUID.DeepCopy(),
 		SenderDeviceID:   o.SenderDeviceID.DeepCopy(),
 		Superseded:       o.Superseded,
@@ -777,11 +1078,11 @@ func (o UIMessageValid) DeepCopy() UIMessageValid {
 			return ret
 		})(o.Unfurls),
 		IsCollapsed: o.IsCollapsed,
-		FlipGameID: (func(x *string) *string {
+		FlipGameID: (func(x *FlipGameIDStr) *FlipGameIDStr {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x)
+			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.FlipGameID),
 		IsDeleteable: o.IsDeleteable,
@@ -800,13 +1101,7 @@ func (o UIMessageValid) DeepCopy() UIMessageValid {
 			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.PinnedMessageID),
-		BotUID: (func(x *gregor1.UID) *gregor1.UID {
-			if x == nil {
-				return nil
-			}
-			tmp := (*x).DeepCopy()
-			return &tmp
-		})(o.BotUID),
+		BotUsername: o.BotUsername,
 	}
 }
 
@@ -819,8 +1114,9 @@ type UIMessageOutbox struct {
 	Ctime             gregor1.Time    `codec:"ctime" json:"ctime"`
 	Ordinal           float64         `codec:"ordinal" json:"ordinal"`
 	IsEphemeral       bool            `codec:"isEphemeral" json:"isEphemeral"`
-	FlipGameID        *string         `codec:"flipGameID,omitempty" json:"flipGameID,omitempty"`
+	FlipGameID        *FlipGameIDStr  `codec:"flipGameID,omitempty" json:"flipGameID,omitempty"`
 	ReplyTo           *UIMessage      `codec:"replyTo,omitempty" json:"replyTo,omitempty"`
+	Supersedes        MessageID       `codec:"supersedes" json:"supersedes"`
 	Filename          string          `codec:"filename" json:"filename"`
 	Title             string          `codec:"title" json:"title"`
 	Preview           *MakePreviewRes `codec:"preview,omitempty" json:"preview,omitempty"`
@@ -842,11 +1138,11 @@ func (o UIMessageOutbox) DeepCopy() UIMessageOutbox {
 		Ctime:       o.Ctime.DeepCopy(),
 		Ordinal:     o.Ordinal,
 		IsEphemeral: o.IsEphemeral,
-		FlipGameID: (func(x *string) *string {
+		FlipGameID: (func(x *FlipGameIDStr) *FlipGameIDStr {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x)
+			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.FlipGameID),
 		ReplyTo: (func(x *UIMessage) *UIMessage {
@@ -856,8 +1152,9 @@ func (o UIMessageOutbox) DeepCopy() UIMessageOutbox {
 			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.ReplyTo),
-		Filename: o.Filename,
-		Title:    o.Title,
+		Supersedes: o.Supersedes.DeepCopy(),
+		Filename:   o.Filename,
+		Title:      o.Title,
 		Preview: (func(x *MakePreviewRes) *MakePreviewRes {
 			if x == nil {
 				return nil
@@ -868,6 +1165,22 @@ func (o UIMessageOutbox) DeepCopy() UIMessageOutbox {
 	}
 }
 
+type UIMessageJourneycard struct {
+	Ordinal        float64         `codec:"ordinal" json:"ordinal"`
+	CardType       JourneycardType `codec:"cardType" json:"cardType"`
+	HighlightMsgID MessageID       `codec:"highlightMsgID" json:"highlightMsgID"`
+	OpenTeam       bool            `codec:"openTeam" json:"openTeam"`
+}
+
+func (o UIMessageJourneycard) DeepCopy() UIMessageJourneycard {
+	return UIMessageJourneycard{
+		Ordinal:        o.Ordinal,
+		CardType:       o.CardType.DeepCopy(),
+		HighlightMsgID: o.HighlightMsgID.DeepCopy(),
+		OpenTeam:       o.OpenTeam,
+	}
+}
+
 type MessageUnboxedState int
 
 const (
@@ -875,6 +1188,7 @@ const (
 	MessageUnboxedState_ERROR       MessageUnboxedState = 2
 	MessageUnboxedState_OUTBOX      MessageUnboxedState = 3
 	MessageUnboxedState_PLACEHOLDER MessageUnboxedState = 4
+	MessageUnboxedState_JOURNEYCARD MessageUnboxedState = 5
 )
 
 func (o MessageUnboxedState) DeepCopy() MessageUnboxedState { return o }
@@ -884,6 +1198,7 @@ var MessageUnboxedStateMap = map[string]MessageUnboxedState{
 	"ERROR":       2,
 	"OUTBOX":      3,
 	"PLACEHOLDER": 4,
+	"JOURNEYCARD": 5,
 }
 
 var MessageUnboxedStateRevMap = map[MessageUnboxedState]string{
@@ -891,13 +1206,14 @@ var MessageUnboxedStateRevMap = map[MessageUnboxedState]string{
 	2: "ERROR",
 	3: "OUTBOX",
 	4: "PLACEHOLDER",
+	5: "JOURNEYCARD",
 }
 
 func (e MessageUnboxedState) String() string {
 	if v, ok := MessageUnboxedStateRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UIMessage struct {
@@ -906,6 +1222,7 @@ type UIMessage struct {
 	Error__       *MessageUnboxedError       `codec:"error,omitempty" json:"error,omitempty"`
 	Outbox__      *UIMessageOutbox           `codec:"outbox,omitempty" json:"outbox,omitempty"`
 	Placeholder__ *MessageUnboxedPlaceholder `codec:"placeholder,omitempty" json:"placeholder,omitempty"`
+	Journeycard__ *UIMessageJourneycard      `codec:"journeycard,omitempty" json:"journeycard,omitempty"`
 }
 
 func (o *UIMessage) State() (ret MessageUnboxedState, err error) {
@@ -928,6 +1245,11 @@ func (o *UIMessage) State() (ret MessageUnboxedState, err error) {
 	case MessageUnboxedState_PLACEHOLDER:
 		if o.Placeholder__ == nil {
 			err = errors.New("unexpected nil value for Placeholder__")
+			return ret, err
+		}
+	case MessageUnboxedState_JOURNEYCARD:
+		if o.Journeycard__ == nil {
+			err = errors.New("unexpected nil value for Journeycard__")
 			return ret, err
 		}
 	}
@@ -974,6 +1296,16 @@ func (o UIMessage) Placeholder() (res MessageUnboxedPlaceholder) {
 	return *o.Placeholder__
 }
 
+func (o UIMessage) Journeycard() (res UIMessageJourneycard) {
+	if o.State__ != MessageUnboxedState_JOURNEYCARD {
+		panic("wrong case accessed")
+	}
+	if o.Journeycard__ == nil {
+		return
+	}
+	return *o.Journeycard__
+}
+
 func NewUIMessageWithValid(v UIMessageValid) UIMessage {
 	return UIMessage{
 		State__: MessageUnboxedState_VALID,
@@ -999,6 +1331,13 @@ func NewUIMessageWithPlaceholder(v MessageUnboxedPlaceholder) UIMessage {
 	return UIMessage{
 		State__:       MessageUnboxedState_PLACEHOLDER,
 		Placeholder__: &v,
+	}
+}
+
+func NewUIMessageWithJourneycard(v UIMessageJourneycard) UIMessage {
+	return UIMessage{
+		State__:       MessageUnboxedState_JOURNEYCARD,
+		Journeycard__: &v,
 	}
 }
 
@@ -1033,6 +1372,13 @@ func (o UIMessage) DeepCopy() UIMessage {
 			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.Placeholder__),
+		Journeycard__: (func(x *UIMessageJourneycard) *UIMessageJourneycard {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.Journeycard__),
 	}
 }
 
@@ -1065,12 +1411,12 @@ func (o UIMessages) DeepCopy() UIMessages {
 }
 
 type UITeamMention struct {
-	InTeam       bool     `codec:"inTeam" json:"inTeam"`
-	Open         bool     `codec:"open" json:"open"`
-	Description  *string  `codec:"description,omitempty" json:"description,omitempty"`
-	NumMembers   *int     `codec:"numMembers,omitempty" json:"numMembers,omitempty"`
-	PublicAdmins []string `codec:"publicAdmins" json:"publicAdmins"`
-	ConvID       *string  `codec:"convID,omitempty" json:"convID,omitempty"`
+	InTeam       bool       `codec:"inTeam" json:"inTeam"`
+	Open         bool       `codec:"open" json:"open"`
+	Description  *string    `codec:"description,omitempty" json:"description,omitempty"`
+	NumMembers   *int       `codec:"numMembers,omitempty" json:"numMembers,omitempty"`
+	PublicAdmins []string   `codec:"publicAdmins" json:"publicAdmins"`
+	ConvID       *ConvIDStr `codec:"convID,omitempty" json:"convID,omitempty"`
 }
 
 func (o UITeamMention) DeepCopy() UITeamMention {
@@ -1102,11 +1448,11 @@ func (o UITeamMention) DeepCopy() UITeamMention {
 			}
 			return ret
 		})(o.PublicAdmins),
-		ConvID: (func(x *string) *string {
+		ConvID: (func(x *ConvIDStr) *ConvIDStr {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x)
+			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.ConvID),
 	}
@@ -1122,6 +1468,7 @@ const (
 	UITextDecorationTyp_LINK               UITextDecorationTyp = 4
 	UITextDecorationTyp_MAILTO             UITextDecorationTyp = 5
 	UITextDecorationTyp_KBFSPATH           UITextDecorationTyp = 6
+	UITextDecorationTyp_EMOJI              UITextDecorationTyp = 7
 )
 
 func (o UITextDecorationTyp) DeepCopy() UITextDecorationTyp { return o }
@@ -1134,6 +1481,7 @@ var UITextDecorationTypMap = map[string]UITextDecorationTyp{
 	"LINK":               4,
 	"MAILTO":             5,
 	"KBFSPATH":           6,
+	"EMOJI":              7,
 }
 
 var UITextDecorationTypRevMap = map[UITextDecorationTyp]string{
@@ -1144,13 +1492,14 @@ var UITextDecorationTypRevMap = map[UITextDecorationTyp]string{
 	4: "LINK",
 	5: "MAILTO",
 	6: "KBFSPATH",
+	7: "EMOJI",
 }
 
 func (e UITextDecorationTyp) String() string {
 	if v, ok := UITextDecorationTypRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UIMaybeMentionStatus int
@@ -1182,18 +1531,18 @@ func (e UIMaybeMentionStatus) String() string {
 	if v, ok := UIMaybeMentionStatusRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UILinkDecoration struct {
-	Display string `codec:"display" json:"display"`
-	Url     string `codec:"url" json:"url"`
+	Url      string `codec:"url" json:"url"`
+	Punycode string `codec:"punycode" json:"punycode"`
 }
 
 func (o UILinkDecoration) DeepCopy() UILinkDecoration {
 	return UILinkDecoration{
-		Display: o.Display,
-		Url:     o.Url,
+		Url:      o.Url,
+		Punycode: o.Punycode,
 	}
 }
 
@@ -1270,6 +1619,7 @@ type UITextDecoration struct {
 	Link__               *UILinkDecoration     `codec:"link,omitempty" json:"link,omitempty"`
 	Mailto__             *UILinkDecoration     `codec:"mailto,omitempty" json:"mailto,omitempty"`
 	Kbfspath__           *KBFSPath             `codec:"kbfspath,omitempty" json:"kbfspath,omitempty"`
+	Emoji__              *Emoji                `codec:"emoji,omitempty" json:"emoji,omitempty"`
 }
 
 func (o *UITextDecoration) Typ() (ret UITextDecorationTyp, err error) {
@@ -1307,6 +1657,11 @@ func (o *UITextDecoration) Typ() (ret UITextDecorationTyp, err error) {
 	case UITextDecorationTyp_KBFSPATH:
 		if o.Kbfspath__ == nil {
 			err = errors.New("unexpected nil value for Kbfspath__")
+			return ret, err
+		}
+	case UITextDecorationTyp_EMOJI:
+		if o.Emoji__ == nil {
+			err = errors.New("unexpected nil value for Emoji__")
 			return ret, err
 		}
 	}
@@ -1383,6 +1738,16 @@ func (o UITextDecoration) Kbfspath() (res KBFSPath) {
 	return *o.Kbfspath__
 }
 
+func (o UITextDecoration) Emoji() (res Emoji) {
+	if o.Typ__ != UITextDecorationTyp_EMOJI {
+		panic("wrong case accessed")
+	}
+	if o.Emoji__ == nil {
+		return
+	}
+	return *o.Emoji__
+}
+
 func NewUITextDecorationWithPayment(v TextPayment) UITextDecoration {
 	return UITextDecoration{
 		Typ__:     UITextDecorationTyp_PAYMENT,
@@ -1429,6 +1794,13 @@ func NewUITextDecorationWithKbfspath(v KBFSPath) UITextDecoration {
 	return UITextDecoration{
 		Typ__:      UITextDecorationTyp_KBFSPATH,
 		Kbfspath__: &v,
+	}
+}
+
+func NewUITextDecorationWithEmoji(v Emoji) UITextDecoration {
+	return UITextDecoration{
+		Typ__:   UITextDecorationTyp_EMOJI,
+		Emoji__: &v,
 	}
 }
 
@@ -1484,6 +1856,13 @@ func (o UITextDecoration) DeepCopy() UITextDecoration {
 			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.Kbfspath__),
+		Emoji__: (func(x *Emoji) *Emoji {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.Emoji__),
 	}
 }
 
@@ -1516,7 +1895,7 @@ func (e UIChatThreadStatusTyp) String() string {
 	if v, ok := UIChatThreadStatusTypRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UIChatThreadStatus struct {
@@ -1584,7 +1963,7 @@ func (o UIChatThreadStatus) DeepCopy() UIChatThreadStatus {
 }
 
 type UIChatSearchConvHit struct {
-	ConvID   string       `codec:"convID" json:"convID"`
+	ConvID   ConvIDStr    `codec:"convID" json:"convID"`
 	TeamType TeamType     `codec:"teamType" json:"teamType"`
 	Name     string       `codec:"name" json:"name"`
 	Mtime    gregor1.Time `codec:"mtime" json:"mtime"`
@@ -1592,7 +1971,7 @@ type UIChatSearchConvHit struct {
 
 func (o UIChatSearchConvHit) DeepCopy() UIChatSearchConvHit {
 	return UIChatSearchConvHit{
-		ConvID:   o.ConvID,
+		ConvID:   o.ConvID.DeepCopy(),
 		TeamType: o.TeamType.DeepCopy(),
 		Name:     o.Name,
 		Mtime:    o.Mtime.DeepCopy(),
@@ -1618,6 +1997,50 @@ func (o UIChatSearchConvHits) DeepCopy() UIChatSearchConvHits {
 			return ret
 		})(o.Hits),
 		UnreadMatches: o.UnreadMatches,
+	}
+}
+
+type UIChatSearchTeamHits struct {
+	Hits             []keybase1.TeamSearchItem `codec:"hits" json:"hits"`
+	SuggestedMatches bool                      `codec:"suggestedMatches" json:"suggestedMatches"`
+}
+
+func (o UIChatSearchTeamHits) DeepCopy() UIChatSearchTeamHits {
+	return UIChatSearchTeamHits{
+		Hits: (func(x []keybase1.TeamSearchItem) []keybase1.TeamSearchItem {
+			if x == nil {
+				return nil
+			}
+			ret := make([]keybase1.TeamSearchItem, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Hits),
+		SuggestedMatches: o.SuggestedMatches,
+	}
+}
+
+type UIChatSearchBotHits struct {
+	Hits             []keybase1.FeaturedBot `codec:"hits" json:"hits"`
+	SuggestedMatches bool                   `codec:"suggestedMatches" json:"suggestedMatches"`
+}
+
+func (o UIChatSearchBotHits) DeepCopy() UIChatSearchBotHits {
+	return UIChatSearchBotHits{
+		Hits: (func(x []keybase1.FeaturedBot) []keybase1.FeaturedBot {
+			if x == nil {
+				return nil
+			}
+			ret := make([]keybase1.FeaturedBot, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Hits),
+		SuggestedMatches: o.SuggestedMatches,
 	}
 }
 
@@ -1744,7 +2167,7 @@ func (e UICoinFlipPhase) String() string {
 	if v, ok := UICoinFlipPhaseRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UICoinFlipErrorParticipant struct {
@@ -1820,7 +2243,7 @@ func (e UICoinFlipErrorTyp) String() string {
 	if v, ok := UICoinFlipErrorTypRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UICoinFlipError struct {
@@ -2063,7 +2486,7 @@ func (e UICoinFlipResultTyp) String() string {
 	if v, ok := UICoinFlipResultTypRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UICoinFlipHand struct {
@@ -2311,7 +2734,7 @@ func (o UICoinFlipParticipant) DeepCopy() UICoinFlipParticipant {
 }
 
 type UICoinFlipStatus struct {
-	GameID                  string                  `codec:"gameID" json:"gameID"`
+	GameID                  FlipGameIDStr           `codec:"gameID" json:"gameID"`
 	Phase                   UICoinFlipPhase         `codec:"phase" json:"phase"`
 	ProgressText            string                  `codec:"progressText" json:"progressText"`
 	ResultText              string                  `codec:"resultText" json:"resultText"`
@@ -2324,7 +2747,7 @@ type UICoinFlipStatus struct {
 
 func (o UICoinFlipStatus) DeepCopy() UICoinFlipStatus {
 	return UICoinFlipStatus{
-		GameID:                  o.GameID,
+		GameID:                  o.GameID.DeepCopy(),
 		Phase:                   o.Phase.DeepCopy(),
 		ProgressText:            o.ProgressText,
 		ResultText:              o.ResultText,
@@ -2405,7 +2828,7 @@ func (e UIWatchPositionPerm) String() string {
 	if v, ok := UIWatchPositionPermRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UICommandStatusDisplayTyp int
@@ -2434,7 +2857,7 @@ func (e UICommandStatusDisplayTyp) String() string {
 	if v, ok := UICommandStatusDisplayTypRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UICommandStatusActionTyp int
@@ -2457,53 +2880,129 @@ func (e UICommandStatusActionTyp) String() string {
 	if v, ok := UICommandStatusActionTypRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
-type UIBotCommandsUpdateStatus int
+type UIBotCommandsUpdateStatusTyp int
 
 const (
-	UIBotCommandsUpdateStatus_UPTODATE UIBotCommandsUpdateStatus = 0
-	UIBotCommandsUpdateStatus_UPDATING UIBotCommandsUpdateStatus = 1
-	UIBotCommandsUpdateStatus_FAILED   UIBotCommandsUpdateStatus = 2
-	UIBotCommandsUpdateStatus_BLANK    UIBotCommandsUpdateStatus = 3
+	UIBotCommandsUpdateStatusTyp_UPTODATE UIBotCommandsUpdateStatusTyp = 0
+	UIBotCommandsUpdateStatusTyp_UPDATING UIBotCommandsUpdateStatusTyp = 1
+	UIBotCommandsUpdateStatusTyp_FAILED   UIBotCommandsUpdateStatusTyp = 2
+	UIBotCommandsUpdateStatusTyp_BLANK    UIBotCommandsUpdateStatusTyp = 3
 )
 
-func (o UIBotCommandsUpdateStatus) DeepCopy() UIBotCommandsUpdateStatus { return o }
+func (o UIBotCommandsUpdateStatusTyp) DeepCopy() UIBotCommandsUpdateStatusTyp { return o }
 
-var UIBotCommandsUpdateStatusMap = map[string]UIBotCommandsUpdateStatus{
+var UIBotCommandsUpdateStatusTypMap = map[string]UIBotCommandsUpdateStatusTyp{
 	"UPTODATE": 0,
 	"UPDATING": 1,
 	"FAILED":   2,
 	"BLANK":    3,
 }
 
-var UIBotCommandsUpdateStatusRevMap = map[UIBotCommandsUpdateStatus]string{
+var UIBotCommandsUpdateStatusTypRevMap = map[UIBotCommandsUpdateStatusTyp]string{
 	0: "UPTODATE",
 	1: "UPDATING",
 	2: "FAILED",
 	3: "BLANK",
 }
 
-func (e UIBotCommandsUpdateStatus) String() string {
-	if v, ok := UIBotCommandsUpdateStatusRevMap[e]; ok {
+func (e UIBotCommandsUpdateStatusTyp) String() string {
+	if v, ok := UIBotCommandsUpdateStatusTypRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
-type ChatAttachmentDownloadStartArg struct {
-	SessionID int `codec:"sessionID" json:"sessionID"`
+type UIBotCommandsUpdateSettings struct {
+	Settings map[string]keybase1.TeamBotSettings `codec:"settings" json:"settings"`
 }
 
-type ChatAttachmentDownloadProgressArg struct {
-	SessionID     int   `codec:"sessionID" json:"sessionID"`
-	BytesComplete int64 `codec:"bytesComplete" json:"bytesComplete"`
-	BytesTotal    int64 `codec:"bytesTotal" json:"bytesTotal"`
+func (o UIBotCommandsUpdateSettings) DeepCopy() UIBotCommandsUpdateSettings {
+	return UIBotCommandsUpdateSettings{
+		Settings: (func(x map[string]keybase1.TeamBotSettings) map[string]keybase1.TeamBotSettings {
+			if x == nil {
+				return nil
+			}
+			ret := make(map[string]keybase1.TeamBotSettings, len(x))
+			for k, v := range x {
+				kCopy := k
+				vCopy := v.DeepCopy()
+				ret[kCopy] = vCopy
+			}
+			return ret
+		})(o.Settings),
+	}
 }
 
-type ChatAttachmentDownloadDoneArg struct {
-	SessionID int `codec:"sessionID" json:"sessionID"`
+type UIBotCommandsUpdateStatus struct {
+	Typ__      UIBotCommandsUpdateStatusTyp `codec:"typ" json:"typ"`
+	Uptodate__ *UIBotCommandsUpdateSettings `codec:"uptodate,omitempty" json:"uptodate,omitempty"`
+}
+
+func (o *UIBotCommandsUpdateStatus) Typ() (ret UIBotCommandsUpdateStatusTyp, err error) {
+	switch o.Typ__ {
+	case UIBotCommandsUpdateStatusTyp_UPTODATE:
+		if o.Uptodate__ == nil {
+			err = errors.New("unexpected nil value for Uptodate__")
+			return ret, err
+		}
+	}
+	return o.Typ__, nil
+}
+
+func (o UIBotCommandsUpdateStatus) Uptodate() (res UIBotCommandsUpdateSettings) {
+	if o.Typ__ != UIBotCommandsUpdateStatusTyp_UPTODATE {
+		panic("wrong case accessed")
+	}
+	if o.Uptodate__ == nil {
+		return
+	}
+	return *o.Uptodate__
+}
+
+func NewUIBotCommandsUpdateStatusWithUptodate(v UIBotCommandsUpdateSettings) UIBotCommandsUpdateStatus {
+	return UIBotCommandsUpdateStatus{
+		Typ__:      UIBotCommandsUpdateStatusTyp_UPTODATE,
+		Uptodate__: &v,
+	}
+}
+
+func NewUIBotCommandsUpdateStatusWithUpdating() UIBotCommandsUpdateStatus {
+	return UIBotCommandsUpdateStatus{
+		Typ__: UIBotCommandsUpdateStatusTyp_UPDATING,
+	}
+}
+
+func NewUIBotCommandsUpdateStatusWithFailed() UIBotCommandsUpdateStatus {
+	return UIBotCommandsUpdateStatus{
+		Typ__: UIBotCommandsUpdateStatusTyp_FAILED,
+	}
+}
+
+func NewUIBotCommandsUpdateStatusWithBlank() UIBotCommandsUpdateStatus {
+	return UIBotCommandsUpdateStatus{
+		Typ__: UIBotCommandsUpdateStatusTyp_BLANK,
+	}
+}
+
+func (o UIBotCommandsUpdateStatus) DeepCopy() UIBotCommandsUpdateStatus {
+	return UIBotCommandsUpdateStatus{
+		Typ__: o.Typ__.DeepCopy(),
+		Uptodate__: (func(x *UIBotCommandsUpdateSettings) *UIBotCommandsUpdateSettings {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.Uptodate__),
+	}
+}
+
+type ChatInboxLayoutArg struct {
+	SessionID int    `codec:"sessionID" json:"sessionID"`
+	Layout    string `codec:"layout" json:"layout"`
 }
 
 type ChatInboxUnverifiedArg struct {
@@ -2513,7 +3012,7 @@ type ChatInboxUnverifiedArg struct {
 
 type ChatInboxConversationArg struct {
 	SessionID int    `codec:"sessionID" json:"sessionID"`
-	Conv      string `codec:"conv" json:"conv"`
+	Convs     string `codec:"convs" json:"convs"`
 }
 
 type ChatInboxFailedArg struct {
@@ -2571,6 +3070,16 @@ type ChatSearchConvHitsArg struct {
 	Hits      UIChatSearchConvHits `codec:"hits" json:"hits"`
 }
 
+type ChatSearchTeamHitsArg struct {
+	SessionID int                  `codec:"sessionID" json:"sessionID"`
+	Hits      UIChatSearchTeamHits `codec:"hits" json:"hits"`
+}
+
+type ChatSearchBotHitsArg struct {
+	SessionID int                 `codec:"sessionID" json:"sessionID"`
+	Hits      UIChatSearchBotHits `codec:"hits" json:"hits"`
+}
+
 type ChatConfirmChannelDeleteArg struct {
 	SessionID int    `codec:"sessionID" json:"sessionID"`
 	Channel   string `codec:"channel" json:"channel"`
@@ -2597,15 +3106,15 @@ type ChatStellarDoneArg struct {
 
 type ChatGiphySearchResultsArg struct {
 	SessionID int                `codec:"sessionID" json:"sessionID"`
-	ConvID    string             `codec:"convID" json:"convID"`
+	ConvID    ConvIDStr          `codec:"convID" json:"convID"`
 	Results   GiphySearchResults `codec:"results" json:"results"`
 }
 
 type ChatGiphyToggleResultWindowArg struct {
-	SessionID  int    `codec:"sessionID" json:"sessionID"`
-	ConvID     string `codec:"convID" json:"convID"`
-	Show       bool   `codec:"show" json:"show"`
-	ClearInput bool   `codec:"clearInput" json:"clearInput"`
+	SessionID  int       `codec:"sessionID" json:"sessionID"`
+	ConvID     ConvIDStr `codec:"convID" json:"convID"`
+	Show       bool      `codec:"show" json:"show"`
+	ClearInput bool      `codec:"clearInput" json:"clearInput"`
 }
 
 type ChatShowManageChannelsArg struct {
@@ -2620,7 +3129,7 @@ type ChatCoinFlipStatusArg struct {
 
 type ChatCommandMarkdownArg struct {
 	SessionID int                `codec:"sessionID" json:"sessionID"`
-	ConvID    string             `codec:"convID" json:"convID"`
+	ConvID    ConvIDStr          `codec:"convID" json:"convID"`
 	Md        *UICommandMarkdown `codec:"md,omitempty" json:"md,omitempty"`
 }
 
@@ -2649,7 +3158,7 @@ type ChatClearWatchArg struct {
 
 type ChatCommandStatusArg struct {
 	SessionID   int                        `codec:"sessionID" json:"sessionID"`
-	ConvID      string                     `codec:"convID" json:"convID"`
+	ConvID      ConvIDStr                  `codec:"convID" json:"convID"`
 	DisplayText string                     `codec:"displayText" json:"displayText"`
 	Typ         UICommandStatusDisplayTyp  `codec:"typ" json:"typ"`
 	Actions     []UICommandStatusActionTyp `codec:"actions" json:"actions"`
@@ -2657,7 +3166,7 @@ type ChatCommandStatusArg struct {
 
 type ChatBotCommandsUpdateStatusArg struct {
 	SessionID int                       `codec:"sessionID" json:"sessionID"`
-	ConvID    string                    `codec:"convID" json:"convID"`
+	ConvID    ConvIDStr                 `codec:"convID" json:"convID"`
 	Status    UIBotCommandsUpdateStatus `codec:"status" json:"status"`
 }
 
@@ -2666,9 +3175,7 @@ type TriggerContactSyncArg struct {
 }
 
 type ChatUiInterface interface {
-	ChatAttachmentDownloadStart(context.Context, int) error
-	ChatAttachmentDownloadProgress(context.Context, ChatAttachmentDownloadProgressArg) error
-	ChatAttachmentDownloadDone(context.Context, int) error
+	ChatInboxLayout(context.Context, ChatInboxLayoutArg) error
 	ChatInboxUnverified(context.Context, ChatInboxUnverifiedArg) error
 	ChatInboxConversation(context.Context, ChatInboxConversationArg) error
 	ChatInboxFailed(context.Context, ChatInboxFailedArg) error
@@ -2682,6 +3189,8 @@ type ChatUiInterface interface {
 	ChatSearchInboxDone(context.Context, ChatSearchInboxDoneArg) error
 	ChatSearchIndexStatus(context.Context, ChatSearchIndexStatusArg) error
 	ChatSearchConvHits(context.Context, ChatSearchConvHitsArg) error
+	ChatSearchTeamHits(context.Context, ChatSearchTeamHitsArg) error
+	ChatSearchBotHits(context.Context, ChatSearchBotHitsArg) error
 	ChatConfirmChannelDelete(context.Context, ChatConfirmChannelDeleteArg) (bool, error)
 	ChatStellarShowConfirm(context.Context, int) error
 	ChatStellarDataConfirm(context.Context, ChatStellarDataConfirmArg) (bool, error)
@@ -2705,48 +3214,18 @@ func ChatUiProtocol(i ChatUiInterface) rpc.Protocol {
 	return rpc.Protocol{
 		Name: "chat.1.chatUi",
 		Methods: map[string]rpc.ServeHandlerDescription{
-			"chatAttachmentDownloadStart": {
+			"chatInboxLayout": {
 				MakeArg: func() interface{} {
-					var ret [1]ChatAttachmentDownloadStartArg
+					var ret [1]ChatInboxLayoutArg
 					return &ret
 				},
 				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
-					typedArgs, ok := args.(*[1]ChatAttachmentDownloadStartArg)
+					typedArgs, ok := args.(*[1]ChatInboxLayoutArg)
 					if !ok {
-						err = rpc.NewTypeError((*[1]ChatAttachmentDownloadStartArg)(nil), args)
+						err = rpc.NewTypeError((*[1]ChatInboxLayoutArg)(nil), args)
 						return
 					}
-					err = i.ChatAttachmentDownloadStart(ctx, typedArgs[0].SessionID)
-					return
-				},
-			},
-			"chatAttachmentDownloadProgress": {
-				MakeArg: func() interface{} {
-					var ret [1]ChatAttachmentDownloadProgressArg
-					return &ret
-				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
-					typedArgs, ok := args.(*[1]ChatAttachmentDownloadProgressArg)
-					if !ok {
-						err = rpc.NewTypeError((*[1]ChatAttachmentDownloadProgressArg)(nil), args)
-						return
-					}
-					err = i.ChatAttachmentDownloadProgress(ctx, typedArgs[0])
-					return
-				},
-			},
-			"chatAttachmentDownloadDone": {
-				MakeArg: func() interface{} {
-					var ret [1]ChatAttachmentDownloadDoneArg
-					return &ret
-				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
-					typedArgs, ok := args.(*[1]ChatAttachmentDownloadDoneArg)
-					if !ok {
-						err = rpc.NewTypeError((*[1]ChatAttachmentDownloadDoneArg)(nil), args)
-						return
-					}
-					err = i.ChatAttachmentDownloadDone(ctx, typedArgs[0].SessionID)
+					err = i.ChatInboxLayout(ctx, typedArgs[0])
 					return
 				},
 			},
@@ -2942,6 +3421,36 @@ func ChatUiProtocol(i ChatUiInterface) rpc.Protocol {
 						return
 					}
 					err = i.ChatSearchConvHits(ctx, typedArgs[0])
+					return
+				},
+			},
+			"chatSearchTeamHits": {
+				MakeArg: func() interface{} {
+					var ret [1]ChatSearchTeamHitsArg
+					return &ret
+				},
+				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+					typedArgs, ok := args.(*[1]ChatSearchTeamHitsArg)
+					if !ok {
+						err = rpc.NewTypeError((*[1]ChatSearchTeamHitsArg)(nil), args)
+						return
+					}
+					err = i.ChatSearchTeamHits(ctx, typedArgs[0])
+					return
+				},
+			},
+			"chatSearchBotHits": {
+				MakeArg: func() interface{} {
+					var ret [1]ChatSearchBotHitsArg
+					return &ret
+				},
+				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+					typedArgs, ok := args.(*[1]ChatSearchBotHitsArg)
+					if !ok {
+						err = rpc.NewTypeError((*[1]ChatSearchBotHitsArg)(nil), args)
+						return
+					}
+					err = i.ChatSearchBotHits(ctx, typedArgs[0])
 					return
 				},
 			},
@@ -3208,172 +3717,170 @@ type ChatUiClient struct {
 	Cli rpc.GenericClient
 }
 
-func (c ChatUiClient) ChatAttachmentDownloadStart(ctx context.Context, sessionID int) (err error) {
-	__arg := ChatAttachmentDownloadStartArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatAttachmentDownloadStart", []interface{}{__arg}, nil)
-	return
-}
-
-func (c ChatUiClient) ChatAttachmentDownloadProgress(ctx context.Context, __arg ChatAttachmentDownloadProgressArg) (err error) {
-	err = c.Cli.Notify(ctx, "chat.1.chatUi.chatAttachmentDownloadProgress", []interface{}{__arg})
-	return
-}
-
-func (c ChatUiClient) ChatAttachmentDownloadDone(ctx context.Context, sessionID int) (err error) {
-	__arg := ChatAttachmentDownloadDoneArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatAttachmentDownloadDone", []interface{}{__arg}, nil)
+func (c ChatUiClient) ChatInboxLayout(ctx context.Context, __arg ChatInboxLayoutArg) (err error) {
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatInboxLayout", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatInboxUnverified(ctx context.Context, __arg ChatInboxUnverifiedArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatInboxUnverified", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatInboxUnverified", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatInboxConversation(ctx context.Context, __arg ChatInboxConversationArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatInboxConversation", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatInboxConversation", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatInboxFailed(ctx context.Context, __arg ChatInboxFailedArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatInboxFailed", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatInboxFailed", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatThreadCached(ctx context.Context, __arg ChatThreadCachedArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatThreadCached", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatThreadCached", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatThreadFull(ctx context.Context, __arg ChatThreadFullArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatThreadFull", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatThreadFull", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatThreadStatus(ctx context.Context, __arg ChatThreadStatusArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatThreadStatus", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatThreadStatus", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatSearchHit(ctx context.Context, __arg ChatSearchHitArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchHit", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchHit", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatSearchDone(ctx context.Context, __arg ChatSearchDoneArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchDone", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchDone", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatSearchInboxStart(ctx context.Context, sessionID int) (err error) {
 	__arg := ChatSearchInboxStartArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchInboxStart", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchInboxStart", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatSearchInboxHit(ctx context.Context, __arg ChatSearchInboxHitArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchInboxHit", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchInboxHit", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatSearchInboxDone(ctx context.Context, __arg ChatSearchInboxDoneArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchInboxDone", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchInboxDone", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatSearchIndexStatus(ctx context.Context, __arg ChatSearchIndexStatusArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchIndexStatus", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchIndexStatus", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatSearchConvHits(ctx context.Context, __arg ChatSearchConvHitsArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchConvHits", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchConvHits", []interface{}{__arg}, nil, 0*time.Millisecond)
+	return
+}
+
+func (c ChatUiClient) ChatSearchTeamHits(ctx context.Context, __arg ChatSearchTeamHitsArg) (err error) {
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchTeamHits", []interface{}{__arg}, nil, 0*time.Millisecond)
+	return
+}
+
+func (c ChatUiClient) ChatSearchBotHits(ctx context.Context, __arg ChatSearchBotHitsArg) (err error) {
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatSearchBotHits", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatConfirmChannelDelete(ctx context.Context, __arg ChatConfirmChannelDeleteArg) (res bool, err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatConfirmChannelDelete", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatConfirmChannelDelete", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatStellarShowConfirm(ctx context.Context, sessionID int) (err error) {
 	__arg := ChatStellarShowConfirmArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatStellarShowConfirm", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatStellarShowConfirm", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatStellarDataConfirm(ctx context.Context, __arg ChatStellarDataConfirmArg) (res bool, err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatStellarDataConfirm", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatStellarDataConfirm", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatStellarDataError(ctx context.Context, __arg ChatStellarDataErrorArg) (res bool, err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatStellarDataError", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatStellarDataError", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatStellarDone(ctx context.Context, __arg ChatStellarDoneArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatStellarDone", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatStellarDone", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatGiphySearchResults(ctx context.Context, __arg ChatGiphySearchResultsArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatGiphySearchResults", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatGiphySearchResults", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatGiphyToggleResultWindow(ctx context.Context, __arg ChatGiphyToggleResultWindowArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatGiphyToggleResultWindow", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatGiphyToggleResultWindow", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatShowManageChannels(ctx context.Context, __arg ChatShowManageChannelsArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatShowManageChannels", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatShowManageChannels", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatCoinFlipStatus(ctx context.Context, __arg ChatCoinFlipStatusArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatCoinFlipStatus", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatCoinFlipStatus", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatCommandMarkdown(ctx context.Context, __arg ChatCommandMarkdownArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatCommandMarkdown", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatCommandMarkdown", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatMaybeMentionUpdate(ctx context.Context, __arg ChatMaybeMentionUpdateArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatMaybeMentionUpdate", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatMaybeMentionUpdate", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatLoadGalleryHit(ctx context.Context, __arg ChatLoadGalleryHitArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatLoadGalleryHit", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatLoadGalleryHit", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatWatchPosition(ctx context.Context, __arg ChatWatchPositionArg) (res LocationWatchID, err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatWatchPosition", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatWatchPosition", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatClearWatch(ctx context.Context, __arg ChatClearWatchArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatClearWatch", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatClearWatch", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatCommandStatus(ctx context.Context, __arg ChatCommandStatusArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatCommandStatus", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatCommandStatus", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) ChatBotCommandsUpdateStatus(ctx context.Context, __arg ChatBotCommandsUpdateStatusArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.chatUi.chatBotCommandsUpdateStatus", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.chatBotCommandsUpdateStatus", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ChatUiClient) TriggerContactSync(ctx context.Context, sessionID int) (err error) {
 	__arg := TriggerContactSyncArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "chat.1.chatUi.triggerContactSync", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "chat.1.chatUi.triggerContactSync", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }

@@ -1,17 +1,29 @@
-import * as React from 'react'
 import * as Styles from '../styles'
-import {Picker, SafeAreaView} from 'react-native'
+import {SafeAreaView} from 'react-native'
+import {Picker} from '@react-native-picker/picker'
 import {Box2} from './box'
 import Overlay from './overlay'
 import Text from './text'
-import {Props} from './floating-picker'
+import type {Props} from './floating-picker'
 
+// NOTE: this doesn't seem to work well when debugging w/ chrome. aka if you scroll and set a value the native component will undo it a bunch and its very finnicky. works fine outside of that it seems
 const FloatingPicker = <T extends string | number>(props: Props<T>) => {
   if (!props.visible) {
     return null
   }
+
   return (
-    <Overlay onHidden={props.onHidden}>
+    <Overlay
+      key={
+        // Android bug: after selecting a new value (e.g. in
+        // set-explode-popup), it flips to the new value, then back to the old
+        // value, then to the new value. There is also a user report claiming
+        // it flips forever. So just force remounting when the selected avlue
+        // changes as a hacky fix.
+        Styles.isAndroid ? props.selectedValue || 0 : undefined
+      }
+      onHidden={props.onHidden}
+    >
       <Box2 direction="vertical" fullWidth={true} style={styles.menu}>
         {props.header}
         <Box2 direction="horizontal" fullWidth={true} style={styles.actionButtons}>
@@ -29,7 +41,7 @@ const FloatingPicker = <T extends string | number>(props: Props<T>) => {
           onValueChange={itemValue => props.onSelect(itemValue)}
           prompt={props.promptString}
           style={styles.picker}
-          itemStyle={Styles.globalStyles.fontRegular}
+          itemStyle={styles.item}
         >
           {props.items.map(item => (
             <Picker.Item key={item.label} {...item} />
@@ -51,6 +63,10 @@ const styles = Styles.styleSheetCreate(
       },
       flexOne: {
         flex: 1,
+      },
+      item: {
+        ...Styles.globalStyles.fontRegular,
+        color: Styles.globalColors.black,
       },
       link: {
         color: Styles.globalColors.blueDark,
@@ -77,6 +93,7 @@ const styles = Styles.styleSheetCreate(
       },
       picker: Styles.platformStyles({
         isAndroid: {
+          color: Styles.globalColors.black,
           marginBottom: Styles.globalMargins.large,
           marginTop: Styles.globalMargins.medium,
         },

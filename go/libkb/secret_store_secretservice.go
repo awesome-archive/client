@@ -1,6 +1,7 @@
 // Copyright 2019 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
+//go:build linux
 // +build linux
 
 package libkb
@@ -15,8 +16,8 @@ import (
 	"strings"
 	"time"
 
+	dbus "github.com/keybase/dbus"
 	secsrv "github.com/keybase/go-keychain/secretservice"
-	dbus "github.com/keybase/go.dbus"
 	"golang.org/x/crypto/hkdf"
 )
 
@@ -31,9 +32,13 @@ func NewSecretStoreRevokableSecretService() *SecretStoreRevokableSecretService {
 }
 
 func (s *SecretStoreRevokableSecretService) makeServiceAttributes(mctx MetaContext) secsrv.Attributes {
-	return secsrv.Attributes{
+	attrs := secsrv.Attributes{
 		"service": mctx.G().Env.GetStoredSecretServiceName(),
 	}
+	if mctx.G().Env.GetRunMode() == DevelRunMode {
+		attrs["service-base"] = mctx.G().Env.GetStoredSecretServiceBaseName()
+	}
+	return attrs
 }
 
 func (s *SecretStoreRevokableSecretService) makeAttributes(mctx MetaContext, username NormalizedUsername, instanceIdentifier []byte) secsrv.Attributes {
@@ -121,7 +126,7 @@ func (s *SecretStoreRevokableSecretService) identifierKeystore(mctx MetaContext)
 }
 
 func (s *SecretStoreRevokableSecretService) RetrieveSecret(mctx MetaContext, username NormalizedUsername) (secret LKSecFullSecret, err error) {
-	defer mctx.TraceTimed("SecretStoreRevokableSecretService.RetrieveSecret", func() error { return err })()
+	defer mctx.Trace("SecretStoreRevokableSecretService.RetrieveSecret", &err)()
 
 	identifierKeystore := s.identifierKeystore(mctx)
 	var instanceIdentifier []byte
@@ -164,7 +169,7 @@ func (s *SecretStoreRevokableSecretService) RetrieveSecret(mctx MetaContext, use
 }
 
 func (s *SecretStoreRevokableSecretService) StoreSecret(mctx MetaContext, username NormalizedUsername, secret LKSecFullSecret) (err error) {
-	defer mctx.TraceTimed("SecretStoreRevokableSecretService.StoreSecret", func() error { return err })()
+	defer mctx.Trace("SecretStoreRevokableSecretService.StoreSecret", &err)()
 
 	// We add a public random identifier to the secret's properties in the
 	// Secret Service so if the same machine (with the same keyring) is storing
@@ -224,7 +229,7 @@ func (s *SecretStoreRevokableSecretService) StoreSecret(mctx MetaContext, userna
 }
 
 func (s *SecretStoreRevokableSecretService) ClearSecret(mctx MetaContext, username NormalizedUsername) (err error) {
-	defer mctx.TraceTimed("SecretStoreRevokableSecretService.ClearSecret", func() error { return err })()
+	defer mctx.Trace("SecretStoreRevokableSecretService.ClearSecret", &err)()
 
 	// Delete file-based portion first. If it fails, we can still try to erase the keyring's portion.
 	secretlessKeystore := s.secretlessKeystore(mctx, string(username))
@@ -273,7 +278,7 @@ func (s *SecretStoreRevokableSecretService) ClearSecret(mctx MetaContext, userna
 // be able to be logged in as due to the noise file being corrupted, the
 // keyring being uninstalled, etc.
 func (s *SecretStoreRevokableSecretService) GetUsersWithStoredSecrets(mctx MetaContext) (usernames []string, err error) {
-	defer mctx.TraceTimed("SecretStoreRevokableSecretService.GetUsersWithStoredSecrets", func() error { return err })()
+	defer mctx.Trace("SecretStoreRevokableSecretService.GetUsersWithStoredSecrets", &err)()
 	identifierKeystore := s.identifierKeystore(mctx)
 	suffixedUsernames, err := identifierKeystore.AllKeys(mctx, identifierKeystoreSuffix)
 	if err != nil {

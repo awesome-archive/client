@@ -5,18 +5,19 @@ import {ParticipantsRow} from '../../common'
 import {isLargeScreen} from '../../../constants/platform'
 import {SelectedEntry, DropdownEntry, DropdownText} from './dropdown'
 import Search from './search'
-import {Account} from '.'
-import {debounce} from 'lodash-es'
+import debounce from 'lodash/debounce'
+import defer from 'lodash/defer'
+import type {Account} from '.'
 
 export type ToKeybaseUserProps = {
   isRequest: boolean
   recipientUsername: string
   errorMessage?: string
   onShowProfile: (username: string) => void
-  onShowSuggestions: () => void
   onRemoveProfile: () => void
   onChangeRecipient: (recipient: string) => void
   onScanQRCode: (() => void) | null
+  onSearch: () => void
 }
 
 const placeholderExample = isLargeScreen ? 'Ex: G12345... or you*example.com' : 'G12.. or you*example.com'
@@ -44,7 +45,7 @@ const ToKeybaseUser = (props: ToKeybaseUserProps) => {
             />
             <Kb.Icon
               type="iconfont-remove"
-              boxStyle={Kb.iconCastPlatformStyles(styles.keybaseUserRemoveButton)}
+              boxStyle={styles.keybaseUserRemoveButton}
               fontSize={16}
               color={Styles.globalColors.black_20}
               onClick={props.onRemoveProfile}
@@ -65,7 +66,7 @@ const ToKeybaseUser = (props: ToKeybaseUserProps) => {
     <Search
       heading={props.isRequest ? 'From' : 'To'}
       onClickResult={props.onChangeRecipient}
-      onShowSuggestions={props.onShowSuggestions}
+      onSearch={props.onSearch}
       onShowTracker={props.onShowProfile}
       onScanQRCode={props.onScanQRCode}
     />
@@ -82,11 +83,14 @@ export type ToStellarPublicKeyProps = {
 
 const ToStellarPublicKey = (props: ToStellarPublicKeyProps) => {
   const [recipientPublicKey, setRecipentPublicKey] = React.useState(props.recipientPublicKey)
-  const debouncedOnChangeRecip = React.useCallback(debounce(props.onChangeRecipient, 1e3), [])
+  // eslint-disable-next-line
+  const debouncedOnChangeRecip = React.useCallback(debounce(props.onChangeRecipient, 1e3), [
+    props.onChangeRecipient,
+  ])
 
   const {setReadyToReview} = props
   const onChangeRecipient = React.useCallback(
-    recipientPublicKey => {
+    (recipientPublicKey: string) => {
       setRecipentPublicKey(recipientPublicKey)
       setReadyToReview(false)
       debouncedOnChangeRecip(recipientPublicKey)
@@ -96,9 +100,10 @@ const ToStellarPublicKey = (props: ToStellarPublicKeyProps) => {
 
   React.useEffect(() => {
     if (props.recipientPublicKey !== recipientPublicKey) {
-      setRecipentPublicKey(props.recipientPublicKey)
+      // Hot fix to let any empty string textChange callbacks happen before we change the value.
+      defer(() => setRecipentPublicKey(props.recipientPublicKey))
     }
-    // We purposely do not want this be called when the state changes
+    // We do not want this be called when the state changes
     // Only when the prop.recipientPublicKey changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.recipientPublicKey])
@@ -153,9 +158,8 @@ const ToStellarPublicKey = (props: ToStellarPublicKeyProps) => {
             <Kb.Icon
               color={Styles.globalColors.black_50}
               type="iconfont-qr-code"
-              fontSize={24}
               onClick={props.onScanQRCode}
-              style={Kb.iconCastPlatformStyles(styles.qrCode)}
+              style={styles.qrCode}
             />
           )}
         </Kb.Box2>
@@ -198,14 +202,15 @@ class ToOtherAccount extends React.Component<ToOtherAccountProps> {
       // A user is sending to another account, but has no other
       // accounts. Show a "create new account" button.
       return (
-        <Kb.Box2 direction="horizontal" centerChildren={true} style={{width: 270}}>
+        <ParticipantsRow heading="To" headingAlignment="Right" style={styles.toAccountRow}>
           <Kb.Button
+            small={true}
             type="Wallet"
             style={styles.createNewAccountButton}
             label="Create a new account"
             onClick={this.props.onCreateNewAccount}
           />
-        </Kb.Box2>
+        </ParticipantsRow>
       )
     }
 

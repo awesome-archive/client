@@ -4,7 +4,7 @@ import * as SettingsGen from '../../actions/settings-gen'
 import * as SettingsConstants from '../../constants/settings'
 import * as RouteTreeGen from '../../actions/route-tree-gen'
 import {anyWaiting} from '../../constants/waiting'
-import EnterPhoneNumber, {Props} from '.'
+import EnterPhoneNumber, {type Props} from '.'
 
 type OwnProps = {}
 
@@ -14,7 +14,7 @@ type WatcherProps = Props & {
   pendingVerification: string
 }
 // Watches for `pendingVerification` to change and routes to the verification screen
-class WatchForGoToVerify extends React.Component<WatcherProps> {
+export class WatchForGoToVerify extends React.Component<WatcherProps> {
   componentDidUpdate(prevProps: WatcherProps) {
     if (
       !this.props.error &&
@@ -30,6 +30,7 @@ class WatchForGoToVerify extends React.Component<WatcherProps> {
   render() {
     return (
       <EnterPhoneNumber
+        defaultCountry={this.props.defaultCountry}
         error={this.props.error}
         onContinue={this.props.onContinue}
         onSkip={this.props.onSkip}
@@ -39,8 +40,9 @@ class WatchForGoToVerify extends React.Component<WatcherProps> {
   }
 }
 
-const ConnectedEnterPhoneNumber = Container.namedConnect(
+const ConnectedEnterPhoneNumber = Container.connect(
   state => ({
+    defaultCountry: state.settings.phoneNumbers.defaultCountry,
     error: state.settings.phoneNumbers.error,
     pendingVerification: state.settings.phoneNumbers.pendingVerification,
     waiting: anyWaiting(state, SettingsConstants.addPhoneNumberWaitingKey),
@@ -60,8 +62,7 @@ const ConnectedEnterPhoneNumber = Container.namedConnect(
       )
     },
   }),
-  (s, d, o: OwnProps) => ({...o, ...s, ...d}),
-  'ConnectedEnterPhoneNumber'
+  (s, d, o: OwnProps) => ({...o, ...s, ...d})
 )(WatchForGoToVerify)
 
 export default ConnectedEnterPhoneNumber

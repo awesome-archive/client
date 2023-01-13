@@ -2,7 +2,7 @@ import {WalletRow} from '.'
 import * as Container from '../../../../../util/container'
 import {getAccount, getSelectedAccount} from '../../../../../constants/wallets'
 import * as WalletsGen from '../../../../../actions/wallets-gen'
-import {AccountID} from '../../../../../constants/types/wallets'
+import type {AccountID} from '../../../../../constants/types/wallets'
 
 type OwnProps = {
   accountID: AccountID
@@ -21,7 +21,7 @@ const mapStateToProps = (state: Container.TypedState, ownProps: OwnProps) => {
     keybaseUser,
     name,
     selectedAccount,
-    unreadPayments: state.wallets.unreadPaymentsMap.get(ownProps.accountID, 0),
+    unreadPayments: state.wallets.unreadPaymentsMap.get(ownProps.accountID) ?? 0,
   }
 }
 

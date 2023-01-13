@@ -1,6 +1,7 @@
 // Copyright 2019 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
-// +build darwin windows netbsd openbsd freebsd
+//go:build darwin || netbsd || openbsd || freebsd
+// +build darwin netbsd openbsd freebsd
 
 package client
 

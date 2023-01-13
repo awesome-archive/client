@@ -1,9 +1,8 @@
-import * as React from 'react'
-import * as Types from '../../../constants/types/fs'
+import type * as Types from '../../../constants/types/fs'
 import * as Constants from '../../../constants/fs'
 import * as Styles from '../../../styles'
 import * as Kb from '../../../common-adapters'
-import {FloatingMenuProps} from './types'
+import type {FloatingMenuProps} from './types'
 
 export type Props = {
   confirm: (() => void) | 'disabled'
@@ -32,7 +31,7 @@ const ConfirmHeader = (props: Props) => (
   </Kb.Box2>
 )
 
-export default (props: Props) => (
+const PathItemActionConfirm = (props: Props) => (
   <Kb.FloatingMenu
     closeOnSelect={false}
     closeText="Cancel"
@@ -41,15 +40,13 @@ export default (props: Props) => (
     visible={props.floatingMenuProps.visible}
     onHidden={props.floatingMenuProps.hide}
     position="bottom right"
-    header={{
-      title: 'unused',
-      view: <ConfirmHeader {...props} />,
-    }}
+    header={<ConfirmHeader {...props} />}
     items={
       props.confirm
         ? [
             {
               disabled: props.confirm === 'disabled',
+              icon: 'iconfont-check',
               onClick: props.confirm !== 'disabled' ? props.confirm : undefined,
               title: 'Yes, continue',
             },
@@ -58,6 +55,7 @@ export default (props: Props) => (
     }
   />
 )
+export default PathItemActionConfirm
 
 const styles = Styles.styleSheetCreate(
   () =>

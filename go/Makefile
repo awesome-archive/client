@@ -1,4 +1,3 @@
-GO15VENDOREXPERIMENT=1
 COVERWEB=go tool cover -html=/tmp/count.out
 
 fmt:
@@ -20,7 +19,6 @@ lint:
 	) \
 	&& ( \
 		golint ./... \
-		| grep -v ^vendor \
 		| grep -v "protocol[\/\\]" \
 		| grep -v -P -e '^((?!kbfs)).*comment' \
 		| grep -v KeysById \
@@ -79,8 +77,18 @@ coverclean:
 gen-deps:
 	./gen_deps.pl
 
-shavendorstellar:
-	echo "expecting f3a7d9906dab5c481669b5b4f852bf447388bd3d:"
-	find vendor/github.com/stellar -type f -print0 | sort -z | xargs -0 shasum | shasum
+linux-clear-devel-secrets:
+	secret-tool clear service-base keybase-devel
 
-.PHONY: test splint fmt lint vet cover testclean coverclient coverdaemon coverengine coverlibcmdline coverlibkb coverclean shavendorstellar gen-deps
+linux-clear-test-secrets:
+	secret-tool clear service-base keybase-devel-test
+
+GOLANGCI_RUN_OPT = --color auto
+
+golangci-lint-kbfs:
+	go list -f '{{.Dir}}' ./kbfs/... | fgrep -v dokan | xargs realpath --relative-to=. | xargs golangci-lint run $(GOLANGCI_RUN_OPT) --deadline 5m0s
+
+golangci-lint-nonkbfs:
+	go list -f '{{.Dir}}' ./... | fgrep -v protocol  | fgrep -v kbfs | xargs realpath --relative-to=. | xargs golangci-lint run $(GOLANGCI_RUN_OPT) --deadline 10m0s
+
+.PHONY: test splint fmt lint vet cover testclean coverclient coverdaemon coverengine coverlibcmdline coverlibkb coverclean gen-deps

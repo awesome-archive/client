@@ -1,48 +1,32 @@
 import * as Container from '../../../../../util/container'
 import * as RouteTreeGen from '../../../../../actions/route-tree-gen'
-import RetentionWarning from '.'
-import {RetentionEntityType} from '..'
-import {RetentionPolicy} from '../../../../../constants/types/retention-policy'
 import * as Constants from '../../../../../constants/teams'
-import {TypedState} from '../../../../../constants/reducer'
+import RetentionWarning from '.'
 
-type OwnProps = Container.RouteProps<{
-  policy: RetentionPolicy
-  entityType: RetentionEntityType
-  onCancel: (() => void) | null
-  onConfirm: (() => void) | null
-}>
+type OwnProps = Container.RouteProps<'retentionWarning'>
 
-const connected = Container.connect(
-  (_: TypedState, ownProps: OwnProps) => {
-    const policy = Container.getRouteProps(ownProps, 'policy', Constants.retentionPolicies.policyInherit)
-    return {
-      entityType: Container.getRouteProps(ownProps, 'entityType', 'adhoc'),
-      exploding: policy.type === 'explode',
-      timePeriod: policy.title,
-    }
-  },
+export default Container.connect(
+  () => ({}),
   (dispatch, ownProps: OwnProps) => ({
     onBack: () => {
       dispatch(RouteTreeGen.createNavigateUp())
-      const onCancel: (() => void) | null = Container.getRouteProps(ownProps, 'onCancel', null)
-      onCancel && onCancel()
+      const onCancel = ownProps.route.params?.onCancel ?? null
+      onCancel?.()
     },
     onConfirm: () => {
       dispatch(RouteTreeGen.createNavigateUp())
-      const cb: (() => void) | null = Container.getRouteProps(ownProps, 'onConfirm', null)
-      cb && cb()
+      const cb = ownProps.route.params?.onConfirm ?? null
+      cb?.()
     },
   }),
-  (s, d, o) => ({...o, ...s, ...d})
-)
-
-// eslint-disable-next-line func-call-spacing
-const withState = Container.withStateHandlers<
-  {enabled: boolean},
-  {setEnabled: (enabled: boolean) => {enabled: boolean} | undefined},
-  {}
->({enabled: false}, {setEnabled: () => (enabled: boolean) => ({enabled})})
-
-// @ts-ignore
-export default connected(withState(RetentionWarning)) as any
+  (_s, d, ownProps: OwnProps) => {
+    const policy = ownProps.route.params?.policy ?? Constants.retentionPolicies.policyInherit
+    return {
+      ...ownProps,
+      ...d,
+      entityType: ownProps.route.params?.entityType ?? 'adhoc',
+      exploding: policy.type === 'explode',
+      timePeriod: policy.title,
+    }
+  }
+)(RetentionWarning)

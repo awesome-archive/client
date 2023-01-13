@@ -1,27 +1,26 @@
-import * as RPCTypes from './types/rpc-gen'
+import type * as Container from '../util/container'
+import type * as RPCTypes from './types/rpc-gen'
 import * as Tabs from './tabs'
-import * as Container from '../util/container'
 
 export const badgeStateToBadgeCounts = (state: Container.TypedState, bs: RPCTypes.BadgeState) => {
   const {inboxVers, unverifiedEmails, unverifiedPhones} = bs
-  const conversations = bs.conversations || []
-  const deletedTeams = bs.deletedTeams || []
-  const newDevices = bs.newDevices || []
-  const newGitRepoGlobalUniqueIDs = bs.newGitRepoGlobalUniqueIDs || []
-  const newTeamAccessRequests = bs.newTeamAccessRequests || []
-  const newTeamNames = bs.newTeamNames || []
-  const revokedDevices = bs.revokedDevices || []
-  const teamsWithResetUsers = bs.teamsWithResetUsers || []
-  const unreadWalletAccounts = bs.unreadWalletAccounts || []
+  const deletedTeams = bs.deletedTeams ?? []
+  const newDevices = bs.newDevices ?? []
+  const newGitRepoGlobalUniqueIDs = bs.newGitRepoGlobalUniqueIDs ?? []
+  const newTeamAccessRequestCount = bs.newTeamAccessRequestCount ?? 0
+  const newTeams = bs.newTeams ?? []
+  const revokedDevices = bs.revokedDevices ?? []
+  const teamsWithResetUsers = bs.teamsWithResetUsers ?? []
+  const unreadWalletAccounts = bs.unreadWalletAccounts ?? []
+  const wotUpdates = bs.wotUpdates ?? new Map<string, RPCTypes.WotUpdate>()
 
   if (state.notifications.badgeVersion >= inboxVers) {
     return undefined
   }
 
-  const deviceType = String(Container.isMobile ? RPCTypes.DeviceType.mobile : RPCTypes.DeviceType.desktop)
   const counts = new Map<Tabs.Tab, number>()
 
-  counts.set(Tabs.peopleTab, bs.homeTodoItems)
+  counts.set(Tabs.peopleTab, bs.homeTodoItems + Object.keys(wotUpdates).length)
 
   const allDeviceChanges = new Set(newDevices)
   newDevices.forEach(d => allDeviceChanges.add(d))
@@ -29,15 +28,15 @@ export const badgeStateToBadgeCounts = (state: Container.TypedState, bs: RPCType
 
   // don't see badges related to this device
   counts.set(Tabs.devicesTab, allDeviceChanges.size - (allDeviceChanges.has(state.config.deviceID) ? 1 : 0))
+  counts.set(Tabs.chatTab, bs.smallTeamBadgeCount + bs.bigTeamBadgeCount)
   counts.set(
-    Tabs.chatTab,
-    conversations.reduce<number>((total, c) => (c.badgeCounts ? total + c.badgeCounts[deviceType] : total), 0)
+    Tabs.walletsTab,
+    unreadWalletAccounts.reduce<number>((total, a) => total + a.numUnread, 0)
   )
-  counts.set(Tabs.walletsTab, unreadWalletAccounts.reduce<number>((total, a) => total + a.numUnread, 0))
   counts.set(Tabs.gitTab, newGitRepoGlobalUniqueIDs.length)
   counts.set(
     Tabs.teamsTab,
-    newTeamNames.length + newTeamAccessRequests.length + teamsWithResetUsers.length + deletedTeams.length
+    newTeams.length + newTeamAccessRequestCount + teamsWithResetUsers.length + deletedTeams.length
   )
   counts.set(Tabs.settingsTab, unverifiedEmails + unverifiedPhones)
 

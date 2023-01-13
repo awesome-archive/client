@@ -1,85 +1,136 @@
+import captialize from 'lodash/capitalize'
 import * as React from 'react'
 import * as Kb from '../../../../../common-adapters'
-import * as Types from '../../../../../constants/types/chat2'
 import * as Constants from '../../../../../constants/chat2'
 import * as Styles from '../../../../../styles'
-import {ShowToastAfterSaving} from '../shared'
+import type * as Types from '../../../../../constants/types/chat2'
+import type * as CryptoTypes from '../../../../../constants/types/crypto'
+import {getEditStyle, ShowToastAfterSaving} from '../shared'
+import {isPathSaltpackEncrypted, isPathSaltpackSigned, Operations} from '../../../../../constants/crypto'
 
 type Props = {
   arrowColor: string
   onDownload?: () => void
   onShowInFinder?: () => void
+  onShowPDF?: () => void
   title: string
   fileName: string
   progress: number
   transferState: Types.MessageAttachmentTransferState
   hasProgress: boolean
   errorMsg: string
+  isHighlighted?: boolean
+  isEditing: boolean
+  isSaltpackFile: boolean
+  onSaltpackFileOpen: (path: string, operation: CryptoTypes.Operations) => void
 }
 
-class FileAttachment extends React.PureComponent<Props> {
-  render() {
-    const progressLabel = Constants.messageAttachmentTransferStateToProgressLabel(this.props.transferState)
-    const iconType = 'icon-file-32'
-    return (
-      <>
-        <ShowToastAfterSaving transferState={this.props.transferState} />
-        <Kb.ClickableBox onClick={this.props.onDownload} style={styles.fullWidth}>
-          <Kb.Box style={styles.containerStyle}>
-            <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny" centerChildren={true}>
-              <Kb.Icon type={iconType} style={Kb.iconCastPlatformStyles(styles.iconStyle)} />
-              <Kb.Box2 direction="vertical" fullWidth={true} style={styles.titleStyle}>
-                <Kb.Text type="BodySemibold">{this.props.title}</Kb.Text>
-                {this.props.fileName !== this.props.title && (
-                  <Kb.Text type="BodyTiny">{this.props.fileName}</Kb.Text>
-                )}
-              </Kb.Box2>
-            </Kb.Box2>
-            {!!this.props.arrowColor && (
-              <Kb.Box style={styles.downloadedIconWrapperStyle}>
-                <Kb.Icon
-                  type="iconfont-download"
-                  style={Kb.iconCastPlatformStyles(styles.downloadedIcon)}
-                  color={this.props.arrowColor}
-                />
-              </Kb.Box>
-            )}
-            {!!progressLabel && (
-              <Kb.Box style={styles.progressContainerStyle}>
-                <Kb.Text type="BodySmall" style={styles.progressLabelStyle}>
-                  {progressLabel}
-                </Kb.Text>
-                {this.props.hasProgress && <Kb.ProgressBar ratio={this.props.progress} />}
-              </Kb.Box>
-            )}
-            {!!this.props.errorMsg && (
-              <Kb.Box style={styles.progressContainerStyle}>
-                <Kb.Text type="BodySmall" style={styles.error}>
-                  Failed to download attachment, please retry
-                </Kb.Text>
-              </Kb.Box>
-            )}
-            {this.props.onShowInFinder && (
+const FileAttachment = React.memo(function FileAttachment(props: Props) {
+  const progressLabel = Constants.messageAttachmentTransferStateToProgressLabel(props.transferState)
+  const {isSaltpackFile, isEditing, isHighlighted} = props
+  const iconType = isSaltpackFile ? 'icon-file-saltpack-32' : 'icon-file-32'
+  const operation = isPathSaltpackEncrypted(props.fileName)
+    ? Operations.Decrypt
+    : isPathSaltpackSigned(props.fileName)
+    ? Operations.Verify
+    : undefined
+  const operationTitle = captialize(operation)
+  return (
+    <>
+      <ShowToastAfterSaving transferState={props.transferState} />
+      <Kb.Box style={Styles.collapseStyles([styles.containerStyle, getEditStyle(isEditing, isHighlighted)])}>
+        <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny" centerChildren={true}>
+          <Kb.Icon fixOverdraw={true} type={iconType} style={styles.iconStyle} onClick={props.onDownload} />
+          <Kb.Box2 direction="vertical" fullWidth={true} style={styles.titleStyle}>
+            {props.fileName === props.title ? (
+              // if the title is the filename, don't try to parse it as markdown
               <Kb.Text
-                type="BodySmallPrimaryLink"
-                onClick={this.props.onShowInFinder}
-                style={styles.linkStyle}
+                type="BodySemibold"
+                onClick={props.onDownload}
+                style={Styles.collapseStyles([
+                  isSaltpackFile && styles.saltpackFileName,
+                  getEditStyle(isEditing, isHighlighted),
+                ])}
               >
-                Show in {Styles.fileUIName}
+                {props.fileName}
+              </Kb.Text>
+            ) : (
+              <Kb.Markdown
+                messageType="attachment"
+                selectable={true}
+                style={getEditStyle(isEditing, isHighlighted)}
+                styleOverride={
+                  Styles.isMobile ? {paragraph: getEditStyle(isEditing, isHighlighted)} : undefined
+                }
+                allowFontScaling={true}
+              >
+                {props.title}
+              </Kb.Markdown>
+            )}
+            {props.fileName !== props.title && (
+              <Kb.Text
+                type="BodyTiny"
+                onClick={props.onDownload}
+                style={Styles.collapseStyles([
+                  isSaltpackFile && styles.saltpackFileName,
+                  getEditStyle(isEditing, isHighlighted),
+                ])}
+              >
+                {props.fileName}
               </Kb.Text>
             )}
+          </Kb.Box2>
+        </Kb.Box2>
+        {!Styles.isMobile && isSaltpackFile && operation && (
+          <Kb.Box style={styles.saltpackOperationContainer}>
+            <Kb.Button
+              mode="Secondary"
+              small={true}
+              label={operationTitle}
+              style={styles.saltpackOperation}
+              onClick={() => props.onSaltpackFileOpen(props.fileName, operation)}
+            />
           </Kb.Box>
-        </Kb.ClickableBox>
-      </>
-    )
-  }
-}
+        )}
+        {!!props.arrowColor && (
+          <Kb.Box style={styles.downloadedIconWrapperStyle}>
+            <Kb.Icon type="iconfont-download" style={styles.downloadedIcon} color={props.arrowColor} />
+          </Kb.Box>
+        )}
+        {!!progressLabel && (
+          <Kb.Box style={styles.progressContainerStyle}>
+            <Kb.Text type="BodySmall" style={styles.progressLabelStyle}>
+              {progressLabel}
+            </Kb.Text>
+            {props.hasProgress && <Kb.ProgressBar ratio={props.progress} />}
+          </Kb.Box>
+        )}
+        {!!props.errorMsg && (
+          <Kb.Box style={styles.progressContainerStyle}>
+            <Kb.Text type="BodySmall" style={styles.error}>
+              Failed to download.{' '}
+              <Kb.Text type="BodySmall" style={styles.retry} onClick={props.onDownload}>
+                Retry
+              </Kb.Text>
+            </Kb.Text>
+          </Kb.Box>
+        )}
+        {props.onShowInFinder && (
+          <Kb.Text type="BodySmallPrimaryLink" onClick={props.onShowInFinder} style={styles.linkStyle}>
+            Show in {Styles.fileUIName}
+          </Kb.Text>
+        )}
+      </Kb.Box>
+    </>
+  )
+})
 
 const styles = Styles.styleSheetCreate(
   () =>
     ({
       containerStyle: {
         ...Styles.globalStyles.flexBoxColumn,
+        width: '100%',
       },
       downloadedIcon: {
         maxHeight: 14,
@@ -88,22 +139,19 @@ const styles = Styles.styleSheetCreate(
       },
       downloadedIconWrapperStyle: {
         ...Styles.globalStyles.flexBoxCenter,
+        ...Styles.padding(3, 0, 3, 3),
         backgroundColor: Styles.globalColors.white,
         borderRadius: 20,
         bottom: 0,
-        padding: 3,
         position: 'absolute',
-        right: 0,
+        right: Styles.globalMargins.small,
       },
       error: {color: Styles.globalColors.redDark},
-      fullWidth: {width: '100%'},
       iconStyle: {
         height: 32,
         width: 32,
       },
-      linkStyle: {
-        color: Styles.globalColors.black_50,
-      },
+      linkStyle: {color: Styles.globalColors.black_50},
       progressContainerStyle: {
         ...Styles.globalStyles.flexBoxRow,
         alignItems: 'center',
@@ -112,9 +160,21 @@ const styles = Styles.styleSheetCreate(
         color: Styles.globalColors.black_50,
         marginRight: Styles.globalMargins.tiny,
       },
-      titleStyle: {
-        flex: 1,
+      retry: {
+        color: Styles.globalColors.redDark,
+        textDecorationLine: 'underline',
       },
+      saltpackFileName: {
+        color: Styles.globalColors.greenDark,
+      },
+      saltpackOperation: Styles.platformStyles({
+        isTablet: {alignSelf: 'flex-start'},
+      }),
+      saltpackOperationContainer: {
+        alignItems: 'flex-start',
+        marginTop: Styles.globalMargins.xtiny,
+      },
+      titleStyle: {flex: 1},
     } as const)
 )
 

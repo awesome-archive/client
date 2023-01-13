@@ -1,9 +1,9 @@
 import * as React from 'react'
-import {NativeSyntheticEvent, NativeTouchEvent} from 'react-native'
+import type {NativeSyntheticEvent, NativeTouchEvent} from 'react-native'
 import * as Kb from '../common-adapters'
 import * as Styles from '../styles'
-import {stubTrue} from 'lodash-es'
 
+const stubTrue = () => true
 const initMeasureRef = {height: -1, pageY: -1}
 const isValidMeasure = (m: typeof initMeasureRef) => m.height >= 0 && m.pageY >= 0
 const updateMeasure = (m: typeof initMeasureRef, newM: typeof initMeasureRef) =>
@@ -27,11 +27,14 @@ const AlphabetIndex = (props: Props) => {
   const storeMeasure = Kb.useTimeout(() => {
     if (topSectionRef.current && Styles.isMobile) {
       // @ts-ignore measure exists on mobile
-      topSectionRef.current.measure((_1, _2, _3, height: number, _4, pageY: number) => {
-        sectionMeasureRef.current = updateMeasure(sectionMeasureRef.current, {height, pageY})
-      })
+      topSectionRef.current.measure(
+        (_1: unknown, _2: unknown, _3: unknown, height: number, _4: unknown, pageY: number) => {
+          sectionMeasureRef.current = updateMeasure(sectionMeasureRef.current, {height, pageY})
+        }
+      )
     }
   }, 200)
+  // eslint-disable-next-line
   React.useEffect(storeMeasure, [props.measureKey])
 
   const {labels, onScroll, showNumSection} = props

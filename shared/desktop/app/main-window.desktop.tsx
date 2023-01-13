@@ -3,21 +3,26 @@ import * as Electron from 'electron'
 import * as ConfigGen from '../../actions/config-gen'
 import * as fs from 'fs'
 import menuHelper from './menu-helper.desktop'
-import {mainWindowDispatch} from '../remote/util.desktop'
-import {WindowState} from '../../constants/types/config'
-import {showDevTools} from '../../local-debug.desktop'
+import type {WindowState} from '../../constants/types/config'
+import {showDevTools} from '../../local-debug'
 import {guiConfigFilename, isDarwin, isWindows, defaultUseNativeFrame} from '../../constants/platform.desktop'
 import logger from '../../logger'
-import {resolveRootAsURL} from './resolve-root.desktop'
-import {debounce} from 'lodash-es'
+import debounce from 'lodash/debounce'
+import {setupDevToolsExtensions} from './dev-tools.desktop'
+import {assetRoot, htmlPrefix} from './html-root.desktop'
+import KB2 from '../../util/electron.desktop'
 
-const htmlFile = resolveRootAsURL('dist', `main${__DEV__ ? '.dev' : ''}.html`)
+const {env} = KB2.constants
+const {mainWindowDispatch} = KB2.functions
+
+let htmlFile = `${htmlPrefix}${assetRoot}main${__FILE_SUFFIX__}.html`
 
 const setupDefaultSession = () => {
   const ds = Electron.session.defaultSession
   if (!ds) {
     throw new Error('No default Session? Should be impossible')
   }
+
   // We are not using partitions on webviews, so this essentially disables
   // download for webviews. If we decide to start using partitions for
   // webviews, we should make sure to attach this to those partitions too.
@@ -41,7 +46,7 @@ const defaultWindowState: WindowState = {
   dockHidden: false,
   height: 600,
   isFullScreen: false,
-  width: 800,
+  width: 810,
   windowHidden: false,
   x: 0,
   y: 0,
@@ -74,18 +79,14 @@ const setupWindowEvents = (win: Electron.BrowserWindow) => {
 
   win.on('close', hideInsteadOfClose)
 
-  type IPCPayload = {type: 'showMainWindow'} | {type: 'closeWindows'}
-  Electron.app.on('KBkeybase' as any, (_: string, payload: IPCPayload) => {
-    switch (payload.type) {
-      case 'showMainWindow':
-        win.show()
-        showDockIcon()
-        break
-      case 'closeWindows':
-        hideDockIcon()
-        break
+  if (!isDarwin) {
+    const emitMaxChange = () => {
+      mainWindowDispatch(ConfigGen.createUpdateWindowMaxState({max: win.isMaximized()}))
     }
-  })
+
+    win.on('maximize', emitMaxChange)
+    win.on('unmaximize', emitMaxChange)
+  }
 }
 
 const changeDock = (show: boolean) => {
@@ -93,7 +94,10 @@ const changeDock = (show: boolean) => {
   if (!dock) return
 
   if (show) {
-    dock.show()
+    dock
+      .show()
+      .then(() => {})
+      .catch(() => {})
   } else {
     dock.hide()
   }
@@ -106,6 +110,9 @@ export const showDockIcon = () => changeDock(true)
 export const hideDockIcon = () => changeDock(false)
 
 let useNativeFrame = defaultUseNativeFrame
+let isDarkMode = false
+let darkModePreference = undefined
+let disableSpellCheck = false
 
 /**
  * loads data that we normally save from configGuiSetValue. At this point the service might not exist so we must read it directly
@@ -123,6 +130,26 @@ const loadWindowState = () => {
 
     if (guiConfig.useNativeFrame !== undefined) {
       useNativeFrame = guiConfig.useNativeFrame
+    }
+
+    if (guiConfig.ui) {
+      disableSpellCheck = guiConfig.ui.disableSpellCheck
+
+      const {darkMode} = guiConfig.ui
+      switch (darkMode) {
+        case 'system':
+          darkModePreference = darkMode
+          isDarkMode = KB2.constants.startDarkMode
+          break
+        case 'alwaysDark':
+          darkModePreference = darkMode
+          isDarkMode = true
+          break
+        case 'alwaysLight':
+          darkModePreference = darkMode
+          isDarkMode = false
+          break
+      }
     }
 
     const obj = JSON.parse(guiConfig.windowState)
@@ -184,12 +211,11 @@ const fixWindowsScalingIssue = (win: Electron.BrowserWindow) => {
 const maybeShowWindowOrDock = (win: Electron.BrowserWindow) => {
   const openedAtLogin = Electron.app.getLoginItemSettings().wasOpenedAtLogin
   // app.getLoginItemSettings().restoreState is Mac only, so consider it always on in Windows
-  const isRestore =
-    !!process.env['KEYBASE_RESTORE_UI'] || Electron.app.getLoginItemSettings().restoreState || isWindows
-  const hideWindowOnStart = process.env['KEYBASE_AUTOSTART'] === '1'
+  const isRestore = !!env.KEYBASE_RESTORE_UI || Electron.app.getLoginItemSettings().restoreState || isWindows
+  const hideWindowOnStart = env.KEYBASE_AUTOSTART === '1'
   const openHidden = Electron.app.getLoginItemSettings().wasOpenedAsHidden
-  logger.info('KEYBASE_AUTOSTART =', process.env['KEYBASE_AUTOSTART'])
-  logger.info('KEYBASE_START_UI =', process.env['KEYBASE_START_UI'])
+  logger.info('KEYBASE_AUTOSTART =', env.KEYBASE_AUTOSTART)
+  logger.info('KEYBASE_START_UI =', env.KEYBASE_START_UI)
   logger.info('Opened at login:', openedAtLogin)
   logger.info('Is restore:', isRestore)
   logger.info('Open hidden:', openHidden)
@@ -237,28 +263,56 @@ const registerForAppLinks = () => {
   Electron.app.setAsDefaultProtocolClient('keybase')
 }
 
-export default () => {
+export const closeWindows = () => {
+  const windows = Electron.BrowserWindow.getAllWindows()
+  windows.forEach(w => {
+    // We tell it to close, we can register handlers for the 'close' event if we want to
+    // keep this window alive or hide it instead.
+    w.close()
+  })
+  hideDockIcon()
+}
+
+const MainWindow = () => {
   setupDefaultSession()
   loadWindowState()
 
+  // pass to main window
+  htmlFile = htmlFile + `?darkModePreference=${darkModePreference || ''}`
   const win = new Electron.BrowserWindow({
+    backgroundColor: isDarkMode ? '#191919' : '#ffffff',
     frame: useNativeFrame,
     height: windowState.height,
     minHeight: 600,
-    minWidth: 400,
+    minWidth: 740,
     show: false,
     webPreferences: {
       backgroundThrottling: false,
+      contextIsolation: true,
       devTools: showDevTools,
-      nodeIntegration: true,
+      nodeIntegration: false,
       nodeIntegrationInWorker: false,
+      preload: `${assetRoot}preload${__FILE_SUFFIX__}.bundle.js`,
+      spellcheck: !disableSpellCheck,
     },
     width: windowState.width,
     x: windowState.x,
     y: windowState.y,
     ...(isDarwin ? {titleBarStyle: 'hiddenInset'} : {}),
   })
-  win.loadURL(htmlFile)
+  if (__DEV__ || __PROFILE__) {
+    setupDevToolsExtensions()
+  }
+
+  win
+    .loadURL(htmlFile)
+    .then(() => {})
+    .catch(() => {})
+  if (!disableSpellCheck) {
+    win.webContents.session.setSpellCheckerDictionaryDownloadURL(
+      'https://keybase.io/dictionaries/hunspell_dictionaries.zip/'
+    )
+  }
 
   if (windowState.isFullScreen) {
     win.setFullScreen(true)
@@ -277,3 +331,9 @@ export default () => {
   setupWindowEvents(win)
   return win
 }
+
+export const getMainWindow = (): Electron.BrowserWindow | null => {
+  const w = Electron.BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('/main.'))
+  return w || null
+}
+export default MainWindow

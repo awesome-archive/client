@@ -1,40 +1,41 @@
-import * as React from 'react'
 import * as Kb from '../common-adapters/mobile.native'
 import * as Styles from '../styles'
-import RouterSwitcheroo from '../router-v2/switcheroo'
-import {GatewayDest} from 'react-gateway'
-import {View} from 'react-native'
+import Router from '../router-v2/router'
+import {PortalHost} from '@gorhom/portal'
+import ResetModal from '../login/reset/modal'
+import GlobalError from './global-errors/container'
+import OutOfDate from './out-of-date'
+import RuntimeStats from './runtime-stats'
 
-type Props = {}
-
-const Main = (_: Props) => (
-  <>
-    <RouterSwitcheroo />
-    <GatewayDest
-      name="popup-root"
-      component={ViewForGatewayDest}
-      pointerEvents="box-none"
-      style={Styles.globalStyles.fillAbsolute}
-    />
-    <Kb.KeyboardAvoidingView
-      style={Styles.globalStyles.fillAbsolute}
-      pointerEvents="box-none"
-      behavior={Styles.isIOS ? 'padding' : undefined}
-    >
-      <GatewayDest
-        name="keyboard-avoiding-root"
-        component={ViewForGatewayDest}
+const Main = () => {
+  return (
+    <>
+      <Router />
+      <PortalHost
+        name="popup-root"
+        // @ts-ignore
         pointerEvents="box-none"
-        style={styles.gatewayDest}
+        style={Styles.globalStyles.fillAbsolute}
       />
-    </Kb.KeyboardAvoidingView>
-  </>
-)
-
-const ViewForGatewayDest = (props: Props) => <View {...props} />
+      <Kb.KeyboardAvoidingView
+        style={Styles.globalStyles.fillAbsolute}
+        pointerEvents="box-none"
+        behavior={Styles.isIOS ? 'padding' : undefined}
+      >
+        <Kb.Box2 direction="vertical" pointerEvents="box-none" fullWidth={true} style={styles.portalParent}>
+          <PortalHost name="keyboard-avoiding-root" />
+        </Kb.Box2>
+      </Kb.KeyboardAvoidingView>
+      <ResetModal />
+      <GlobalError />
+      <OutOfDate />
+      <RuntimeStats />
+    </>
+  )
+}
 
 const styles = Styles.styleSheetCreate(() => ({
-  gatewayDest: {flexGrow: 1, width: '100%'},
+  portalParent: {flexGrow: 1, position: 'relative'},
 }))
 
 export default Main

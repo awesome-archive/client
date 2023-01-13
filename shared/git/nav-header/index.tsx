@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import * as Container from '../../util/container'
@@ -27,7 +26,7 @@ export const HeaderTitle = () => (
   </Kb.Box2>
 )
 
-export const HeaderRightActions = Kb.OverlayParentHOC((props: Kb.PropsWithOverlay<{}>) => {
+export const HeaderRightActions = () => {
   const dispatch = Container.useDispatch()
 
   const onAddPersonal = () => {
@@ -38,38 +37,34 @@ export const HeaderRightActions = Kb.OverlayParentHOC((props: Kb.PropsWithOverla
     dispatch(GitGen.createSetError({}))
     dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {isTeam: true}, selected: 'gitNewRepo'}]}))
   }
+
+  const {toggleShowingPopup, showingPopup, popup, popupAnchor} = Kb.usePopup(attachTo => (
+    <Kb.FloatingMenu
+      attachTo={attachTo}
+      closeOnSelect={true}
+      visible={showingPopup}
+      onHidden={toggleShowingPopup}
+      position="bottom center"
+      positionFallbacks={[]}
+      items={[
+        {icon: 'iconfont-person', onClick: onAddPersonal, title: 'New personal repository'},
+        {icon: 'iconfont-people', onClick: onAddTeam, title: 'New team repository'},
+      ]}
+    />
+  ))
   return (
     <>
       <Kb.Button
         label="New repository"
-        onClick={props.toggleShowingMenu}
+        onClick={toggleShowingPopup}
         small={true}
-        ref={props.setAttachmentRef}
+        ref={popupAnchor}
         style={styles.newRepoButton}
       />
-      <Kb.FloatingMenu
-        attachTo={props.getAttachmentRef}
-        closeOnSelect={true}
-        visible={props.showingMenu}
-        onHidden={props.toggleShowingMenu}
-        position="bottom center"
-        positionFallbacks={[]}
-        items={[
-          {
-            onClick: onAddPersonal,
-            title: 'New personal repository',
-          },
-          {
-            disabled: Styles.isMobile,
-            onClick: Styles.isMobile ? undefined : onAddTeam,
-            style: Styles.isMobile ? {paddingLeft: 0, paddingRight: 0} : {},
-            title: `New team repository${Styles.isMobile ? ' (desktop only)' : ''}`,
-          },
-        ]}
-      />
+      {popup}
     </>
   )
-})
+}
 
 const styles = Styles.styleSheetCreate(() => ({
   headerTitle: {flex: 1, paddingBottom: Styles.globalMargins.xtiny, paddingLeft: Styles.globalMargins.xsmall},

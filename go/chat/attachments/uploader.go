@@ -3,10 +3,10 @@ package attachments
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	disklru "github.com/keybase/client/go/lru"
 
@@ -27,6 +27,7 @@ import (
 const (
 	uploadedPreviewsDir = "uploadedpreviews"
 	uploadedFullsDir    = "uploadedfulls"
+	uploadedTempsDir    = "uploadtemps"
 )
 
 type uploaderTask struct {
@@ -85,7 +86,7 @@ type uploaderTaskStorage struct {
 func newUploaderTaskStorage(g *globals.Context) *uploaderTaskStorage {
 	return &uploaderTaskStorage{
 		Contextified: globals.NewContextified(g),
-		DebugLabeler: utils.NewDebugLabeler(g.GetLog(), "uploaderTaskStorage", false),
+		DebugLabeler: utils.NewDebugLabeler(g.ExternalG(), "uploaderTaskStorage", false),
 	}
 }
 
@@ -108,7 +109,7 @@ func (u *uploaderTaskStorage) file(outboxID chat1.OutboxID, getPath func(chat1.O
 	}
 	return encrypteddb.NewFile(u.G().ExternalG(), getPath(outboxID),
 		func(ctx context.Context) ([32]byte, error) {
-			return storage.GetSecretBoxKey(ctx, u.G().ExternalG(), storage.DefaultSecretUI)
+			return storage.GetSecretBoxKey(ctx, u.G().ExternalG())
 		}), nil
 }
 
@@ -176,6 +177,7 @@ type Uploader struct {
 	s3signer              s3.Signer
 	uploads               map[string]*activeUpload
 	previewsLRU, fullsLRU *disklru.DiskLRU
+	versionUploaderTemps  int
 
 	// testing
 	tempDir string
@@ -185,17 +187,25 @@ var _ types.AttachmentUploader = (*Uploader)(nil)
 
 func NewUploader(g *globals.Context, store Store, s3signer s3.Signer,
 	ri func() chat1.RemoteInterface, size int) *Uploader {
-	return &Uploader{
-		Contextified: globals.NewContextified(g),
-		DebugLabeler: utils.NewDebugLabeler(g.GetLog(), "Attachments.Uploader", false),
-		store:        store,
-		ri:           ri,
-		s3signer:     s3signer,
-		uploads:      make(map[string]*activeUpload),
-		taskStorage:  newUploaderTaskStorage(g),
-		previewsLRU:  disklru.NewDiskLRU(uploadedPreviewsDir, 1, size),
-		fullsLRU:     disklru.NewDiskLRU(uploadedFullsDir, 1, size),
+	u := &Uploader{
+		Contextified:         globals.NewContextified(g),
+		DebugLabeler:         utils.NewDebugLabeler(g.ExternalG(), "Attachments.Uploader", false),
+		store:                store,
+		ri:                   ri,
+		s3signer:             s3signer,
+		uploads:              make(map[string]*activeUpload),
+		taskStorage:          newUploaderTaskStorage(g),
+		previewsLRU:          disklru.NewDiskLRU(uploadedPreviewsDir, 2, size),
+		fullsLRU:             disklru.NewDiskLRU(uploadedFullsDir, 2, size),
+		versionUploaderTemps: 1,
 	}
+
+	// make sure local state is clean
+	mctx := libkb.NewMetaContextTODO(g.ExternalG())
+	go u.clearOldUploaderTempDirs(context.Background(), 8*time.Second)
+	go disklru.CleanOutOfSyncWithDelay(mctx, u.previewsLRU, u.getPreviewsDir(), 10*time.Second)
+	go disklru.CleanOutOfSyncWithDelay(mctx, u.fullsLRU, u.getFullsDir(), 10*time.Second)
+	return u
 }
 
 func (u *Uploader) SetPreviewTempDir(dir string) {
@@ -205,7 +215,7 @@ func (u *Uploader) SetPreviewTempDir(dir string) {
 }
 
 func (u *Uploader) Complete(ctx context.Context, outboxID chat1.OutboxID) {
-	defer u.Trace(ctx, func() error { return nil }, "Complete(%s)", outboxID)()
+	defer u.Trace(ctx, nil, "Complete(%s)", outboxID)()
 	status, err := u.getStatus(ctx, outboxID)
 	if err != nil {
 		u.Debug(ctx, "Complete: failed to get outboxID: %s", err)
@@ -218,11 +228,57 @@ func (u *Uploader) Complete(ctx context.Context, outboxID chat1.OutboxID) {
 	u.taskStorage.completeTask(ctx, outboxID)
 	NewPendingPreviews(u.G()).Remove(ctx, outboxID)
 	// just always attempt to remove the upload temp dir for this outbox ID, even if it might not be there
-	os.RemoveAll(u.getUploadTempDir(outboxID))
+	u.clearTempDirFromOutboxID(ctx, outboxID)
+}
+
+func (u *Uploader) clearExpoAudioPaths(ctx context.Context) {
+	if u.G().IsMobileAppType() {
+		var subDir string
+		if libkb.IsAndroid() {
+			subDir = "../../../cache/Audio"
+		} else {
+			subDir = "../AV"
+		}
+		dir := filepath.Join(u.G().GetCacheDir(), subDir)
+		u.Debug(ctx, "clearExpoAudioPaths: clearing current dir: %s", dir)
+		os.RemoveAll(dir)
+	}
+}
+
+func (u *Uploader) clearOldUploaderTempDirs(ctx context.Context, delay time.Duration) {
+	u.Debug(ctx, "clearOldUploaderTempDirs: cleaning in %v", delay)
+	select {
+	case <-ctx.Done():
+		u.Debug(ctx, "clearOldUploaderTempDirs: context canceled, bailing")
+		return
+	case <-time.After(delay):
+	}
+
+	defer u.Trace(ctx, nil, "clearOldUploaderTempDirs")()
+	for i := 0; i < u.versionUploaderTemps; i++ {
+		dir := u.getUploadTempBaseDir(i)
+		u.Debug(ctx, "clearOldUploaderTempDirs: cleaning: %s", dir)
+		os.RemoveAll(dir)
+	}
+	if u.G().IsMobileAppType() {
+		u.clearExpoAudioPaths(ctx)
+	} else {
+		dir := u.getUploadTempBaseDir(u.versionUploaderTemps)
+		u.Debug(ctx, "clearOldUploaderTempDirs: clearing current dir: %s", dir)
+		os.RemoveAll(dir)
+	}
+}
+
+func (u *Uploader) clearTempDirFromOutboxID(ctx context.Context, outboxID chat1.OutboxID) {
+	dir := u.getUploadTempDir(u.versionUploaderTemps, outboxID)
+	u.Debug(ctx, "clearTempDirFromOutboxID: clearing: %s", dir)
+	os.RemoveAll(dir)
+
+	u.clearExpoAudioPaths(ctx)
 }
 
 func (u *Uploader) Retry(ctx context.Context, outboxID chat1.OutboxID) (res types.AttachmentUploaderResultCb, err error) {
-	defer u.Trace(ctx, func() error { return err }, "Retry(%s)", outboxID)()
+	defer u.Trace(ctx, &err, "Retry(%s)", outboxID)()
 	ustatus, err := u.getStatus(ctx, outboxID)
 	if err != nil {
 		return nil, err
@@ -244,7 +300,7 @@ func (u *Uploader) Retry(ctx context.Context, outboxID chat1.OutboxID) (res type
 }
 
 func (u *Uploader) Cancel(ctx context.Context, outboxID chat1.OutboxID) (err error) {
-	defer u.Trace(ctx, func() error { return err }, "Cancel(%s)", outboxID)()
+	defer u.Trace(ctx, &err, "Cancel(%s)", outboxID)()
 	// check if we are actively uploading the outbox ID and cancel it
 	u.Lock()
 	var ch chan types.AttachmentUploadResult
@@ -266,7 +322,7 @@ func (u *Uploader) Cancel(ctx context.Context, outboxID chat1.OutboxID) (err err
 }
 
 func (u *Uploader) Status(ctx context.Context, outboxID chat1.OutboxID) (status types.AttachmentUploaderTaskStatus, res types.AttachmentUploadResult, err error) {
-	defer u.Trace(ctx, func() error { return err }, "Status(%s)", outboxID)()
+	defer u.Trace(ctx, &err, "Status(%s)", outboxID)()
 	ustatus, err := u.getStatus(ctx, outboxID)
 	if err != nil {
 		return status, res, err
@@ -305,7 +361,7 @@ func (u *Uploader) saveTask(ctx context.Context, uid gregor1.UID, convID chat1.C
 
 func (u *Uploader) Register(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
 	outboxID chat1.OutboxID, title, filename string, metadata []byte, callerPreview *chat1.MakePreviewRes) (res types.AttachmentUploaderResultCb, err error) {
-	defer u.Trace(ctx, func() error { return err }, "Register(%s)", outboxID)()
+	defer u.Trace(ctx, &err, "Register(%s)", outboxID)()
 	// Write down the task information
 	if err := u.saveTask(ctx, uid, convID, outboxID, title, filename, metadata, callerPreview); err != nil {
 		return nil, err
@@ -368,7 +424,7 @@ func (u *Uploader) uploadFile(ctx context.Context, diskLRU *disklru.DiskLRU, dir
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		return nil, err
 	}
-	f, err = ioutil.TempFile(dir, prefix)
+	f, err = os.CreateTemp(dir, prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -464,6 +520,7 @@ func (u *Uploader) upload(ctx context.Context, uid gregor1.UID, convID chat1.Con
 		u.Debug(ctx, "upload: no pending preview, generating one: %s", err)
 		if pre, err = PreprocessAsset(ctx, u.G(), u.DebugLabeler, src, filename, u.G().NativeVideoHelper,
 			callerPreview); err != nil {
+			u.Debug(ctx, "upload: failed to preprocess: %s", err)
 			return res, err
 		}
 		if pre.Preview != nil {
@@ -499,7 +556,7 @@ func (u *Uploader) upload(ctx context.Context, uid gregor1.UID, convID chat1.Con
 		uf, err := u.uploadFullFile(ctx, pre.BaseMetadata())
 		if err != nil {
 			u.Debug(bgctx, "upload: failed to create uploaded full file: %s", err)
-			encryptedOut = ioutil.Discard
+			encryptedOut = io.Discard
 			uf = nil
 		} else {
 			defer uf.Close()
@@ -543,6 +600,19 @@ func (u *Uploader) upload(ctx context.Context, uid gregor1.UID, convID chat1.Con
 			case <-bgctx.Done():
 				return bgctx.Err()
 			}
+
+			// check to make sure this isn't an emoji conv, and if so just abort
+			conv, err := utils.GetUnverifiedConv(bgctx, u.G(), uid, convID, types.InboxSourceDataSourceAll)
+			if err != nil {
+				return err
+			}
+			switch conv.GetTopicType() {
+			case chat1.TopicType_EMOJI, chat1.TopicType_EMOJICROSS:
+				u.Debug(bgctx, "upload: skipping preview upload in emoji conv")
+				return nil
+			default:
+			}
+
 			// copy the params so as not to mess with the main params above
 			previewParams := s3params
 
@@ -551,7 +621,7 @@ func (u *Uploader) upload(ctx context.Context, uid gregor1.UID, convID chat1.Con
 			up, err := u.uploadPreviewFile(ctx)
 			if err != nil {
 				u.Debug(bgctx, "upload: failed to create uploaded preview file: %s", err)
-				encryptedOut = ioutil.Discard
+				encryptedOut = io.Discard
 				up = nil
 			} else {
 				defer up.Close()
@@ -618,26 +688,61 @@ func (u *Uploader) upload(ctx context.Context, uid gregor1.UID, convID chat1.Con
 	return upload.uploadResult, nil
 }
 
-func (u *Uploader) getUploadTempDir(outboxID chat1.OutboxID) string {
-	return filepath.Join(u.G().GetSharedCacheDir(), "uploadtemps", outboxID.String())
+func (u *Uploader) getUploadTempBaseDir(version int) string {
+	base := filepath.Join(u.G().GetSharedCacheDir(), uploadedTempsDir)
+	// version 0 didn't have the naming scheme ready, so special case it
+	if version == 0 {
+		return base
+	}
+	return fmt.Sprintf("%s_v%d", base, version)
+}
+
+func (u *Uploader) getUploadTempDir(version int, outboxID chat1.OutboxID) string {
+	return filepath.Join(u.getUploadTempBaseDir(version), outboxID.String())
 }
 
 func (u *Uploader) GetUploadTempFile(ctx context.Context, outboxID chat1.OutboxID, filename string) (string, error) {
-	dir := u.getUploadTempDir(outboxID)
+	dir := u.getUploadTempDir(u.versionUploaderTemps, outboxID)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, filepath.Base(filename)), nil
 }
 
+func (u *Uploader) GetUploadTempSink(ctx context.Context, filename string) (*os.File, chat1.OutboxID, error) {
+	obid, err := storage.NewOutboxID()
+	if err != nil {
+		return nil, nil, err
+	}
+	filename, err = u.GetUploadTempFile(ctx, obid, filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	file, err := os.Create(filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	return file, obid, nil
+}
+
+func (u *Uploader) CancelUploadTempFile(ctx context.Context, outboxID chat1.OutboxID) error {
+	u.clearTempDirFromOutboxID(ctx, outboxID)
+	return nil
+}
+
+func (u *Uploader) getPreviewsDir() string {
+	return filepath.Join(u.getBaseDir(), uploadedPreviewsDir)
+}
+
+func (u *Uploader) getFullsDir() string {
+	return filepath.Join(u.getBaseDir(), uploadedFullsDir)
+}
+
 func (u *Uploader) OnDbNuke(mctx libkb.MetaContext) error {
-	baseDir := u.getBaseDir()
-	previewsDir := filepath.Join(baseDir, uploadedPreviewsDir)
-	if err := u.previewsLRU.CleanOutOfSync(mctx, previewsDir); err != nil {
+	if err := u.previewsLRU.CleanOutOfSync(mctx, u.getPreviewsDir()); err != nil {
 		u.Debug(mctx.Ctx(), "unable to run clean for uploadedPreviews: %v", err)
 	}
-	fullsDir := filepath.Join(baseDir, uploadedFullsDir)
-	if err := u.fullsLRU.CleanOutOfSync(mctx, fullsDir); err != nil {
+	if err := u.fullsLRU.CleanOutOfSync(mctx, u.getFullsDir()); err != nil {
 		u.Debug(mctx.Ctx(), "unable to run clean for uploadedFulls: %v", err)
 	}
 	return nil

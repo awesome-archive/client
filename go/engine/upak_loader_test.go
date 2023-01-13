@@ -50,8 +50,8 @@ func TestLoadDeviceKeyNew(t *testing.T) {
 	devices, _ := getActiveDevicesAndKeys(tc, fu)
 	var device1 *libkb.Device
 	for _, device := range devices {
-		if device.Type != libkb.DeviceTypePaper {
-			device1 = device
+		if device.Type != keybase1.DeviceTypeV2_PAPER {
+			device1 = device.Device
 		}
 	}
 	require.NotNil(t, device1, "device1 should be non-nil")
@@ -108,8 +108,8 @@ func TestLoadDeviceKeyNew(t *testing.T) {
 	devices, _ = getActiveDevicesAndKeys(tc, fu)
 	var device2 *libkb.Device
 	for _, device := range devices {
-		if device.Type != libkb.DeviceTypePaper && device.ID != device1.ID {
-			device2 = device
+		if device.Type != keybase1.DeviceTypeV2_PAPER && device.ID != device1.ID {
+			device2 = device.Device
 		}
 	}
 	require.NotNil(t, device2, "device2 should be non-nil")
@@ -149,8 +149,8 @@ func TestLoadDeviceKeyRevoked(t *testing.T) {
 	devices, _ := getActiveDevicesAndKeys(tc, fu)
 	var thisDevice *libkb.Device
 	for _, device := range devices {
-		if device.Type != libkb.DeviceTypePaper {
-			thisDevice = device
+		if device.Type != keybase1.DeviceTypeV2_PAPER {
+			thisDevice = device.Device
 		}
 	}
 
@@ -578,12 +578,12 @@ func TestInvalidation(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, upak)
 	upl.Invalidate(mctx.Ctx(), u.UID())
-	arg = libkb.NewLoadUserArgWithMetaContext(mctx).WithUID(u.UID()).WithCachedOnly()
+	arg = libkb.NewLoadUserArgWithMetaContext(mctx).WithUID(u.UID()).WithCachedOnly(true)
 	_, _, err = upl.LoadV2(arg)
 	require.Error(t, err)
 	require.IsType(t, libkb.UserNotFoundError{}, err)
 	require.Contains(t, err.Error(), "cached user found, but it was stale, and cached only")
-	arg = libkb.NewLoadUserArgWithMetaContext(mctx).WithUID(u.UID()).WithCachedOnly().WithStaleOK(true)
+	arg = libkb.NewLoadUserArgWithMetaContext(mctx).WithUID(u.UID()).WithCachedOnly(true).WithStaleOK(true)
 	upak, _, err = upl.LoadV2(arg)
 	require.NoError(t, err)
 	require.NotNil(t, upak)

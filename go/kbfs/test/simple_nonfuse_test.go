@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 
+//go:build !fuse
 // +build !fuse
 
 package test
@@ -10,7 +11,6 @@ import "testing"
 
 // os.Rename doesn't support overriding empty dst dir, so skip this test if
 // FUSE engine is used.
-//
 func TestRenameDirOverDir(t *testing.T) {
 	test(t,
 		users("alice"),

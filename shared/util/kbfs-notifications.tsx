@@ -1,8 +1,8 @@
-import {capitalize} from 'lodash-es'
-import {FSErrorType, FSNotificationType, FSStatusCode, FSNotification} from '../constants/types/rpc-gen'
-import path from 'path'
+import capitalize from 'lodash/capitalize'
+import {FSErrorType, FSNotificationType, FSStatusCode, type FSNotification} from '../constants/types/rpc-gen'
 import {parseFolderNameToUsers} from './kbfs'
-import {TypedState} from '../constants/reducer'
+import {pathSep} from '../constants/platform'
+import type {TypedState} from '../constants/reducer'
 
 type DecodedKBFSError = {
   title: string
@@ -10,7 +10,7 @@ type DecodedKBFSError = {
 }
 
 function usernamesForNotification(notification: FSNotification) {
-  return parseFolderNameToUsers(null, notification.filename.split(path.sep)[3] || notification.filename).map(
+  return parseFolderNameToUsers(null, notification.filename.split(pathSep)[3] || notification.filename).map(
     i => i.username
   )
 }
@@ -19,10 +19,7 @@ function tlfForNotification(notification: FSNotification): string {
   // The notification.filename is canonical platform independent path.
   // To get the TLF we can look at the first 3 directories.
   // /keybase/private/gabrielh/foo.txt => /keybase/private/gabrielh
-  return notification.filename
-    .split(path.sep)
-    .slice(0, 4)
-    .join(path.sep)
+  return notification.filename.split(pathSep).slice(0, 4).join(pathSep)
 }
 
 function decodeKBFSError(user: string, notification: FSNotification): DecodedKBFSError {
@@ -30,7 +27,7 @@ function decodeKBFSError(user: string, notification: FSNotification): DecodedKBF
   const tlf = tlfForNotification(notification)
   switch (notification.errorType) {
     case FSErrorType.accessDenied: {
-      let prefix = user ? `${user} does` : 'You do'
+      const prefix = user ? `${user} does` : 'You do'
       return {
         body: `${prefix} not have ${notification.params.mode} access to ${notification.filename}`,
         title: 'Keybase: Access denied',
@@ -57,9 +54,7 @@ function decodeKBFSError(user: string, notification: FSNotification): DecodedKBF
 
     case FSErrorType.timeout:
       return {
-        body: `The ${
-          notification.params.mode
-        } operation took too long and failed. Please run 'keybase log send' so our admins can review.`,
+        body: `The ${notification.params.mode} operation took too long and failed. Please run 'keybase log send' so our admins can review.`,
         title: `Keybase: ${capitalize(notification.params.mode)} timeout in ${tlf}`,
       }
 
@@ -94,8 +89,7 @@ function decodeKBFSError(user: string, notification: FSNotification): DecodedKBF
           }
         } else {
           return {
-            body:
-              'Keybase is using too many file system resources temporarily, and writes will fail until the data syncs to the remote server.',
+            body: 'Keybase is using too many file system resources temporarily, and writes will fail until the data syncs to the remote server.',
             title: 'Keybase: Out of temporary space',
           }
         }
@@ -146,20 +140,22 @@ function decodeKBFSError(user: string, notification: FSNotification): DecodedKBF
 }
 
 export function kbfsNotification(notification: FSNotification, notify: any, state: TypedState) {
-  const action = {
-    // For now, disable file notifications because they're really annoying and
-    // we now have the syncing indicator.
-    // [FSNotificationType.encrypting]: 'Encrypting and uploading',
-    // [FSNotificationType.decrypting]: 'Decrypting',
-    // [FSNotificationType.signing]: 'Signing and uploading',
-    // [FSNotificationType.verifying]: 'Verifying and downloading',
-    [FSNotificationType.rekeying]: 'Rekeying',
-    // The following notifications just need to be enabled, they get handled
-    // independently.
-    [FSNotificationType.initialized]: '',
-    [FSNotificationType.connection]: '',
-    // [FSNotificationType.syncConfigChanged]: 'Synchronization config changed',
-  }[notification.notificationType]
+  const action: string | undefined = (
+    {
+      // For now, disable file notifications because they're really annoying and
+      // we now have the syncing indicator.
+      // [FSNotificationType.encrypting]: 'Encrypting and uploading',
+      // [FSNotificationType.decrypting]: 'Decrypting',
+      // [FSNotificationType.signing]: 'Signing and uploading',
+      // [FSNotificationType.verifying]: 'Verifying and downloading',
+      [FSNotificationType.rekeying]: 'Rekeying',
+      // The following notifications just need to be enabled, they get handled
+      // independently.
+      [FSNotificationType.initialized]: '',
+      [FSNotificationType.connection]: '',
+      // [FSNotificationType.syncConfigChanged]: 'Synchronization config changed',
+    } as any
+  )[notification.notificationType] as string
 
   if (action === undefined && notification.statusCode !== FSStatusCode.error) {
     // Ignore notification types we don't care about.
@@ -174,9 +170,9 @@ export function kbfsNotification(notification: FSNotification, notify: any, stat
     notification.errorType === FSErrorType.diskCacheErrorLogSend
   ) {
     console.log(`KBFS failed to initialize its disk cache. Please send logs.`)
-    let title = `KBFS: Disk cache not initialized`
-    let body = `Please Send Feedback to Keybase`
-    let rateLimitKey = body
+    const title = `KBFS: Disk cache not initialized`
+    const body = `Please Send Feedback to Keybase`
+    const rateLimitKey = body
     notify(title, {body}, 10, rateLimitKey)
   }
 
@@ -192,7 +188,7 @@ export function kbfsNotification(notification: FSNotification, notify: any, stat
 
   let title = `KBFS: ${action}`
   let body = `Chat or files with ${usernames} ${notification.status}`
-  let user = state.config.username
+  const user = state.config.username
   let rateLimitKey
 
   const isError = notification.statusCode === FSStatusCode.error

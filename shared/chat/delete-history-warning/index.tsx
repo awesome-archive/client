@@ -1,16 +1,17 @@
-import React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 
 type Props = {
-  onBack: (() => void) | null
   onCancel: () => void
   onDeleteHistory: () => void
 }
 
 const DeleteHistoryWarning = ({onCancel, onDeleteHistory}: Props) => (
   <Kb.MaybePopup onClose={onCancel}>
-    <Kb.Box style={Styles.collapseStyles([Styles.globalStyles.flexBoxColumn, styles.padding, styles.box])}>
+    {Styles.isMobile && <Kb.HeaderHocHeader onCancel={onCancel} />}
+    <Kb.Box
+      style={Styles.collapseStyles([Styles.globalStyles.flexBoxColumn, styles.padding, styles.box] as const)}
+    >
       <Kb.Icon type={Styles.isMobile ? 'icon-message-deletion-64' : 'icon-message-deletion-48'} />
       <Kb.Text style={{padding: Styles.globalMargins.small}} type="Header">
         Delete conversation history?
@@ -41,13 +42,17 @@ const DeleteHistoryWarning = ({onCancel, onDeleteHistory}: Props) => (
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      box: {
-        alignItems: 'center',
-        backgroundColor: Styles.globalColors.white,
-        justifyContent: 'center',
-        maxWidth: 560,
-        padding: Styles.globalMargins.small,
-      },
+      box: Styles.platformStyles({
+        common: {
+          alignItems: 'center',
+          backgroundColor: Styles.globalColors.white,
+          justifyContent: 'center',
+          padding: Styles.globalMargins.small,
+        },
+        isMobile: {
+          width: '100%',
+        },
+      }),
       button: Styles.platformStyles({
         isElectron: {marginLeft: Styles.globalMargins.tiny},
         isMobile: {marginTop: Styles.globalMargins.tiny},
@@ -77,4 +82,4 @@ const styles = Styles.styleSheetCreate(
     } as const)
 )
 
-export default Kb.HeaderOnMobile(DeleteHistoryWarning)
+export default DeleteHistoryWarning

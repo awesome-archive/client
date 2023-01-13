@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import PeopleItem from '../item'
@@ -32,9 +31,7 @@ const Announcement = (props: Props) => {
             <Kb.Button small={true} label={props.confirmLabel} onClick={props.onConfirm} />
           )}
           {!!props.onDismiss && (
-            <Kb.Text type="BodyPrimaryLink" onClick={props.onDismiss}>
-              Later
-            </Kb.Text>
+            <Kb.Button small={true} label="Later" onClick={props.onDismiss} mode="Secondary" />
           )}
         </Kb.Box2>
       )}

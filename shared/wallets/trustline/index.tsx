@@ -1,3 +1,5 @@
+import * as Container from '../../util/container'
+import * as WalletsGen from '../../actions/wallets-gen'
 import * as React from 'react'
 import * as Styles from '../../styles'
 import * as Kb from '../../common-adapters'
@@ -15,7 +17,6 @@ type _Props = {
   loaded: boolean
   onSearchChange: (text: string) => void
   popularAssets: Array<Types.AssetID>
-  refresh: () => void
   searchingAssets?: Array<Types.AssetID>
   totalAssetsCount?: number
   waitingSearch: boolean
@@ -68,16 +69,16 @@ const getSectionListKey = (props: BodyProps) =>
     props.popularAssets.length ? 'pa' : '_'
   }`
 
-const sectionHeader = section => !section.title || <Kb.SectionDivider label={section.title} />
+const sectionHeader = section => (section.title ? <Kb.SectionDivider label={section.title} /> : null)
 
 const ListUpdateOnMount = (props: BodyProps) => {
   // hack to get `ReactList` to render more than one item on initial mount.
   // Somehow we need two updates here.
   const [updateCounter, setUpdateCounter] = React.useState(0)
-  React.useEffect(() => setUpdateCounter(updateCounter => (updateCounter > 1 ? 2 : updateCounter + 1)), [
-    updateCounter,
-    setUpdateCounter,
-  ])
+  React.useEffect(
+    () => setUpdateCounter(updateCounter => (updateCounter > 1 ? 2 : updateCounter + 1)),
+    [updateCounter, setUpdateCounter]
+  )
 
   return (
     <Kb.BoxGrow>
@@ -103,11 +104,19 @@ const ListUpdateOnMount = (props: BodyProps) => {
 }
 
 const Body = (props: BodyProps) => {
+  const {accountID, onFocusChange} = props
+  const dispatch = Container.useDispatch()
+
   React.useEffect(() => {
-    props.refresh()
-    return () => props.clearTrustlineModal()
-  }, [])
-  const {onFocusChange} = props
+    if (accountID !== Types.noAccountID) {
+      dispatch(WalletsGen.createRefreshTrustlineAcceptedAssets({accountID}))
+    }
+    dispatch(WalletsGen.createRefreshTrustlinePopularAssets())
+
+    return () => {
+      dispatch(WalletsGen.createClearTrustlineSearchResults())
+    }
+  }, [dispatch, accountID])
   return (
     <Kb.Box2 direction="vertical" fullWidth={true} style={styles.body}>
       {props.loaded ? (
@@ -131,11 +140,7 @@ const Body = (props: BodyProps) => {
             <Kb.Banner color="red">
               <Kb.BannerParagraph
                 bannerColor="red"
-                content={`Stellar holds ${
-                  Constants.trustlineHoldingBalance
-                } XLM per trustline, and your available Lumens balance is ${
-                  props.balanceAvailableToSend
-                } XLM.`}
+                content={`Stellar holds ${Constants.trustlineHoldingBalance} XLM per trustline, and your available Lumens balance is ${props.balanceAvailableToSend} XLM.`}
               />
             </Kb.Banner>
           )}
@@ -155,7 +160,7 @@ const Body = (props: BodyProps) => {
         </>
       ) : (
         <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.grow} centerChildren={true}>
-          <Kb.ProgressIndicator />
+          <Kb.ProgressIndicator type="Large" />
         </Kb.Box2>
       )}
     </Kb.Box2>
@@ -185,25 +190,16 @@ const TrustlineDesktop = (props: Props) => {
   )
 }
 
-const TrustlineMobile = Kb.HeaderHoc<BodyProps>(Body)
+const TrustlineMobile = p => {
+  const {onDone, ...rest} = p
+  return (
+    <Kb.HeaderHocWrapper borderless={true} title="Trustlines" rightActionLabel="Done" onRightAction={onDone}>
+      <Body {...rest} />
+    </Kb.HeaderHocWrapper>
+  )
+}
 
-const Trustline = Styles.isMobile
-  ? (props: Props) => {
-      const {onDone, ...rest} = props
-      const bodyProps = rest as BodyProps
-      return (
-        <TrustlineMobile
-          borderless={true}
-          title="Trustlines"
-          rightActionLabel="Done"
-          onRightAction={props.onDone}
-          {...bodyProps}
-        />
-      )
-    }
-  : TrustlineDesktop
-
-export default Trustline
+export default Styles.isMobile ? TrustlineMobile : TrustlineDesktop
 
 const styles = Styles.styleSheetCreate(() => ({
   body: {

@@ -18,7 +18,9 @@ const Kb = {
 
 type Props = {
   align?: 'left' | 'right' | null // default to 'left',
-  color?: 'blue' | 'green' | null // default to 'blue',
+  allowLabelClick?: boolean
+  children?: React.ReactNode
+  color?: 'blue' | 'green' | 'red' | null // default to 'blue',
   disabled?: boolean | null
   gapInBetween?: boolean | null // inserts flex:1 gap between toggle and text,
   gapSize?: number | null // inserts a gap of N pixels between toggle and text
@@ -30,7 +32,7 @@ type Props = {
   style?: Styles.StylesCrossPlatform | null
 }
 
-const LabelContainer = props =>
+const LabelContainer = (props: Props) =>
   // We put the tooltip on the whole thing on desktop.
   Styles.isMobile && props.labelTooltip ? (
     <Kb.WithTooltip
@@ -42,11 +44,13 @@ const LabelContainer = props =>
     </Kb.WithTooltip>
   ) : (
     <Kb.Box2 direction="vertical" style={styles.labelContainer}>
-      {props.children}
+      <Kb.ClickableBox onClick={props.allowLabelClick ? props.onClick : undefined}>
+        {props.children}
+      </Kb.ClickableBox>
     </Kb.Box2>
   )
 
-const getContent = (props, ref) => (
+const getContent = (props: Props, ref: React.Ref<ClickableBox>) => (
   <>
     <Kb.ClickableBox onClick={props.disabled ? undefined : props.onClick} ref={ref}>
       <SwitchToggle
@@ -55,7 +59,9 @@ const getContent = (props, ref) => (
         style={Styles.collapseStyles([
           props.align === 'left' && styles.switchLeft,
           props.align === 'right' && styles.switchRight,
-        ])}
+          props.disabled && styles.disabled,
+          !!props.labelSubtitle && styles.switch,
+        ] as const)}
       />
     </Kb.ClickableBox>
     {!!props.gapInBetween && <Kb.Box style={styles.gap} />}
@@ -63,7 +69,12 @@ const getContent = (props, ref) => (
     {typeof props.label === 'string' ? (
       <LabelContainer {...props}>
         <Kb.Text type="BodySemibold">{props.label}</Kb.Text>
-        {!!props.labelSubtitle && <Kb.Text type="BodyTiny">{props.labelSubtitle}</Kb.Text>}
+        {!!props.labelSubtitle && <Kb.Text type="BodySmall">{props.labelSubtitle}</Kb.Text>}
+      </LabelContainer>
+    ) : props.labelSubtitle ? (
+      <LabelContainer {...props}>
+        {props.label}
+        <Kb.Text type="BodySmall">{props.labelSubtitle}</Kb.Text>
       </LabelContainer>
     ) : (
       props.label
@@ -71,16 +82,15 @@ const getContent = (props, ref) => (
   </>
 )
 
-const getStyle = props =>
+const getStyle = (props: Props) =>
   Styles.collapseStyles([
     styles.container,
     props.align !== 'right' ? Styles.globalStyles.flexBoxRow : Styles.globalStyles.flexBoxRowReverse,
-    props.disabled && styles.disabled,
     props.style,
   ])
 
-const Switch = React.forwardRef<ClickableBox, Props>((props: Props, ref) =>
-  Styles.isMobile || !props.labelTooltip ? (
+const Switch = React.forwardRef<ClickableBox, Props>(function Switch(props: Props, ref) {
+  return Styles.isMobile || !props.labelTooltip ? (
     <Kb.Box style={getStyle(props)}>{getContent(props, ref)}</Kb.Box>
   ) : (
     <Kb.WithTooltip
@@ -91,45 +101,37 @@ const Switch = React.forwardRef<ClickableBox, Props>((props: Props, ref) =>
       {getContent(props, ref)}
     </Kb.WithTooltip>
   )
-)
+})
 
 export default Switch
 
 const styles = Styles.styleSheetCreate(() => ({
   container: Styles.platformStyles({
-    common: {
-      alignItems: 'center',
-    },
     isElectron: {
+      alignItems: 'center',
       minHeight: 24,
     },
     isMobile: {
+      alignItems: 'flex-start',
+      flexShrink: 1,
       minHeight: 32,
     },
   }),
-  disabled: {
-    opacity: 0.3,
-  },
-  gap: {
-    flex: 1,
-  },
-  labelContainer: {
-    flexShrink: 1,
-  },
-  switchLeft: Styles.platformStyles({
-    isElectron: {
-      marginRight: 10,
-    },
+  disabled: {opacity: 0.3},
+  gap: {flex: 1},
+  labelContainer: {flexShrink: 1},
+  switch: Styles.platformStyles({
     isMobile: {
-      marginRight: 12,
+      bottom: Styles.globalMargins.xtiny,
+      position: 'relative',
     },
   }),
+  switchLeft: Styles.platformStyles({
+    isElectron: {marginRight: 10},
+    isMobile: {marginRight: 12},
+  }),
   switchRight: Styles.platformStyles({
-    isElectron: {
-      marginLeft: 10,
-    },
-    isMobile: {
-      marginLeft: 12,
-    },
+    isElectron: {marginLeft: 10},
+    isMobile: {marginLeft: 12},
   }),
 }))

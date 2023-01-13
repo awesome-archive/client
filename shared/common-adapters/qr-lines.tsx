@@ -1,4 +1,3 @@
-import * as React from 'react'
 import {Box} from './box'
 import * as Styles from '../styles'
 
@@ -10,7 +9,7 @@ const BadLines = () => null
 
 // Note: duplicating the lines here vs a series of maps / permutations so its more readable
 const GoodLines = ({color}: {color: Styles.Color}) => {
-  const s = [styles.common, {backgroundColor: color}]
+  const s = [styles.common, {backgroundColor: color}] as any
   return (
     <>
       <Box style={Styles.collapseStyles([...s, {height: long, left: padding, top: padding, width: small}])} />

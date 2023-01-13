@@ -1,11 +1,12 @@
 import Announcement from '.'
 import * as PeopleGen from '../../actions/people-gen'
+import * as Chat2Gen from '../../actions/chat2-gen'
 import * as RouteTree from '../../actions/route-tree-gen'
 import * as RPCTypes from '../../constants/types/rpc-gen'
 import * as Tabs from '../../constants/tabs'
 import * as SettingsTabs from '../../constants/settings'
 import openURL from '../../util/open-url'
-import {namedConnect, isMobile} from '../../util/container'
+import * as Container from '../../util/container'
 
 type OwnProps = {
   appLink: RPCTypes.AppLinkType | null
@@ -32,41 +33,37 @@ const mapDispatchToProps = dispatch => ({
       case RPCTypes.AppLinkType.people:
         break
       case RPCTypes.AppLinkType.chat:
-        dispatch(RouteTree.createNavigateAppend({path: [Tabs.chatTab]}))
+        dispatch(Chat2Gen.createNavigateToInbox())
         break
       case RPCTypes.AppLinkType.files:
-        dispatch(
-          RouteTree.createNavigateAppend({
-            path: isMobile ? [Tabs.settingsTab, SettingsTabs.fsTab] : [Tabs.fsTab],
-          })
-        )
+        dispatch(RouteTree.createSwitchTab({tab: Container.isMobile ? Tabs.settingsTab : Tabs.fsTab}))
+        if (Container.isMobile) {
+          dispatch(RouteTree.createNavigateAppend({path: [SettingsTabs.fsTab]}))
+        }
         break
       case RPCTypes.AppLinkType.wallet:
-        dispatch(
-          RouteTree.createNavigateAppend({
-            path: isMobile ? [Tabs.settingsTab, SettingsTabs.walletsTab] : [Tabs.walletsTab],
-          })
-        )
+        dispatch(RouteTree.createSwitchTab({tab: Container.isMobile ? Tabs.settingsTab : Tabs.walletsTab}))
+        if (Container.isMobile) {
+          dispatch(RouteTree.createNavigateAppend({path: [SettingsTabs.walletsTab]}))
+        }
         break
       case RPCTypes.AppLinkType.git:
-        dispatch(
-          RouteTree.createNavigateAppend({
-            path: isMobile ? [Tabs.settingsTab, SettingsTabs.gitTab] : [Tabs.gitTab],
-          })
-        )
+        dispatch(RouteTree.createSwitchTab({tab: Container.isMobile ? Tabs.settingsTab : Tabs.gitTab}))
+        if (Container.isMobile) {
+          dispatch(RouteTree.createNavigateAppend({path: [SettingsTabs.gitTab]}))
+        }
         break
       case RPCTypes.AppLinkType.devices:
-        dispatch(
-          RouteTree.createNavigateAppend({
-            path: isMobile ? [Tabs.settingsTab, SettingsTabs.devicesTab] : [Tabs.devicesTab],
-          })
-        )
+        dispatch(RouteTree.createSwitchTab({tab: Container.isMobile ? Tabs.settingsTab : Tabs.devicesTab}))
+        if (Container.isMobile) {
+          dispatch(RouteTree.createNavigateAppend({path: [SettingsTabs.devicesTab]}))
+        }
         break
       case RPCTypes.AppLinkType.settings:
-        dispatch(RouteTree.createNavigateAppend({path: [Tabs.settingsTab]}))
+        dispatch(RouteTree.createSwitchTab({tab: Tabs.settingsTab}))
         break
       case RPCTypes.AppLinkType.teams:
-        dispatch(RouteTree.createNavigateAppend({path: [Tabs.teamsTab]}))
+        dispatch(RouteTree.createSwitchTab({tab: Tabs.teamsTab}))
         break
     }
     dispatch(PeopleGen.createDismissAnnouncement({id}))
@@ -88,4 +85,4 @@ const mergeProps = (_, dispatchProps, ownProps: OwnProps) => ({
   url: ownProps.url,
 })
 
-export default namedConnect(mapStateToProps, mapDispatchToProps, mergeProps, 'Announcement')(Announcement)
+export default Container.connect(mapStateToProps, mapDispatchToProps, mergeProps)(Announcement)

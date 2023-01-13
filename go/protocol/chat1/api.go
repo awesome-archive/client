@@ -1,4 +1,4 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.2 (https://github.com/keybase/node-avdl-compiler)
+// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
 //   Input file: avdl/chat1/api.avdl
 
 package chat1
@@ -8,6 +8,24 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
+
+type ConvIDStr string
+
+func (o ConvIDStr) DeepCopy() ConvIDStr {
+	return o
+}
+
+type TLFIDStr string
+
+func (o TLFIDStr) DeepCopy() TLFIDStr {
+	return o
+}
+
+type FlipGameIDStr string
+
+func (o FlipGameIDStr) DeepCopy() FlipGameIDStr {
+	return o
+}
 
 type RateLimitRes struct {
 	Tank     string `codec:"tank" json:"tank"`
@@ -57,25 +75,37 @@ func (o ChatMessage) DeepCopy() ChatMessage {
 }
 
 type MsgSender struct {
-	Uid        string `codec:"uid" json:"uid"`
-	Username   string `codec:"username,omitempty" json:"username,omitempty"`
-	DeviceID   string `codec:"deviceID" json:"device_id"`
-	DeviceName string `codec:"deviceName,omitempty" json:"device_name,omitempty"`
+	Uid        keybase1.UID      `codec:"uid" json:"uid"`
+	Username   string            `codec:"username,omitempty" json:"username,omitempty"`
+	DeviceID   keybase1.DeviceID `codec:"deviceID" json:"device_id"`
+	DeviceName string            `codec:"deviceName,omitempty" json:"device_name,omitempty"`
 }
 
 func (o MsgSender) DeepCopy() MsgSender {
 	return MsgSender{
-		Uid:        o.Uid,
+		Uid:        o.Uid.DeepCopy(),
 		Username:   o.Username,
-		DeviceID:   o.DeviceID,
+		DeviceID:   o.DeviceID.DeepCopy(),
 		DeviceName: o.DeviceName,
+	}
+}
+
+type MsgBotInfo struct {
+	BotUID      keybase1.UID `codec:"botUID" json:"bot_uid"`
+	BotUsername string       `codec:"botUsername,omitempty" json:"bot_username,omitempty"`
+}
+
+func (o MsgBotInfo) DeepCopy() MsgBotInfo {
+	return MsgBotInfo{
+		BotUID:      o.BotUID.DeepCopy(),
+		BotUsername: o.BotUsername,
 	}
 }
 
 type MsgFlipContent struct {
 	Text         string             `codec:"text" json:"text"`
-	GameID       string             `codec:"gameID" json:"game_id"`
-	FlipConvID   string             `codec:"flipConvID" json:"flip_conv_id"`
+	GameID       FlipGameIDStr      `codec:"gameID" json:"game_id"`
+	FlipConvID   ConvIDStr          `codec:"flipConvID" json:"flip_conv_id"`
 	UserMentions []KnownUserMention `codec:"userMentions" json:"user_mentions"`
 	TeamMentions []KnownTeamMention `codec:"teamMentions" json:"team_mentions"`
 }
@@ -83,8 +113,8 @@ type MsgFlipContent struct {
 func (o MsgFlipContent) DeepCopy() MsgFlipContent {
 	return MsgFlipContent{
 		Text:       o.Text,
-		GameID:     o.GameID,
-		FlipConvID: o.FlipConvID,
+		GameID:     o.GameID.DeepCopy(),
+		FlipConvID: o.FlipConvID.DeepCopy(),
 		UserMentions: (func(x []KnownUserMention) []KnownUserMention {
 			if x == nil {
 				return nil
@@ -110,9 +140,119 @@ func (o MsgFlipContent) DeepCopy() MsgFlipContent {
 	}
 }
 
+type EmojiContent struct {
+	Alias       string     `codec:"alias" json:"alias"`
+	IsCrossTeam bool       `codec:"isCrossTeam" json:"isCrossTeam"`
+	ConvID      *ConvIDStr `codec:"convID,omitempty" json:"convID,omitempty"`
+	MessageID   *MessageID `codec:"messageID,omitempty" json:"messageID,omitempty"`
+}
+
+func (o EmojiContent) DeepCopy() EmojiContent {
+	return EmojiContent{
+		Alias:       o.Alias,
+		IsCrossTeam: o.IsCrossTeam,
+		ConvID: (func(x *ConvIDStr) *ConvIDStr {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.ConvID),
+		MessageID: (func(x *MessageID) *MessageID {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.MessageID),
+	}
+}
+
+type MsgTextContent struct {
+	Body         string             `codec:"body" json:"body"`
+	Payments     []TextPayment      `codec:"payments" json:"payments"`
+	ReplyTo      *MessageID         `codec:"replyTo,omitempty" json:"replyTo,omitempty"`
+	ReplyToUID   *string            `codec:"replyToUID,omitempty" json:"replyToUID,omitempty"`
+	UserMentions []KnownUserMention `codec:"userMentions" json:"userMentions"`
+	TeamMentions []KnownTeamMention `codec:"teamMentions" json:"teamMentions"`
+	LiveLocation *LiveLocation      `codec:"liveLocation,omitempty" json:"liveLocation,omitempty"`
+	Emojis       []EmojiContent     `codec:"emojis" json:"emojis"`
+}
+
+func (o MsgTextContent) DeepCopy() MsgTextContent {
+	return MsgTextContent{
+		Body: o.Body,
+		Payments: (func(x []TextPayment) []TextPayment {
+			if x == nil {
+				return nil
+			}
+			ret := make([]TextPayment, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Payments),
+		ReplyTo: (func(x *MessageID) *MessageID {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.ReplyTo),
+		ReplyToUID: (func(x *string) *string {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x)
+			return &tmp
+		})(o.ReplyToUID),
+		UserMentions: (func(x []KnownUserMention) []KnownUserMention {
+			if x == nil {
+				return nil
+			}
+			ret := make([]KnownUserMention, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.UserMentions),
+		TeamMentions: (func(x []KnownTeamMention) []KnownTeamMention {
+			if x == nil {
+				return nil
+			}
+			ret := make([]KnownTeamMention, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.TeamMentions),
+		LiveLocation: (func(x *LiveLocation) *LiveLocation {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.LiveLocation),
+		Emojis: (func(x []EmojiContent) []EmojiContent {
+			if x == nil {
+				return nil
+			}
+			ret := make([]EmojiContent, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Emojis),
+	}
+}
+
 type MsgContent struct {
 	TypeName           string                       `codec:"typeName" json:"type"`
-	Text               *MessageText                 `codec:"text,omitempty" json:"text,omitempty"`
+	Text               *MsgTextContent              `codec:"text,omitempty" json:"text,omitempty"`
 	Attachment         *MessageAttachment           `codec:"attachment,omitempty" json:"attachment,omitempty"`
 	Edit               *MessageEdit                 `codec:"edit,omitempty" json:"edit,omitempty"`
 	Reaction           *MessageReaction             `codec:"reaction,omitempty" json:"reaction,omitempty"`
@@ -130,7 +270,7 @@ type MsgContent struct {
 func (o MsgContent) DeepCopy() MsgContent {
 	return MsgContent{
 		TypeName: o.TypeName,
-		Text: (func(x *MessageText) *MessageText {
+		Text: (func(x *MsgTextContent) *MsgTextContent {
 			if x == nil {
 				return nil
 			}
@@ -226,7 +366,7 @@ func (o MsgContent) DeepCopy() MsgContent {
 
 type MsgSummary struct {
 	Id                  MessageID                `codec:"id" json:"id"`
-	ConvID              string                   `codec:"convID" json:"conversation_id"`
+	ConvID              ConvIDStr                `codec:"convID" json:"conversation_id"`
 	Channel             ChatChannel              `codec:"channel" json:"channel"`
 	Sender              MsgSender                `codec:"sender" json:"sender"`
 	SentAt              int64                    `codec:"sentAt" json:"sent_at"`
@@ -240,18 +380,18 @@ type MsgSummary struct {
 	IsEphemeral         bool                     `codec:"isEphemeral,omitempty" json:"is_ephemeral,omitempty"`
 	IsEphemeralExpired  bool                     `codec:"isEphemeralExpired,omitempty" json:"is_ephemeral_expired,omitempty"`
 	ETime               gregor1.Time             `codec:"eTime,omitempty" json:"e_time,omitempty"`
-	Reactions           *ReactionMap             `codec:"reactions,omitempty" json:"reactions,omitempty"`
+	Reactions           *UIReactionMap           `codec:"reactions,omitempty" json:"reactions,omitempty"`
 	HasPairwiseMacs     bool                     `codec:"hasPairwiseMacs,omitempty" json:"has_pairwise_macs,omitempty"`
 	AtMentionUsernames  []string                 `codec:"atMentionUsernames,omitempty" json:"at_mention_usernames,omitempty"`
 	ChannelMention      string                   `codec:"channelMention,omitempty" json:"channel_mention,omitempty"`
 	ChannelNameMentions []UIChannelNameMention   `codec:"channelNameMentions,omitempty" json:"channel_name_mentions,omitempty"`
-	BotUID              *string                  `codec:"botUID,omitempty" json:"bot_uid,omitempty"`
+	BotInfo             *MsgBotInfo              `codec:"botInfo,omitempty" json:"bot_info,omitempty"`
 }
 
 func (o MsgSummary) DeepCopy() MsgSummary {
 	return MsgSummary{
 		Id:       o.Id.DeepCopy(),
-		ConvID:   o.ConvID,
+		ConvID:   o.ConvID.DeepCopy(),
 		Channel:  o.Channel.DeepCopy(),
 		Sender:   o.Sender.DeepCopy(),
 		SentAt:   o.SentAt,
@@ -275,7 +415,7 @@ func (o MsgSummary) DeepCopy() MsgSummary {
 		IsEphemeral:        o.IsEphemeral,
 		IsEphemeralExpired: o.IsEphemeralExpired,
 		ETime:              o.ETime.DeepCopy(),
-		Reactions: (func(x *ReactionMap) *ReactionMap {
+		Reactions: (func(x *UIReactionMap) *UIReactionMap {
 			if x == nil {
 				return nil
 			}
@@ -306,13 +446,13 @@ func (o MsgSummary) DeepCopy() MsgSummary {
 			}
 			return ret
 		})(o.ChannelNameMentions),
-		BotUID: (func(x *string) *string {
+		BotInfo: (func(x *MsgBotInfo) *MsgBotInfo {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x)
+			tmp := (*x).DeepCopy()
 			return &tmp
-		})(o.BotUID),
+		})(o.BotInfo),
 	}
 }
 
@@ -396,27 +536,30 @@ func (o Thread) DeepCopy() Thread {
 
 // A chat conversation. This is essentially a chat channel plus some additional metadata.
 type ConvSummary struct {
-	Id           string                    `codec:"id" json:"id"`
-	Channel      ChatChannel               `codec:"channel" json:"channel"`
-	Unread       bool                      `codec:"unread" json:"unread"`
-	ActiveAt     int64                     `codec:"activeAt" json:"active_at"`
-	ActiveAtMs   int64                     `codec:"activeAtMs" json:"active_at_ms"`
-	MemberStatus string                    `codec:"memberStatus" json:"member_status"`
-	ResetUsers   []string                  `codec:"resetUsers,omitempty" json:"reset_users,omitempty"`
-	FinalizeInfo *ConversationFinalizeInfo `codec:"finalizeInfo,omitempty" json:"finalize_info,omitempty"`
-	Supersedes   []string                  `codec:"supersedes,omitempty" json:"supersedes,omitempty"`
-	SupersededBy []string                  `codec:"supersededBy,omitempty" json:"superseded_by,omitempty"`
-	Error        string                    `codec:"error,omitempty" json:"error,omitempty"`
+	Id            ConvIDStr                     `codec:"id" json:"id"`
+	Channel       ChatChannel                   `codec:"channel" json:"channel"`
+	IsDefaultConv bool                          `codec:"isDefaultConv" json:"is_default_conv"`
+	Unread        bool                          `codec:"unread" json:"unread"`
+	ActiveAt      int64                         `codec:"activeAt" json:"active_at"`
+	ActiveAtMs    int64                         `codec:"activeAtMs" json:"active_at_ms"`
+	MemberStatus  string                        `codec:"memberStatus" json:"member_status"`
+	ResetUsers    []string                      `codec:"resetUsers,omitempty" json:"reset_users,omitempty"`
+	FinalizeInfo  *ConversationFinalizeInfo     `codec:"finalizeInfo,omitempty" json:"finalize_info,omitempty"`
+	Supersedes    []string                      `codec:"supersedes,omitempty" json:"supersedes,omitempty"`
+	SupersededBy  []string                      `codec:"supersededBy,omitempty" json:"superseded_by,omitempty"`
+	Error         string                        `codec:"error,omitempty" json:"error,omitempty"`
+	CreatorInfo   *ConversationCreatorInfoLocal `codec:"creatorInfo,omitempty" json:"creator_info,omitempty"`
 }
 
 func (o ConvSummary) DeepCopy() ConvSummary {
 	return ConvSummary{
-		Id:           o.Id,
-		Channel:      o.Channel.DeepCopy(),
-		Unread:       o.Unread,
-		ActiveAt:     o.ActiveAt,
-		ActiveAtMs:   o.ActiveAtMs,
-		MemberStatus: o.MemberStatus,
+		Id:            o.Id.DeepCopy(),
+		Channel:       o.Channel.DeepCopy(),
+		IsDefaultConv: o.IsDefaultConv,
+		Unread:        o.Unread,
+		ActiveAt:      o.ActiveAt,
+		ActiveAtMs:    o.ActiveAtMs,
+		MemberStatus:  o.MemberStatus,
 		ResetUsers: (func(x []string) []string {
 			if x == nil {
 				return nil
@@ -458,6 +601,13 @@ func (o ConvSummary) DeepCopy() ConvSummary {
 			return ret
 		})(o.SupersededBy),
 		Error: o.Error,
+		CreatorInfo: (func(x *ConversationCreatorInfoLocal) *ConversationCreatorInfoLocal {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.CreatorInfo),
 	}
 }
 
@@ -465,7 +615,6 @@ type ChatList struct {
 	Conversations    []ConvSummary                 `codec:"conversations" json:"conversations"`
 	Offline          bool                          `codec:"offline" json:"offline"`
 	IdentifyFailures []keybase1.TLFIdentifyFailure `codec:"identifyFailures,omitempty" json:"identify_failures,omitempty"`
-	Pagination       *Pagination                   `codec:"pagination,omitempty" json:"pagination,omitempty"`
 	RateLimits       []RateLimitRes                `codec:"rateLimits,omitempty" json:"ratelimits,omitempty"`
 }
 
@@ -494,13 +643,6 @@ func (o ChatList) DeepCopy() ChatList {
 			}
 			return ret
 		})(o.IdentifyFailures),
-		Pagination: (func(x *Pagination) *Pagination {
-			if x == nil {
-				return nil
-			}
-			tmp := (*x).DeepCopy()
-			return &tmp
-		})(o.Pagination),
 		RateLimits: (func(x []RateLimitRes) []RateLimitRes {
 			if x == nil {
 				return nil
@@ -650,14 +792,14 @@ func (o RegexpRes) DeepCopy() RegexpRes {
 }
 
 type NewConvRes struct {
-	Id               string                        `codec:"id" json:"id"`
+	Id               ConvIDStr                     `codec:"id" json:"id"`
 	IdentifyFailures []keybase1.TLFIdentifyFailure `codec:"identifyFailures,omitempty" json:"identify_failures,omitempty"`
 	RateLimits       []RateLimitRes                `codec:"rateLimits,omitempty" json:"ratelimits,omitempty"`
 }
 
 func (o NewConvRes) DeepCopy() NewConvRes {
 	return NewConvRes{
-		Id: o.Id,
+		Id: o.Id.DeepCopy(),
 		IdentifyFailures: (func(x []keybase1.TLFIdentifyFailure) []keybase1.TLFIdentifyFailure {
 			if x == nil {
 				return nil
@@ -771,10 +913,37 @@ func (o MsgNotification) DeepCopy() MsgNotification {
 	}
 }
 
+type ConvNotification struct {
+	Type  string       `codec:"type" json:"type"`
+	Conv  *ConvSummary `codec:"conv,omitempty" json:"conv,omitempty"`
+	Error *string      `codec:"error,omitempty" json:"error,omitempty"`
+}
+
+func (o ConvNotification) DeepCopy() ConvNotification {
+	return ConvNotification{
+		Type: o.Type,
+		Conv: (func(x *ConvSummary) *ConvSummary {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.Conv),
+		Error: (func(x *string) *string {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x)
+			return &tmp
+		})(o.Error),
+	}
+}
+
 type AdvertiseCommandAPIParam struct {
 	Typ      string                `codec:"typ" json:"type"`
 	Commands []UserBotCommandInput `codec:"commands" json:"commands"`
 	TeamName string                `codec:"teamName,omitempty" json:"team_name,omitempty"`
+	ConvID   ConvIDStr             `codec:"convID,omitempty" json:"conv_id,omitempty"`
 }
 
 func (o AdvertiseCommandAPIParam) DeepCopy() AdvertiseCommandAPIParam {
@@ -792,17 +961,32 @@ func (o AdvertiseCommandAPIParam) DeepCopy() AdvertiseCommandAPIParam {
 			return ret
 		})(o.Commands),
 		TeamName: o.TeamName,
+		ConvID:   o.ConvID.DeepCopy(),
+	}
+}
+
+type ClearCommandAPIParam struct {
+	Typ      string    `codec:"typ" json:"type"`
+	TeamName string    `codec:"teamName,omitempty" json:"team_name,omitempty"`
+	ConvID   ConvIDStr `codec:"convID,omitempty" json:"conv_id,omitempty"`
+}
+
+func (o ClearCommandAPIParam) DeepCopy() ClearCommandAPIParam {
+	return ClearCommandAPIParam{
+		Typ:      o.Typ,
+		TeamName: o.TeamName,
+		ConvID:   o.ConvID.DeepCopy(),
 	}
 }
 
 type ResetConvMemberAPI struct {
-	ConversationID string `codec:"conversationID" json:"conversationID"`
-	Username       string `codec:"username" json:"username"`
+	ConversationID ConvIDStr `codec:"conversationID" json:"conversationID"`
+	Username       string    `codec:"username" json:"username"`
 }
 
 func (o ResetConvMemberAPI) DeepCopy() ResetConvMemberAPI {
 	return ResetConvMemberAPI{
-		ConversationID: o.ConversationID,
+		ConversationID: o.ConversationID.DeepCopy(),
 		Username:       o.Username,
 	}
 }
@@ -836,6 +1020,42 @@ func (o GetResetConvMembersRes) DeepCopy() GetResetConvMembersRes {
 			}
 			return ret
 		})(o.RateLimits),
+	}
+}
+
+type DeviceInfo struct {
+	DeviceID          keybase1.DeviceID     `codec:"deviceID" json:"id"`
+	DeviceDescription string                `codec:"deviceDescription" json:"description"`
+	DeviceType        keybase1.DeviceTypeV2 `codec:"deviceType" json:"type"`
+	DeviceCtime       int64                 `codec:"deviceCtime" json:"ctime"`
+}
+
+func (o DeviceInfo) DeepCopy() DeviceInfo {
+	return DeviceInfo{
+		DeviceID:          o.DeviceID.DeepCopy(),
+		DeviceDescription: o.DeviceDescription,
+		DeviceType:        o.DeviceType.DeepCopy(),
+		DeviceCtime:       o.DeviceCtime,
+	}
+}
+
+type GetDeviceInfoRes struct {
+	Devices []DeviceInfo `codec:"devices" json:"devices"`
+}
+
+func (o GetDeviceInfoRes) DeepCopy() GetDeviceInfoRes {
+	return GetDeviceInfoRes{
+		Devices: (func(x []DeviceInfo) []DeviceInfo {
+			if x == nil {
+				return nil
+			}
+			ret := make([]DeviceInfo, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Devices),
 	}
 }
 

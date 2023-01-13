@@ -2,52 +2,50 @@ import logger from '../../logger'
 import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import Feedback from '.'
-import logSend from '../../native/log-send'
 import * as Container from '../../util/container'
-import * as RouteTreeGen from '../../actions/route-tree-gen'
 import {isAndroid, version, pprofDir} from '../../constants/platform'
 import {writeLogLinesToFile} from '../../util/forward-logs'
-import {Platform, NativeModules} from 'react-native'
+import {Platform} from 'react-native'
 import {getExtraChatLogsForLogSend, getPushTokenForLogSend} from '../../constants/settings'
+import {logSend, appVersionName, appVersionCode} from 'react-native-kb'
 
-type OwnProps = Container.RouteProps<{heading: string; feedback: string}>
+type OwnProps = Container.RouteProps<'settingsTabs.feedbackTab'>
 
 export type State = {
   sending: boolean
-  sendError: Error | null
+  sendError?: Error
 }
-export type Props = Kb.PropsWithTimer<{
+export type Props = {
   chat: Object
   feedback: string
   loggedOut: boolean
   push: Object
-  onBack: () => void
   status: Object
-  title: string
-}>
+}
 
-const nativeBridge = NativeModules.KeybaseEngine
-const appVersionName = nativeBridge.appVersionName || ''
-const appVersionCode = nativeBridge.appVersionCode || ''
 const mobileOsVersion = Platform.Version
 
 class FeedbackContainer extends React.Component<Props, State> {
   static navigationOptions = {
     header: undefined,
-    headerHeight: 60,
     title: 'Feedback',
+    useHeaderHeight: () => 60,
   }
 
-  mounted = false
+  private mounted = false
+  private timeoutID?: ReturnType<typeof setTimeout>
 
   state = {
-    sendError: null,
+    sendError: undefined,
     sending: false,
   }
-  _dumpLogs = () => logger.dump().then(writeLogLinesToFile)
+  private dumpLogs = async () => logger.dump().then(writeLogLinesToFile)
 
   componentWillUnmount() {
     this.mounted = false
+    if (this.timeoutID) {
+      clearTimeout(this.timeoutID)
+    }
   }
 
   componentDidMount() {
@@ -57,11 +55,11 @@ class FeedbackContainer extends React.Component<Props, State> {
   _onSendFeedback = (feedback: string, sendLogs: boolean, sendMaxBytes: boolean) => {
     this.setState({sending: true})
 
-    this.props.setTimeout(() => {
-      const maybeDump = sendLogs ? this._dumpLogs() : Promise.resolve()
+    this.timeoutID = setTimeout(() => {
+      const maybeDump = sendLogs ? this.dumpLogs() : Promise.resolve()
 
       maybeDump
-        .then(() => {
+        .then(async () => {
           logger.info(`Sending ${sendLogs ? 'log' : 'feedback'} to daemon`)
           const extra = sendLogs
             ? {...this.props.status, ...this.props.chat, ...this.props.push}
@@ -81,7 +79,7 @@ class FeedbackContainer extends React.Component<Props, State> {
           logger.info('logSendId is', logSendId)
           if (this.mounted) {
             this.setState({
-              sendError: null,
+              sendError: undefined,
               sending: false,
             })
           }
@@ -101,7 +99,6 @@ class FeedbackContainer extends React.Component<Props, State> {
   render() {
     return (
       <Kb.Box2 direction="vertical" fullWidth={true}>
-        <Kb.HeaderHocHeader onBack={this.props.onBack} title={this.props.title} />
         <Feedback
           onSendFeedback={this._onSendFeedback}
           sending={this.state.sending}
@@ -118,34 +115,28 @@ class FeedbackContainer extends React.Component<Props, State> {
 
 // TODO really shouldn't be doing this in connect, should do this with an action
 
-const connected = Container.compose(
-  Container.connect(
-    state => ({
-      chat: getExtraChatLogsForLogSend(state),
-      loggedOut: !state.config.loggedIn,
-      push: getPushTokenForLogSend(state),
-      status: {
-        appVersionCode,
-        appVersionName,
-        deviceID: state.config.deviceID,
-        mobileOsVersion,
-        platform: isAndroid ? 'android' : 'ios',
-        uid: state.config.uid,
-        username: state.config.username,
-        version,
-      },
-    }),
-    dispatch => ({
-      onBack: () => dispatch(RouteTreeGen.createNavigateUp()),
-    }),
-    (s, d, o: OwnProps) => ({
-      ...s,
-      ...d,
-      feedback: Container.getRouteProps(o, 'feedback', ''),
-      title: Container.getRouteProps(o, 'heading', 'Feedback'),
-    })
-  ),
-  Kb.HOCTimers
+const connected = Container.connect(
+  state => ({
+    chat: getExtraChatLogsForLogSend(state),
+    loggedOut: !state.config.loggedIn,
+    push: getPushTokenForLogSend(state),
+    status: {
+      appVersionCode,
+      appVersionName,
+      deviceID: state.config.deviceID,
+      mobileOsVersion,
+      platform: isAndroid ? 'android' : 'ios',
+      uid: state.config.uid,
+      username: state.config.username,
+      version,
+    },
+  }),
+  () => ({}),
+  (s, d, o: OwnProps) => ({
+    ...s,
+    ...d,
+    feedback: o.route.params?.feedback ?? '',
+  })
 )(FeedbackContainer)
 
 export default connected

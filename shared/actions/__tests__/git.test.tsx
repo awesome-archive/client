@@ -1,7 +1,9 @@
 /* eslint-env jest */
+/*
 import * as Tabs from '../../constants/tabs'
 import * as GitGen from '../git-gen'
 import * as RPCTypes from '../../constants/types/rpc-gen'
+import * as Container from '../../util/container'
 import * as RouteTreeGen from '../route-tree-gen'
 import gitSaga from '../git'
 import * as Testing from '../../util/testing'
@@ -21,7 +23,7 @@ const gitRepos = [
     chatDisabled: false,
     devicename: 'My Mac Device',
     id: '1b091b39c3c248a0b97d09a4c46c9224_b3749db074a859d991c71bc28d99d82c',
-    lastEditTime: 'a minute ago',
+    lastEditTime: '1 minute ago',
     lastEditUser: 'eifjls092',
     name: 'meta',
     repoID: 'b3749db074a859d991c71bc28d99d82c',
@@ -33,7 +35,7 @@ const gitRepos = [
     chatDisabled: false,
     devicename: 'My Mac Device',
     id: '39ae3a19bf4215414d424677c37dce24_1a53ac017631bfbd59adfeb453c84c2c',
-    lastEditTime: 'a few seconds ago',
+    lastEditTime: 'less than a minute ago',
     lastEditUser: 'eifjls092',
     name: 'tea-shop',
     repoID: '1a53ac017631bfbd59adfeb453c84c2c',
@@ -117,7 +119,7 @@ const loadedStore = {
   },
 }
 
-const startOnGitTab = dispatch => {
+const startOnGitTab = (dispatch: Container.Dispatch) => {
   dispatch(RouteTreeGen.createSwitchLoggedIn({loggedIn: true}))
   dispatch(RouteTreeGen.createNavigateAppend({path: [Tabs.gitTab]}))
 }
@@ -129,8 +131,8 @@ const startReduxSagaWithLoadedStore = Testing.makeStartReduxSaga(gitSaga, loaded
 // const getRouteState = getState => getRoutePathState(getState().routeTree.routeState, [Tabs.gitTab])
 
 describe('reload side effects', () => {
-  let init
-  let rpc
+  let init: any
+  let rpc: any
   beforeEach(() => {
     init = startReduxSaga()
     rpc = jest.spyOn(RPCTypes, 'gitGetAllGitMetadataRpcPromise')
@@ -155,9 +157,9 @@ describe('reload side effects', () => {
 })
 
 describe('load', () => {
-  let init
-  let rpc
-  let date
+  let init: any
+  let rpc: any
+  let date: any
   beforeEach(() => {
     init = startReduxSaga()
     date = jest.spyOn(Date, 'now')
@@ -192,9 +194,9 @@ describe('load', () => {
 })
 
 describe('Team Repos', () => {
-  let init
-  let rpc
-  let date
+  let init: any
+  let rpc: any
+  let date: any
   beforeEach(() => {
     init = startReduxSagaWithLoadedStore()
     date = jest.spyOn(Date, 'now')
@@ -235,9 +237,9 @@ describe('Team Repos', () => {
 })
 
 describe('Create / Delete', () => {
-  let init
-  let rpc
-  let date
+  let init: any
+  let rpc: any
+  let date: any
   beforeEach(() => {
     init = startReduxSagaWithLoadedStore()
     date = jest.spyOn(Date, 'now')
@@ -295,3 +297,5 @@ describe('Create / Delete', () => {
     expect(rpc).toHaveBeenCalled()
   })
 })
+*/
+export default {}

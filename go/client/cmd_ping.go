@@ -96,7 +96,8 @@ func (t *pingGregorTransport) Dial(context.Context) (rpc.Transporter, error) {
 	if err != nil {
 		return nil, err
 	}
-	t.stagedTransport = rpc.NewTransport(t.conn, nil, nil, rpc.DefaultMaxFrameLength)
+	t.stagedTransport = rpc.NewTransport(t.conn, nil, nil,
+		nil, rpc.DefaultMaxFrameLength)
 	return t.stagedTransport, nil
 }
 
@@ -135,7 +136,7 @@ func (g *pingGregorHandler) OnConnect(ctx context.Context, conn *rpc.Connection,
 	response, err := ac.Ping(ctx)
 	if err != nil {
 		g.pingErrors <- err
-	} else if response != "pong" {
+	} else if !(response == "pong" || response == "") {
 		g.pingErrors <- fmt.Errorf("Got an unexpected response from ping: %#v", response)
 	} else {
 		g.pingSuccess <- struct{}{}

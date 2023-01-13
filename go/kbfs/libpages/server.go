@@ -10,6 +10,8 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -29,6 +31,17 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
+// CertStoreType is a type for specifying if and what cert store should be used
+// for acme/autocert.
+type CertStoreType string
+
+// Possible cert store types.
+const (
+	NoCertStore      CertStoreType = ""
+	DiskCertStore    CertStoreType = "disk"
+	KVStoreCertStore CertStoreType = "kvstore"
+)
+
 // ServerConfig holds configuration parameters for Server.
 type ServerConfig struct {
 	// If DomainWhitelist is non-nil and non-empty, only domains in the
@@ -37,11 +50,11 @@ type ServerConfig struct {
 	// If DomainBlacklist is non-nil and non-empty, domains in the blacklist
 	// and all subdomains under them are blocked. When a domain is present in
 	// both blacklist and whitelist, the domain is blocked.
-	DomainBlacklist  []string
-	UseStaging       bool
-	Logger           *zap.Logger
-	UseDiskCertCache bool
-	StatsReporter    StatsReporter
+	DomainBlacklist []string
+	UseStaging      bool
+	Logger          *zap.Logger
+	CertStore       CertStoreType
+	StatsReporter   StatsReporter
 
 	domainListsOnce sync.Once
 	domainWhitelist map[string]bool
@@ -473,20 +486,24 @@ const (
 	prodDiskCacheName       = "./kbp-cert-cache"
 )
 
-func makeACMEManager(
-	useStaging bool, useDiskCertCacache bool, hostPolicy autocert.HostPolicy) (
+func makeACMEManager(kbfsConfig libkbfs.Config, useStaging bool,
+	certStoreType CertStoreType, hostPolicy autocert.HostPolicy) (
 	*autocert.Manager, error) {
 	manager := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
 		HostPolicy: hostPolicy,
 	}
 
-	if useDiskCertCacache {
+	switch certStoreType {
+	case DiskCertStore:
 		if useStaging {
 			manager.Cache = autocert.DirCache(stagingDiskCacheName)
 		} else {
 			manager.Cache = autocert.DirCache(prodDiskCacheName)
 		}
+	case KVStoreCertStore:
+		manager.Cache = newCertStoreBackedByKVStore(kbfsConfig)
+	default:
 	}
 
 	if useStaging {
@@ -507,6 +524,18 @@ var additionalMimeTypes = map[string]string{
 	".wasm": "application/wasm",
 }
 
+type logForwarder struct {
+	msg     string
+	logFunc func(msg string, fields ...zap.Field)
+}
+
+var _ io.Writer = (*logForwarder)(nil)
+
+func (f *logForwarder) Write(p []byte) (n int, err error) {
+	f.logFunc(f.msg, zap.String("content", string(p)))
+	return len(p), nil
+}
+
 // ListenAndServe listens on 443 and 80 ports of all addresses, and serve
 // Keybase Pages based on config and kbfsConfig. HTTPs setup is handled with
 // ACME.
@@ -520,7 +549,7 @@ func ListenAndServe(ctx context.Context,
 	server := &Server{
 		config:     config,
 		kbfsConfig: kbfsConfig,
-		rootLoader: DNSRootLoader{log: config.Logger},
+		rootLoader: NewDNSRootLoader(config.Logger),
 	}
 	server.siteCache, err = lru.NewWithEvict(fsCacheSize, server.siteCacheEvict)
 	if err != nil {
@@ -528,15 +557,27 @@ func ListenAndServe(ctx context.Context,
 	}
 
 	manager, err := makeACMEManager(
-		config.UseStaging, config.UseDiskCertCache, server.allowDomain)
+		kbfsConfig, config.UseStaging, config.CertStore, server.allowDomain)
 	if err != nil {
 		return err
+	}
+
+	if manager.Client == nil || len(manager.Client.DirectoryURL) == 0 {
+		config.Logger.Info("ListenAndServe",
+			zap.String("acme directory url", autocert.DefaultACMEDirectory))
+	} else {
+		config.Logger.Info("ListenAndServe",
+			zap.String("acme directory url", manager.Client.DirectoryURL))
 	}
 
 	httpsServer := http.Server{
 		Handler:           server,
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 		IdleTimeout:       httpIdleTimeout,
+		ErrorLog: log.New(&logForwarder{
+			msg:     "http error log",
+			logFunc: config.Logger.Error,
+		}, "", 0),
 	}
 
 	httpServer := http.Server{

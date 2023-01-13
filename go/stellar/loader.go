@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/stellar1"
@@ -101,7 +102,7 @@ func (p *Loader) getPaymentLocalLocked(ctx context.Context, paymentID stellar1.P
 }
 
 func (p *Loader) LoadPayment(ctx context.Context, convID chat1.ConversationID, msgID chat1.MessageID, senderUsername string, paymentID stellar1.PaymentID) *chat1.UIPaymentInfo {
-	defer libkb.CTrace(ctx, p.G().GetLog(), fmt.Sprintf("Loader.LoadPayment(cid=%s,mid=%s,pid=%s)", convID, msgID, paymentID), func() error { return nil })()
+	defer p.G().CTrace(ctx, fmt.Sprintf("Loader.LoadPayment(cid=%s,mid=%s,pid=%s)", convID, msgID, paymentID), nil)()
 
 	p.Lock()
 	defer p.Unlock()
@@ -150,7 +151,7 @@ func (p *Loader) LoadPayment(ctx context.Context, convID chat1.ConversationID, m
 }
 
 func (p *Loader) LoadRequest(ctx context.Context, convID chat1.ConversationID, msgID chat1.MessageID, senderUsername string, requestID stellar1.KeybaseRequestID) *chat1.UIRequestInfo {
-	defer libkb.CTrace(ctx, p.G().GetLog(), fmt.Sprintf("Loader.LoadRequest(cid=%s,mid=%s,rid=%s)", convID, msgID, requestID), func() error { return nil })()
+	defer p.G().CTrace(ctx, fmt.Sprintf("Loader.LoadRequest(cid=%s,mid=%s,rid=%s)", convID, msgID, requestID), nil)()
 
 	p.Lock()
 	defer p.Unlock()
@@ -259,7 +260,7 @@ func (p *Loader) runRequests() {
 
 func (p *Loader) LoadPaymentSync(ctx context.Context, paymentID stellar1.PaymentID) {
 	mctx := libkb.NewMetaContext(ctx, p.G())
-	defer mctx.TraceTimed(fmt.Sprintf("LoadPaymentSync(%s)", paymentID), func() error { return nil })()
+	defer mctx.Trace(fmt.Sprintf("LoadPaymentSync(%s)", paymentID), nil)()
 
 	backoffPolicy := libkb.BackoffPolicy{
 		Millis: []int{2000, 3000, 5000},
@@ -277,7 +278,7 @@ func (p *Loader) LoadPaymentSync(ctx context.Context, paymentID stellar1.Payment
 func (p *Loader) loadPayment(mctx libkb.MetaContext, id stellar1.PaymentID) (err error) {
 	mctx, cancel := mctx.BackgroundWithLogTags().WithLogTag("LP").WithTimeout(15 * time.Second)
 	defer cancel()
-	defer mctx.TraceTimed(fmt.Sprintf("loadPayment(%s)", id), func() error { return nil })()
+	defer mctx.Trace(fmt.Sprintf("loadPayment(%s)", id), nil)()
 
 	s := getGlobal(p.G())
 	details, err := s.remoter.PaymentDetailsGeneric(mctx.Ctx(), stellar1.TransactionIDFromPaymentID(id).String())
@@ -304,7 +305,7 @@ func (p *Loader) loadRequest(id stellar1.KeybaseRequestID) {
 	defer cancel()
 
 	m := libkb.NewMetaContext(ctx, p.G())
-	defer m.TraceTimed(fmt.Sprintf("loadRequest(%s)", id), func() error { return nil })()
+	defer m.Trace(fmt.Sprintf("loadRequest(%s)", id), nil)()
 
 	s := getGlobal(p.G())
 	details, err := s.remoter.RequestDetails(ctx, id)
@@ -334,7 +335,7 @@ func (p *Loader) uiPaymentInfo(m libkb.MetaContext, summary *stellar1.PaymentLoc
 		Worth:             summary.Worth,
 		WorthAtSendTime:   summary.WorthAtSendTime,
 		Delta:             summary.Delta,
-		Note:              summary.Note,
+		Note:              utils.EscapeForDecorate(m.Ctx(), summary.Note),
 		IssuerDescription: summary.IssuerDescription,
 		PaymentID:         summary.Id,
 		SourceAmount:      summary.SourceAmountActual,

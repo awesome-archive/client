@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 //
+//go:build !windows
 // +build !windows
 
 package libfuse
@@ -21,7 +22,7 @@ import (
 // server. For enabling, the port number to listen on (with localhost)
 // must be what is written, e.g.
 //
-//   echo 8080 > /keybase/.kbfs_enable_debug_server
+//	echo 8080 > /keybase/.kbfs_enable_debug_server
 //
 // will spawn the HTTP debug server on port 8080.
 type DebugServerFile struct {

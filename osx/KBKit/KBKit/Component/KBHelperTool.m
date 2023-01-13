@@ -86,6 +86,7 @@
 
   BOOL multiUser = [bundleVersion isOrderedSame:[KBSemVersion version:@"1.0.31"]];
   BOOL activeDirectory = [bundleVersion isOrderedSame:[KBSemVersion version:@"1.0.35"]];
+  BOOL bigSurFuse = [bundleVersion isOrderedSame:[KBSemVersion version:@"1.0.47"]];
 
   if (multiUser) {
     alertText = @"New Keybase feature: multiple users in macOS";
@@ -94,6 +95,9 @@
   } else if (activeDirectory) {
     alertText = @"Keybase helper update";
     infoText = @"This Keybase release fixes a regression in macOS installs that use Active Directory for user management.\n\nYou may need to enter your password for this update.";
+  } else if (bigSurFuse) {
+    alertText = @"Keybase helper update";
+    infoText = @"This Keybase release contains a new version of macFuse which adds KBFS support for Big Sur and M1 devices.\n\nYou may need to enter your password for this update. A system reboot may also be needed.";
   } else {
     alertText = @"Keybase helper update";
     infoText = @"This Keybase release contains bugfixes and security updates to the Keybase installer helper tool.\n\nYou may need to enter your password for this update.";
@@ -110,6 +114,10 @@
   return [NSFileManager.defaultManager fileExistsAtPath:HELPER_LOCATION isDirectory:nil];
 }
 
+- (BOOL)isCriticalUpdate:(KBSemVersion *)runningVersion {
+  return [runningVersion isLessThan:[KBSemVersion version:@"1.0.44"]];
+}
+
 - (void)refreshComponent:(KBRefreshComponentCompletion)completion {
   GHODictionary *info = [GHODictionary dictionary];
   KBSemVersion *bundleVersion = [self bundleVersion];
@@ -123,7 +131,7 @@
 
   [self.helper sendRequest:@"version" params:nil completion:^(NSError *error, NSDictionary *versions) {
     if (error) {
-      self.componentStatus = [KBComponentStatus componentStatusWithInstallStatus:KBRInstallStatusError installAction:KBRInstallActionReinstall info:info error:error];
+      self.componentStatus = [KBComponentStatus componentStatusWithInstallStatus:KBRInstallStatusNotInstalled installAction:KBRInstallActionReinstall info:info error:nil];
       // If we couldn't run this, just act like it is a very old version running that we don't know how to
       // talk to so we can still run checks on the bundle version
       KBSemVersion *runningVersion = [KBSemVersion version:@"1.0.0" build:nil];
@@ -133,11 +141,18 @@
       DDLogDebug(@"Helper version: %@", versions);
       KBSemVersion *runningVersion = [KBSemVersion version:KBIfNull(versions[@"version"], @"") build:nil];
       if (runningVersion) info[@"Version"] = [runningVersion description];
+      DDLogInfo(@"Running Version: %@", runningVersion);
       if ([bundleVersion isGreaterThan:runningVersion]) {
-        if (bundleVersion) info[@"Bundle Version"] = [bundleVersion description];
-        self.componentStatus = [KBComponentStatus componentStatusWithInstallStatus:KBRInstallStatusInstalled installAction:KBRInstallActionUpgrade info:info error:nil];
-        [self doInstallAlert:bundleVersion runningVersion:runningVersion];
-        completion(self.componentStatus);
+        if ([self isCriticalUpdate:runningVersion]) {
+          DDLogInfo(@"Critical update found: bundle: %@ running: %@", bundleVersion, runningVersion);
+          self.componentStatus = [KBComponentStatus componentStatusWithInstallStatus:KBRInstallStatusError installAction:KBRInstallActionUpgrade info:info error:KBMakeError(KBErrorCodeFuseCriticalUpdate, @"FUSE critical update")];
+          completion(self.componentStatus);
+        } else {
+          if (bundleVersion) info[@"Bundle Version"] = [bundleVersion description];
+          self.componentStatus = [KBComponentStatus componentStatusWithInstallStatus:KBRInstallStatusInstalled installAction:KBRInstallActionUpgrade info:info error:nil];
+          [self doInstallAlert:bundleVersion runningVersion:runningVersion];
+          completion(self.componentStatus);
+        }
       } else {
         self.componentStatus = [KBComponentStatus componentStatusWithInstallStatus:KBRInstallStatusInstalled installAction:KBRInstallActionNone info:info error:nil];
         completion(self.componentStatus);
@@ -148,6 +163,11 @@
 
 - (void)install:(KBCompletion)completion {
   [self refreshComponent:^(KBComponentStatus *cs) {
+    // check for an error from refresh, and just abort if it gives us one
+    if (cs.error != nil) {
+      completion(cs.error);
+      return;
+    }
     if ([cs needsInstallOrUpgrade]) {
       [self _install:completion];
     } else {

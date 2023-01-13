@@ -1,68 +1,89 @@
+import * as Constants from '../../../constants/chat2'
+import * as Container from '../../../util/container'
+import * as Kb from '../../../common-adapters'
 import * as React from 'react'
+import * as Styles from '../../../styles'
+import * as WaitingConstants from '../../../constants/waiting'
 import Banner from '../bottom-banner/container'
 import InputArea from '../input-area/container'
-import ListArea from '../list-area/container'
-import * as Kb from '../../../common-adapters'
-import * as Styles from '../../../styles'
-import {readImageFromClipboard} from '../../../util/clipboard.desktop'
-import {Props} from '.'
-import '../conversation.css'
-import ThreadLoadStatus from '../load-status/container'
+import InvitationToBlock from '../../blocking/invitation-to-block'
+import ListArea from '../list-area'
 import PinnedMessage from '../pinned-message/container'
+import ThreadLoadStatus from '../load-status/container'
 import ThreadSearch from '../search/container'
+import type * as Types from '../../../constants/types/chat2'
+import type {Props} from '.'
+import {readImageFromClipboard} from '../../../util/clipboard.desktop'
+import '../conversation.css'
 
 const Offline = () => (
-  <Kb.Box style={styles.offline}>
-    <Kb.Text type="BodySmallSemibold">
-      Couldn't load all chat messages due to network connectivity. Retrying...
-    </Kb.Text>
-  </Kb.Box>
+  <Kb.Banner color="grey" small={true} style={styles.offline}>
+    Couldn't load all chat messages due to network connectivity. Retrying...
+  </Kb.Banner>
 )
 
+const LoadingLine = (p: {conversationIDKey: Types.ConversationIDKey}) => {
+  const {conversationIDKey} = p
+  const showLoader = Container.useSelector(state =>
+    WaitingConstants.anyWaiting(
+      state,
+      Constants.waitingKeyThreadLoad(conversationIDKey),
+      Constants.waitingKeyInboxSyncStarted
+    )
+  )
+  return showLoader ? <Kb.LoadingLine /> : null
+}
+
 class Conversation extends React.PureComponent<Props> {
-  _mounted = false
-
-  componentWillUnmount() {
-    this._mounted = false
+  private onPaste = (e: React.SyntheticEvent) => {
+    readImageFromClipboard(e)
+      .then(clipboardData => {
+        if (clipboardData) {
+          this.props.onPaste(clipboardData)
+        }
+      })
+      .catch(() => {})
   }
 
-  componentDidMount() {
-    this._mounted = true
-  }
-
-  _onPaste = e => {
-    readImageFromClipboard(e, () => {}).then(clipboardData => {
-      if (clipboardData) {
-        this.props.onPaste(clipboardData)
-      }
-    })
+  private hotKeys = ['mod+f']
+  private onHotKey = () => {
+    this.props.onToggleThreadSearch()
   }
 
   render() {
     return (
-      <Kb.Box className="conversation" style={styles.container} onPaste={this._onPaste}>
-        <Kb.DragAndDrop onAttach={this.props.onAttach}>
+      <Kb.Box className="conversation" style={styles.container} onPaste={this.onPaste}>
+        <Kb.HotKey hotKeys={this.hotKeys} onHotKey={this.onHotKey} />
+        <Kb.DragAndDrop
+          onAttach={this.props.onAttach}
+          fullHeight={true}
+          fullWidth={true}
+          rejectReason={this.props.dragAndDropRejectReason}
+        >
           {this.props.threadLoadedOffline && <Offline />}
           <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.innerContainer}>
             <ListArea
               onFocusInput={this.props.onFocusInput}
-              scrollListDownCounter={this.props.scrollListDownCounter}
-              scrollListToBottomCounter={this.props.scrollListToBottomCounter}
-              scrollListUpCounter={this.props.scrollListUpCounter}
+              requestScrollUpRef={this.props.requestScrollUpRef}
+              requestScrollToBottomRef={this.props.requestScrollToBottomRef}
+              requestScrollDownRef={this.props.requestScrollDownRef}
               conversationIDKey={this.props.conversationIDKey}
             />
-            {!this.props.showThreadSearch && (
-              <PinnedMessage conversationIDKey={this.props.conversationIDKey} />
-            )}
+            <Kb.Box2 direction="vertical" fullWidth={true} style={{left: 0, position: 'absolute', top: 0}}>
+              <ThreadLoadStatus conversationIDKey={this.props.conversationIDKey} />
+              {!this.props.showThreadSearch && (
+                <PinnedMessage conversationIDKey={this.props.conversationIDKey} />
+              )}
+            </Kb.Box2>
             {this.props.showThreadSearch && (
               <ThreadSearch
                 style={styles.threadSearchStyle}
                 conversationIDKey={this.props.conversationIDKey}
               />
             )}
-            <ThreadLoadStatus conversationIDKey={this.props.conversationIDKey} />
-            {this.props.showLoader && <Kb.LoadingLine />}
+            <LoadingLine conversationIDKey={this.props.conversationIDKey} />
           </Kb.Box2>
+          <InvitationToBlock conversationID={this.props.conversationIDKey} />
           <Banner conversationIDKey={this.props.conversationIDKey} />
           <InputArea
             focusInputCounter={this.props.focusInputCounter}
@@ -91,10 +112,7 @@ const styles = Styles.styleSheetCreate(
         position: 'relative',
       },
       offline: {
-        ...Styles.globalStyles.flexBoxCenter,
-        backgroundColor: Styles.globalColors.black_10,
-        flex: 1,
-        maxHeight: Styles.globalMargins.medium,
+        padding: Styles.globalMargins.xxtiny,
       },
       threadSearchStyle: {
         position: 'absolute' as const,

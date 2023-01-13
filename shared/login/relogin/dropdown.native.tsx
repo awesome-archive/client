@@ -1,19 +1,12 @@
 import logger from '../../logger'
-import {
-  Box,
-  Icon,
-  Text,
-  NativeTouchableWithoutFeedback,
-  NativePicker,
-  NativeModal,
-} from '../../common-adapters/mobile.native'
+import * as Kb from '../../common-adapters/mobile.native'
 import * as React from 'react'
 import * as Styles from '../../styles'
-import {isIOS} from '../../constants/platform'
+import type {ConfiguredAccount} from '../../constants/types/config'
 
 type Props = {
-  type: 'Username' | 'General'
-  options: Array<string>
+  type: 'Username'
+  options: Array<ConfiguredAccount>
   onClick: (option: string, index: number) => void
   onPress?: void
   onOther?: () => void
@@ -47,7 +40,6 @@ class Dropdown extends React.Component<Props, State> {
     this.state = {modalVisible: false, value: props.value || pickItemValue}
     this.showingPick = !this.props.value
   }
-
   componentDidUpdate(prevProps: Props) {
     if (this.props.value !== prevProps.value) {
       this.setState({value: this.props.value || pickItemValue})
@@ -64,9 +56,12 @@ class Dropdown extends React.Component<Props, State> {
       } else {
         logger.warn('otherValue selected, yet no onOther handler')
       }
-      this.setState({value: this.props.options[0] || ''})
+      this.setState({value: (this.props.options[0] || {username: ''}).username})
     } else if (this.props.onClick) {
-      this.props.onClick(this.state.value || '', (this.props.options || []).indexOf(this.state.value || ''))
+      this.props.onClick(
+        this.state.value || '',
+        (this.props.options || []).findIndex(u => u.username === this.state.value)
+      )
     }
   }
 
@@ -82,12 +77,8 @@ class Dropdown extends React.Component<Props, State> {
 
   _ensureSelected() {
     if (!this.state.value && this.props.options && this.props.options.length) {
-      this.setState({value: this.props.options[0]})
+      this.setState({value: (this.props.options[0] || {username: ''}).username})
     }
-  }
-
-  _itemStyle() {
-    return this.props.type === 'Username' ? {color: Styles.globalColors.orange} : {}
   }
 
   _label(value: string | null): string {
@@ -97,26 +88,35 @@ class Dropdown extends React.Component<Props, State> {
 
     return (
       {
-        [otherItemValue]: this.props.type === 'Username' ? 'Someone else...' : 'Or something else',
+        [otherItemValue]: 'Someone else...',
         [pickItemValue]: 'Pick an option',
       }[value] || value
     )
   }
 
   _renderLabelAndCaret() {
-    return [
-      <Text center={true} key="text" type="Header" style={{...styles.text, ...this._itemStyle()}}>
-        {this._label(this.state.value)}
-      </Text>,
-      <Icon key="icon" type="iconfont-caret-down" style={styles.icon} sizeType="Tiny" />,
-    ]
+    return (
+      <>
+        <Kb.Text key="text" type="Header" style={styles.orangeText}>
+          {this._label(this.state.value)}
+        </Kb.Text>
+        {Styles.isAndroid ? null : (
+          <Kb.Icon key="icon" type="iconfont-caret-down" style={styles.icon} sizeType="Tiny" />
+        )}
+      </>
+    )
   }
 
   _renderPicker(style: Object, selectOnChange: boolean) {
     const pickItem = this.showingPick
       ? [{key: pickItemValue, label: this._label(pickItemValue), value: pickItemValue}]
       : []
-    const actualItems = (this.props.options || []).map(o => ({key: o, label: o, value: o}))
+
+    const actualItems = (this.props.options || []).map(o => ({
+      key: o.username,
+      label: o.hasStoredSecret ? `${o.username} (Signed in)` : o.username,
+      value: o.username,
+    }))
     const otherItem = this.props.onOther
       ? {key: otherItemValue, label: this._label(otherItemValue), value: otherItemValue}
       : []
@@ -135,11 +135,16 @@ class Dropdown extends React.Component<Props, State> {
     }
 
     return (
-      <NativePicker style={style} selectedValue={this.state.value} onValueChange={onValueChange}>
+      <Kb.NativePicker
+        style={style}
+        selectedValue={this.state.value}
+        onValueChange={onValueChange}
+        itemStyle={styles.item}
+      >
         {items.map(i => (
-          <NativePicker.Item key={i.label} {...i} />
+          <Kb.NativePicker.Item {...i} key={i.label} />
         ))}
-      </NativePicker>
+      </Kb.NativePicker>
     )
   }
 
@@ -149,38 +154,38 @@ class Dropdown extends React.Component<Props, State> {
     // everything else.
     // TODO: Clean this up to be less tricky
     return (
-      <Box style={{...styles.container, ...this.props.style}}>
+      <Kb.Box style={{...styles.container, ...this.props.style}}>
         {this._renderLabelAndCaret()}
         {this._renderPicker(styles.pickerAndroid, true)}
-      </Box>
+      </Kb.Box>
     )
   }
 
   _renderIOS() {
     return (
-      <NativeTouchableWithoutFeedback onPress={() => this._showModal(true)}>
-        <Box style={{...styles.container, ...this.props.style}}>
-          <NativeModal
+      <Kb.NativeTouchableWithoutFeedback onPress={() => this._showModal(true)}>
+        <Kb.Box style={{...styles.container, ...this.props.style}}>
+          <Kb.NativeModal
             animationType="slide"
             transparent={true}
             visible={this.state.modalVisible}
             onRequestClose={() => this._showModal(false)}
           >
-            <Box style={styles.pickerContainer}>
-              <NativeTouchableWithoutFeedback onPress={() => this._showModal(false)}>
-                <Box style={{flex: 1}} />
-              </NativeTouchableWithoutFeedback>
+            <Kb.Box style={styles.pickerContainer}>
+              <Kb.NativeTouchableWithoutFeedback onPress={() => this._showModal(false)}>
+                <Kb.Box style={{flex: 1}} />
+              </Kb.NativeTouchableWithoutFeedback>
               {this._renderPicker(styles.pickerIOS, false)}
-            </Box>
-          </NativeModal>
+            </Kb.Box>
+          </Kb.NativeModal>
           {this._renderLabelAndCaret()}
-        </Box>
-      </NativeTouchableWithoutFeedback>
+        </Kb.Box>
+      </Kb.NativeTouchableWithoutFeedback>
     )
   }
 
   render() {
-    return isIOS ? this._renderIOS() : this._renderAndroid()
+    return Styles.isIOS ? this._renderIOS() : this._renderAndroid()
   }
 }
 
@@ -190,14 +195,21 @@ const styles = Styles.styleSheetCreate(
       container: {
         ...Styles.globalStyles.flexBoxRow,
         alignItems: 'center',
+        backgroundColor: Styles.globalColors.white,
         borderColor: Styles.globalColors.black_10,
         borderRadius: Styles.borderRadius,
         borderWidth: 1,
-        height: 40,
-        paddingLeft: 17,
-        paddingRight: 17,
+        height: 48,
+        paddingLeft: Styles.globalMargins.small,
+        paddingRight: Styles.globalMargins.small,
       },
       icon: {width: 10},
+      item: {color: Styles.globalColors.black},
+      orangeText: {
+        color: Styles.globalColors.orange,
+        flex: 1,
+        lineHeight: 28,
+      },
       pickerAndroid: {
         backgroundColor: Styles.globalColors.transparent,
         bottom: 0,
@@ -208,12 +220,11 @@ const styles = Styles.styleSheetCreate(
         top: 0,
       },
       pickerContainer: {
-        backgroundColor: Styles.globalColors.black_50,
+        backgroundColor: Styles.globalColors.black_50OrBlack_60,
         flex: 1,
         justifyContent: 'flex-end',
       },
       pickerIOS: {backgroundColor: Styles.globalColors.white},
-      text: {flex: 1},
     } as const)
 )
 

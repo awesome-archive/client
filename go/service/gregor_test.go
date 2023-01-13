@@ -292,8 +292,8 @@ func (m mockGregord) Sync(ctx context.Context, arg gregor1.SyncArg) (gregor1.Syn
 		return res, err
 	}
 	for _, msg := range msgs {
-		if msg, ok := msg.(gregor1.InBandMessage); ok {
-			res.Msgs = append(res.Msgs, msg)
+		if ibm, ok := msg.(gregor1.InBandMessage); ok {
+			res.Msgs = append(res.Msgs, ibm)
 		} else {
 			m.log.Warning("Bad cast in serveSync (type=%T): %+v", msg)
 		}
@@ -317,7 +317,7 @@ func (m mockGregord) ConsumePublishMessage(_ context.Context, _ gregor1.Message)
 	return errors.New("unimplemented")
 }
 func (m mockGregord) Ping(_ context.Context) (string, error) {
-	return "pong", nil
+	return "", nil
 }
 func (m mockGregord) State(ctx context.Context, arg gregor1.StateArg) (gregor1.State, error) {
 	state, err := m.sm.State(ctx, arg.Uid, arg.Deviceid, arg.TimeOrOffset)
@@ -469,7 +469,7 @@ func TestSyncFresh(t *testing.T) {
 	h, server, uid := setupSyncTests(t, g)
 	defer h.Shutdown()
 
-	//Consume a bunch of messages to the server, and we'll sync them down
+	// Consume a bunch of messages to the server, and we'll sync them down
 	const numMsgs = 20
 	var refMsgs []gregor.InBandMessage
 	for i := 0; i < numMsgs; i++ {
@@ -494,7 +494,7 @@ func TestSyncNonFresh(t *testing.T) {
 	h, server, uid := setupSyncTests(t, g)
 	defer h.Shutdown()
 
-	//Consume a bunch of messages to the server, and we'll sync them down
+	// Consume a bunch of messages to the server, and we'll sync them down
 	const numMsgs = 6
 	const msgLimit = numMsgs / 2
 	var refMsgs []gregor.InBandMessage
@@ -533,7 +533,7 @@ func TestSyncSaveRestoreFresh(t *testing.T) {
 	h, server, uid := setupSyncTests(t, g)
 	defer h.Shutdown()
 
-	//Consume a bunch of messages to the server, and we'll sync them down
+	// Consume a bunch of messages to the server, and we'll sync them down
 	const numMsgs = 6
 	const msgLimit = numMsgs / 2
 	var refReplayMsgs, refConsumeMsgs []gregor.InBandMessage
@@ -583,7 +583,7 @@ func TestSyncSaveRestoreNonFresh(t *testing.T) {
 	h, server, uid := setupSyncTests(t, g)
 	defer h.Shutdown()
 
-	//Consume a bunch of messages to the server, and we'll sync them down
+	// Consume a bunch of messages to the server, and we'll sync them down
 	const numMsgs = 6
 	const msgLimit = numMsgs / 2
 	var refReplayMsgs, refConsumeMsgs []gregor.InBandMessage
@@ -775,7 +775,7 @@ func TestGregorTeamBadges(t *testing.T) {
 	fakeUID := keybase1.MakeTestUID(1)
 	msg := server.newIbm2(uid, gregor1.Category("team.newly_added_to_team"), gregor1.Body([]byte(`[{"id": "`+teamID+`","name": "teamname"}]`)))
 	require.NoError(t, server.ConsumeMessage(context.TODO(), msg))
-	msg = server.newIbm2(uid, gregor1.Category("team.request_access"), gregor1.Body([]byte(`[{"id": "`+teamID+`","name": "teamname"}]`)))
+	msg = server.newIbm2(uid, gregor1.Category("team.request_access:"+teamID), gregor1.Body([]byte(`{"id": "`+teamID+`","username": "username"}`)))
 	require.NoError(t, server.ConsumeMessage(context.TODO(), msg))
 	msg = server.newIbm2(uid, gregor1.Category("team.member_out_from_reset"), gregor1.Body([]byte(`{"reset_user": {"uid":"`+fakeUID.String()+`","username":"alice"},"team_name": "teamname"}`)))
 	require.NoError(t, server.ConsumeMessage(context.TODO(), msg))
@@ -793,10 +793,9 @@ func TestGregorTeamBadges(t *testing.T) {
 
 	listener.getBadgeState(t) // skip one since resync sends 2
 	bs := listener.getBadgeState(t)
-	require.Equal(t, 1, len(bs.NewTeamNames), "one new team name")
-	require.Equal(t, "teamname", bs.NewTeamNames[0])
-	require.Equal(t, 1, len(bs.NewTeamAccessRequests), "one team access request")
-	require.Equal(t, "teamname", bs.NewTeamAccessRequests[0])
+	require.Equal(t, 1, len(bs.NewTeams), "one new team name")
+	require.Equal(t, teamID, bs.NewTeams[0])
+	require.Equal(t, 1, bs.NewTeamAccessRequestCount, "one team access request")
 	require.Equal(t, 1, len(bs.TeamsWithResetUsers), "one team member out due to reset")
 	require.Equal(t, "teamname", bs.TeamsWithResetUsers[0].Teamname)
 	require.Equal(t, "alice", bs.TeamsWithResetUsers[0].Username)
@@ -844,7 +843,7 @@ func TestGregorBadgesOOBM(t *testing.T) {
 			{ConvID: chat1.ConversationID(`c`), UnreadMessages: 3},
 		},
 		InboxSyncStatus: chat1.SyncInboxResType_CLEAR,
-	})
+	}, false)
 	err := h.badger.Send(context.TODO())
 	require.NoError(t, err)
 	bs = listener.getBadgeState(t)

@@ -24,12 +24,12 @@ function notify_slack {
 trap notify_slack ERR
 
 # Reset on exit
-kbfs_branch=`cd "$kbfs_dir" && git rev-parse --abbrev-ref HEAD`
-client_branch=`cd "$client_dir" && git rev-parse --abbrev-ref HEAD`
+kbfs_branch=$(cd "$kbfs_dir" && git rev-parse --abbrev-ref HEAD)
+client_branch=$(cd "$client_dir" && git rev-parse --abbrev-ref HEAD)
 rn_packager_pid=""
 function reset {
-  (cd "$kbfs_dir" && git checkout $kbfs_branch)
-  (cd "$client_dir" && git checkout $client_branch)
+  (cd "$kbfs_dir" && git checkout "$kbfs_branch")
+  (cd "$client_dir" && git checkout "$client_branch")
   (cd "$client_dir" && git checkout shared/ios/)
 
   if [ ! "$rn_packager_pid" = "" ]; then
@@ -43,6 +43,7 @@ if [ -n "$kbfs_commit" ]; then
   cd "$kbfs_dir"
   echo "Checking out $kbfs_commit on kbfs (will reset to $kbfs_branch)"
   git fetch
+  git reset --hard
   git clean -f
   git checkout "$kbfs_commit"
   # tell gobuild.sh (called via "yarn run rn-gobuild-ios" below) to use our local commit
@@ -57,6 +58,7 @@ if [ -n "$client_commit" ]; then
   cd "$client_dir"
   echo "Checking out $client_commit on client (will reset to $client_branch)"
   git fetch
+  git reset --hard
   git clean -f
   git checkout "$client_commit"
 else
@@ -69,14 +71,16 @@ git log -n 3
 
 cd "$shared_dir"
 
-if [ ! "$cache_npm" = "1" ]; then
-  echo "Cleaning up main node_modules from previous runs"
-  rm -rf "$shared_dir/node_modules"
+echo "Cleaning up main node_modules from previous runs"
+rm -rf node_modules
+yarn modules
+echo "Ensuring correct"
+yarn --check-files
 
-  yarn install --frozen-lockfile --prefer-offline
-  yarn global add react-native-cli
-fi
-
+echo "Cocoapods"
+cd ios
+pod install --repo-update
+cd ..
 
 if [ ! "$cache_go_lib" = "1" ]; then
   echo "Building Go library"

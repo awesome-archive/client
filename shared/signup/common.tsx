@@ -2,63 +2,56 @@ import * as React from 'react'
 import * as Container from '../util/container'
 import * as Kb from '../common-adapters'
 import * as RouteTreeGen from '../actions/route-tree-gen'
-import {Props as ButtonProps} from '../common-adapters/button'
+import {type Props as ButtonProps} from '../common-adapters/button'
 import openURL from '../util/open-url'
 import * as Styles from '../styles'
 
 type InfoIconProps = {
   invisible?: boolean
-  onDocumentation: () => void
-  onFeedback: () => void
   style?: Styles.StylesCrossPlatform
 }
 
-type InfoIconOwnProps = {
-  invisible?: boolean
-  onDocumentation?: () => void
-  onFeedback?: () => void
-}
+export const InfoIcon = (props: InfoIconProps) => {
+  const loggedIn = Container.useSelector(state => state.config.loggedIn)
+  const dispatch = Container.useDispatch()
+  const onDocumentation = () => openURL('https://book.keybase.io/docs')
+  const onFeedback = () => {
+    dispatch(
+      RouteTreeGen.createNavigateAppend({
+        path: [loggedIn ? 'signupSendFeedbackLoggedIn' : 'signupSendFeedbackLoggedOut'],
+      })
+    )
+  }
 
-const _InfoIcon = (props: Kb.PropsWithOverlay<InfoIconProps>) => (
-  <>
-    <Kb.Icon
-      type="iconfont-question-mark"
-      onClick={props.invisible ? undefined : props.toggleShowingMenu}
-      ref={props.setAttachmentRef}
-      style={Styles.collapseStyles([props.invisible && styles.opacityNone, props.style])}
-    />
+  const {showingPopup, toggleShowingPopup, popup, popupAnchor} = Kb.usePopup(attachTo => (
     <Kb.FloatingMenu
       items={[
-        {onClick: () => props.onFeedback(), title: 'Send feedback'},
-        {onClick: props.onDocumentation, title: 'Documentation'},
+        {onClick: onFeedback, title: 'Send feedback'},
+        {onClick: onDocumentation, title: 'Documentation'},
       ]}
-      attachTo={props.getAttachmentRef}
-      visible={props.showingMenu}
-      onHidden={props.toggleShowingMenu}
+      attachTo={attachTo}
+      visible={showingPopup}
+      onHidden={toggleShowingPopup}
       closeOnSelect={true}
     />
-  </>
-)
+  ))
 
-export const InfoIcon = Container.namedConnect(
-  state => ({_loggedIn: state.config.loggedIn}),
-  dispatch => ({
-    _onFeedback: (loggedIn: boolean) => {
-      dispatch(
-        RouteTreeGen.createNavigateAppend({
-          path: [loggedIn ? 'signupSendFeedbackLoggedIn' : 'signupSendFeedbackLoggedOut'],
-        })
-      )
-    },
-    onDocumentation: () => openURL('https://keybase.io/docs'),
-  }),
-  (s, d, o: InfoIconOwnProps) => ({
-    ...o,
-    onDocumentation: d.onDocumentation,
-    onFeedback: () => d._onFeedback(s._loggedIn),
-  }),
-  'SignupInfoIcon'
-)(Kb.OverlayParentHOC(_InfoIcon))
+  return (
+    <>
+      <Kb.Icon
+        type="iconfont-question-mark"
+        onClick={props.invisible ? undefined : toggleShowingPopup}
+        ref={popupAnchor as any}
+        style={Styles.collapseStyles([
+          Styles.desktopStyles.windowDraggingClickable,
+          props.invisible && styles.opacityNone,
+          props.style,
+        ] as any)}
+      />
+      {popup}
+    </>
+  )
+}
 
 type HeaderProps = {
   onBack?: (() => void) | null
@@ -69,6 +62,8 @@ type HeaderProps = {
   style: Styles.StylesCrossPlatform
   negative: boolean
   rightActionComponent?: React.ReactNode
+  rightActionLabel?: string
+  onRightAction?: (() => void) | null
 }
 
 // Only used on desktop
@@ -80,7 +75,7 @@ const Header = (props: HeaderProps) => (
   >
     {(props.showInfoIcon || props.showInfoIconRow) && (
       <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.infoIconContainer}>
-        <InfoIcon invisible={(props.negative as boolean) || (props.showInfoIconRow && !props.showInfoIcon)} />
+        <InfoIcon invisible={props.negative || (props.showInfoIconRow && !props.showInfoIcon)} />
       </Kb.Box2>
     )}
     <Kb.Box2 direction="horizontal" centerChildren={true} style={styles.titleContainer} fullWidth={true}>
@@ -104,6 +99,16 @@ const Header = (props: HeaderProps) => (
         </Kb.ClickableBox>
       )}
       {props.titleComponent || <Kb.Text type="Header">{props.title}</Kb.Text>}
+      {props.onRightAction && !!props.rightActionLabel && (
+        <Kb.Button
+          type="Default"
+          mode="Secondary"
+          small={true}
+          label={props.rightActionLabel}
+          onClick={props.onRightAction}
+          style={styles.rightActionButton}
+        />
+      )}
       {props.rightActionComponent && (
         <Kb.Box2 direction="horizontal" style={styles.rightAction}>
           {props.rightActionComponent}
@@ -119,6 +124,7 @@ type ButtonMeta = {
   onClick: () => void
   type?: ButtonProps['type']
   waiting?: boolean
+  waitingKey?: string | null // makes this a WaitingButton
 }
 
 type SignupScreenProps = {
@@ -146,7 +152,13 @@ type SignupScreenProps = {
 
 // Screens with header + body bg color (i.e. all but join-or-login)
 export const SignupScreen = (props: SignupScreenProps) => (
-  <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} alignItems="center">
+  <Kb.Box2
+    direction="vertical"
+    fullWidth={true}
+    fullHeight={true}
+    alignItems="center"
+    style={styles.whiteBackground}
+  >
     {!Styles.isMobile && (
       <Header
         onBack={props.onBack}
@@ -157,12 +169,14 @@ export const SignupScreen = (props: SignupScreenProps) => (
         style={Styles.collapseStyles([props.noBackground && styles.whiteHeaderContainer, props.headerStyle])}
         negative={!!props.negativeHeader}
         rightActionComponent={props.rightActionComponent}
+        rightActionLabel={props.rightActionLabel}
+        onRightAction={props.onRightAction}
       />
     )}
     {Styles.isMobile && !props.skipMobileHeader && (
       <Kb.ModalHeader
         leftButton={
-          props.leftAction ? (
+          props.leftAction && props.onBack ? (
             <Kb.Text type="BodyBigLink" onClick={props.onBack}>
               {props.leftActionText || props.leftAction}
             </Kb.Text>
@@ -201,10 +215,26 @@ export const SignupScreen = (props: SignupScreenProps) => (
       {/* Banners after children so they go on top */}
       {!!props.banners && <Kb.Box2 direction="vertical" style={styles.banners} children={props.banners} />}
       {!!props.buttons && (
-        <Kb.ButtonBar direction="column" fullWidth={Styles.isMobile} style={styles.buttonBar}>
-          {props.buttons.map(b => (
-            <Kb.Button key={b.label} style={styles.button} {...b} fullWidth={true} />
-          ))}
+        <Kb.ButtonBar
+          direction="column"
+          fullWidth={Styles.isMobile && !Styles.isTablet}
+          style={styles.buttonBar}
+        >
+          {props.buttons.map(b =>
+            b.waitingKey !== undefined ? (
+              <Kb.WaitingButton
+                key={b.label}
+                style={styles.button}
+                {...b}
+                // TS doesn't narrow the type inside ButtonMeta, so still thinks
+                // waitingKey can be undefined unless we pull it out
+                waitingKey={b.waitingKey}
+                fullWidth={true}
+              />
+            ) : (
+              <Kb.Button key={b.label} style={styles.button} {...b} fullWidth={true} />
+            )
+          )}
         </Kb.ButtonBar>
       )}
     </Kb.Box2>
@@ -264,6 +294,9 @@ const styles = Styles.styleSheetCreate(
           height: 40,
           width: '100%',
         },
+        isTablet: {
+          maxWidth: 368,
+        },
       }),
       buttonBar: Styles.platformStyles({
         isElectron: {
@@ -287,16 +320,27 @@ const styles = Styles.styleSheetCreate(
       opacityNone: {
         opacity: 0,
       },
-      rightAction: {
-        alignItems: 'center',
-        alignSelf: 'flex-end',
-        bottom: 0,
-        justifyContent: 'center',
-        paddingRight: Styles.globalMargins.small,
-        position: 'absolute',
-        right: 0,
-        top: 0,
-      },
+      rightAction: Styles.platformStyles({
+        common: {
+          alignItems: 'center',
+          alignSelf: 'flex-end',
+          bottom: 0,
+          justifyContent: 'center',
+          paddingRight: Styles.globalMargins.small,
+          position: 'absolute',
+          right: 0,
+          top: 0,
+        },
+        isElectron: Styles.desktopStyles.windowDraggingClickable,
+      }),
+      rightActionButton: Styles.platformStyles({
+        common: {
+          position: 'absolute',
+          right: Styles.globalMargins.small,
+          top: 10,
+        },
+        isElectron: Styles.desktopStyles.windowDraggingClickable,
+      }),
       titleContainer: {
         ...Styles.padding(Styles.globalMargins.xsmall, 0, Styles.globalMargins.small),
         position: 'relative',

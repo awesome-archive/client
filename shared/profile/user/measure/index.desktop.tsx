@@ -1,14 +1,9 @@
 import * as React from 'react'
 import * as Styles from '../../../styles'
 import Rm from 'react-measure'
-import {Props} from '.'
+import type {Props} from '.'
 
-class Measure extends React.Component<
-  Props,
-  {
-    width: number
-  }
-> {
+class Measure extends React.Component<Props, {width: number}> {
   _width = 0
   _onResize = contentRect => {
     if (this._width !== contentRect.bounds.width) {

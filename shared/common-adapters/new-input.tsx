@@ -1,8 +1,8 @@
 import * as React from 'react'
-import PlainInput, {PropsWithInput} from './plain-input'
+import PlainInput, {type PropsWithInput} from './plain-input'
 import Box, {Box2} from './box'
-import Icon, {IconType, castPlatformStyles} from './icon'
-import {getStyle as getTextStyle} from './text'
+import Icon, {type IconType} from './icon'
+import Text, {getStyle as getTextStyle} from './text'
 import * as Styles from '../styles'
 import './input.css'
 
@@ -12,7 +12,7 @@ export type _Props = {
   error?: boolean
   hideBorder?: boolean
   icon?: IconType
-  dummyInput?: boolean
+  prefix?: string
 }
 
 type Props = PropsWithInput<_Props>
@@ -35,6 +35,9 @@ class ReflessNewInput extends React.Component<Props & RefProps, State> {
   }
 
   _onFocus = () => {
+    if (this.props.disabled) {
+      return
+    }
     this.setState({focused: true})
     this.props.onFocus && this.props.onFocus()
   }
@@ -46,7 +49,11 @@ class ReflessNewInput extends React.Component<Props & RefProps, State> {
 
   render() {
     const textStyle = getTextStyle(this.props.textType || 'BodySemibold')
-    const {containerStyle, decoration, error, forwardedRef, hideBorder, icon, ...plainInputProps} = this.props
+    // prettier-ignore
+    const {containerStyle, decoration, error, forwardedRef, hideBorder, icon, prefix, ...plainInputProps} = this.props
+    const plainInputStyle = prefix
+      ? Styles.collapseStyles([styles.prefixInput, plainInputProps.style])
+      : plainInputProps.style
     return (
       <Box2
         direction="horizontal"
@@ -64,24 +71,30 @@ class ReflessNewInput extends React.Component<Props & RefProps, State> {
               color={Styles.globalColors.black_20} // not sure how to make this dynamic
               type={this.props.icon}
               fontSize={textStyle.fontSize}
-              style={castPlatformStyles(styles.displayFlex)}
+              style={styles.displayFlex}
             />
           </Box>
+        )}
+        {!!prefix && (
+          <Text type={plainInputProps.textType || PlainInput.defaultProps.textType} style={styles.prefix}>
+            {prefix}
+          </Text>
         )}
         <PlainInput
           {...plainInputProps}
           onFocus={this._onFocus}
           onBlur={this._onBlur}
           ref={this.props.forwardedRef}
+          style={plainInputStyle}
         />
         {this.props.decoration}
       </Box2>
     )
   }
 }
-const NewInput = React.forwardRef<PlainInput, Props>((props, ref) => (
-  <ReflessNewInput {...props} forwardedRef={ref} />
-))
+const NewInput = React.forwardRef<PlainInput, Props>(function NewInputInner(props, ref) {
+  return <ReflessNewInput {...props} forwardedRef={ref} />
+})
 
 const styles = Styles.styleSheetCreate(
   () =>
@@ -114,6 +127,8 @@ const styles = Styles.styleSheetCreate(
       icon: {
         marginRight: Styles.globalMargins.xtiny,
       },
+      prefix: Styles.platformStyles({isMobile: {alignSelf: 'flex-end'}}),
+      prefixInput: {padding: 0},
     } as const)
 )
 

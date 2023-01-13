@@ -24,7 +24,8 @@ autorestart_enabled() {
 }
 
 make_mountpoint() {
-  if redirector_enabled ; then
+  local_is_redirector_enabled="$1"
+  if [ -n "$local_is_redirector_enabled" ]; then
     if ! mountpoint "$rootmount" &> /dev/null; then
       mkdir -p "$rootmount"
       chown root:root "$rootmount"
@@ -67,11 +68,15 @@ systemd_unit_active_for() {
     command -v systemctl &> /dev/null && systemd_exec_as "$user" "systemctl --user -q is-active $service"
 }
 
+SYSTEMD_RESTARTED_REDIRECTOR=
 systemd_restart_if_active() {
     user=$1
     service=$2
     if systemd_unit_active_for "$user" "$service"; then
         systemd_exec_as "$user" "systemctl --user restart $service"
+        if [ "$service" = "keybase-redirector.service" ]; then
+            SYSTEMD_RESTARTED_REDIRECTOR=1
+        fi
     fi
 }
 
@@ -166,13 +171,36 @@ fix_bad_config_perms() {
     fi
 }
 
-if redirector_enabled ; then
+fix_bad_config_perms
+
+# Associate Keybase with .saltpack files.
+if command -v update-mime-database &> /dev/null ; then
+  update-mime-database /usr/share/mime
+fi
+
+# Update the GTK icon cache, if possible.
+if command -v gtk-update-icon-cache &> /dev/null ; then
+  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor
+fi
+
+is_redirector_enabled=""
+if redirector_enabled; then
+    is_redirector_enabled="1"
+fi
+
+# Set suid on redirector before we restart it, in case package manager reverted
+# permissions.
+if [ -n "$is_redirector_enabled" ]; then
   chown root:root "$krbin"
   chmod 4755 "$krbin"
 else
   # Turn off suid if root has been turned off.
   chmod a-s "$krbin"
 fi
+
+# Restart services before restarting redirector manually
+# so we know if it was already restarted via systemd.
+safe_restart_systemd_services
 
 currlink="$(readlink "$rootmount")"
 if [ -n "$currlink" ] ; then
@@ -198,10 +226,12 @@ elif [ -d "$rootmount" ] ; then
         fi
         rmdir "$rootmount"
         echo You must run run_keybase to restore file system access.
-    elif ! redirector_enabled ; then
+    elif [ -z "$is_redirector_enabled" ]; then
         if killall "$(basename "$krbin")" &> /dev/null ; then
             echo "Stopping existing root redirector."
         fi
+    elif [ -n "$SYSTEMD_RESTARTED_REDIRECTOR" ]; then
+        echo "Restarted existing root redirector via systemd."
     elif killall -USR1 "$(basename "$krbin")" &> /dev/null ; then
         echo "Restarting existing root redirector."
         # If the redirector is still owned by root, that probably
@@ -246,14 +276,5 @@ elif [ -d "$rootmount" ] ; then
     fi
 fi
 
-fix_bad_config_perms
-
 # Make the mountpoint if it doesn't already exist by this point.
-make_mountpoint
-
-# Update the GTK icon cache, if possible.
-if command -v gtk-update-icon-cache &> /dev/null ; then
-  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor
-fi
-
-safe_restart_systemd_services
+make_mountpoint "$is_redirector_enabled"

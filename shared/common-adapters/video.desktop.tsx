@@ -1,6 +1,6 @@
 import * as React from 'react'
 import Measure from 'react-measure'
-import {Props, State} from './video'
+import type {Props, State} from './video'
 import * as Styles from '../styles'
 import {getVideoSize, CheckURL} from './video.shared'
 
@@ -43,8 +43,9 @@ export default class extends React.PureComponent<Props, State> {
   }
 
   render() {
+    const {onUrlError} = this.props
     return (
-      <CheckURL url={this.props.url}>
+      <CheckURL url={this.props.url} allowFile={this.props.allowFile}>
         <Measure bounds={true} onResize={this._onContainerResize}>
           {({measureRef}) => (
             <div ref={measureRef} style={Styles.collapseStyles([styles.container, this.props.style])}>
@@ -59,6 +60,7 @@ export default class extends React.PureComponent<Props, State> {
                 autoPlay={true}
                 preload="metadata"
                 onLoadedMetadata={this._onVideoLoadedmetadata}
+                onError={onUrlError && (() => onUrlError('video loading error'))}
               />
             </div>
           )}

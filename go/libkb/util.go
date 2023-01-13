@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/big"
 	"net/url"
@@ -24,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -38,6 +38,7 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/clockwork"
 	"github.com/keybase/go-codec/codec"
+	jsonw "github.com/keybase/go-jsonw"
 	"golang.org/x/net/context"
 )
 
@@ -54,11 +55,18 @@ func VersionString() string {
 	return Version
 }
 
+func ErrToOkPtr(err *error) string {
+	if err == nil {
+		return "ok"
+	}
+	return ErrToOk(*err)
+}
+
 func ErrToOk(err error) string {
 	if err == nil {
 		return "ok"
 	}
-	return "ERROR: " + err.Error()
+	return fmt.Sprintf("ERROR: %v", err)
 }
 
 // exists returns whether the given file or directory exists or not
@@ -106,7 +114,7 @@ func FormatTime(tm time.Time) string {
 }
 
 func Cicmp(s1, s2 string) bool {
-	return strings.ToLower(s1) == strings.ToLower(s2)
+	return strings.EqualFold(s1, s2)
 }
 
 func TrimCicmp(s1, s2 string) bool {
@@ -147,13 +155,21 @@ func PickFirstError(errors ...error) error {
 }
 
 type FirstErrorPicker struct {
-	e error
+	e     error
+	count int
 }
 
 func (p *FirstErrorPicker) Push(e error) {
-	if e != nil && p.e == nil {
-		p.e = e
+	if e != nil {
+		p.count++
+		if p.e == nil {
+			p.e = e
+		}
 	}
+}
+
+func (p *FirstErrorPicker) Count() int {
+	return p.count
 }
 
 func (p *FirstErrorPicker) Error() error {
@@ -256,9 +272,10 @@ func safeWriteToFileOnce(g SafeWriteLogger, t SafeWriter, mode os.FileMode) (err
 
 // Pluralize returns pluralized string with value.
 // For example,
-//   Pluralize(1, "zebra", "zebras", true) => "1 zebra"
-//   Pluralize(2, "zebra", "zebras", true) => "2 zebras"
-//   Pluralize(2, "zebra", "zebras", false) => "zebras"
+//
+//	Pluralize(1, "zebra", "zebras", true) => "1 zebra"
+//	Pluralize(2, "zebra", "zebras", true) => "2 zebras"
+//	Pluralize(2, "zebra", "zebras", false) => "zebras"
 func Pluralize(n int, singular string, plural string, nshow bool) string {
 	if n == 1 {
 		if nshow {
@@ -322,6 +339,29 @@ func IsPossiblePhoneNumber(phone keybase1.PhoneNumber) error {
 	}
 	return nil
 }
+
+type Random interface {
+	// RndRange returns a uniformly random integer between low and high inclusive
+	RndRange(low, high int64) (res int64, err error)
+}
+
+// SecureRandom internally uses the cryptographically secure crypto/rand as a
+// source of randomness.
+type SecureRandom struct{}
+
+func (r *SecureRandom) RndRange(low, high int64) (res int64, err error) {
+	if low > high {
+		return 0, fmt.Errorf("SecureRandom error: [%v,%v] is not a valid range", low, high)
+	}
+	rangeBig := big.NewInt(high - low + 1)
+	big, err := rand.Int(rand.Reader, rangeBig)
+	if err != nil {
+		return 0, err
+	}
+	return low + big.Int64(), nil
+}
+
+var _ Random = (*SecureRandom)(nil)
 
 func RandBytes(length int) ([]byte, error) {
 	var n int
@@ -489,93 +529,42 @@ func RandHexString(prefix string, numbytes int) (string, error) {
 	return prefix + str, nil
 }
 
-func Trace(log logger.Logger, msg string, f func() error) func() {
-	log = log.CloneWithAddedDepth(1)
-	log.Debug("+ %s", msg)
-	return func() { log.Debug("- %s -> %s", msg, ErrToOk(f())) }
-}
-
-func TraceTimed(log logger.Logger, msg string, f func() error) func() {
+func Trace(log logger.Logger, msg string, err *error) func() {
 	log = log.CloneWithAddedDepth(1)
 	log.Debug("+ %s", msg)
 	start := time.Now()
-	return func() { log.Debug("- %s -> %s [time=%s]", msg, ErrToOk(f()), time.Since(start)) }
+	return func() { log.Debug("- %s -> %s [time=%s]", msg, ErrToOkPtr(err), time.Since(start)) }
 }
 
-func CTrace(ctx context.Context, log logger.Logger, msg string, f func() error) func() {
-	log = log.CloneWithAddedDepth(1)
-	log.CDebugf(ctx, "+ %s", msg)
-	return func() {
-		err := f()
-		if err != nil {
-			log.CDebugf(ctx, "- %s -> %v %T", msg, err, err)
-		} else {
-			log.CDebugf(ctx, "- %s -> ok", msg)
-		}
-	}
-}
-
-func CTraceString(ctx context.Context, log logger.Logger, msg string, f func() string) func() {
-	log = log.CloneWithAddedDepth(1)
-	log.CDebugf(ctx, "+ %s", msg)
-	return func() {
-		log.CDebugf(ctx, "- %s -> %s", msg, f())
-	}
-}
-
-func CTraceTimed(ctx context.Context, log logger.Logger, msg string, f func() error, cl clockwork.Clock) func() {
+func CTrace(ctx context.Context, log logger.Logger, msg string, err *error, cl clockwork.Clock) func() {
 	log = log.CloneWithAddedDepth(1)
 	log.CDebugf(ctx, "+ %s", msg)
 	start := cl.Now()
 	return func() {
-		err := f()
-		if err != nil {
-			log.CDebugf(ctx, "- %s -> %v %T [time=%s]", msg, err, err, cl.Since(start))
+		if err != nil && *err != nil {
+			log.CDebugf(ctx, "- %s -> %v %T [time=%s]", msg, *err, err, cl.Since(start))
 		} else {
 			log.CDebugf(ctx, "- %s -> ok [time=%s]", msg, cl.Since(start))
 		}
 	}
 }
 
-func TraceOK(log logger.Logger, msg string, f func() bool) func() {
-	log = log.CloneWithAddedDepth(1)
-	log.Debug("+ %s", msg)
-	return func() { log.Debug("- %s -> %v", msg, f()) }
+func (g *GlobalContext) Trace(msg string, err *error) func() {
+	return Trace(g.Log.CloneWithAddedDepth(1), msg, err)
+}
+func (g *GlobalContext) CTrace(ctx context.Context, msg string, err *error) func() {
+	return CTrace(ctx, g.Log.CloneWithAddedDepth(1), msg, err, g.Clock())
+}
+func (g *GlobalContext) CPerfTrace(ctx context.Context, msg string, err *error) func() {
+	return CTrace(ctx, g.PerfLog, msg, err, g.Clock())
 }
 
-func CTraceOK(ctx context.Context, log logger.Logger, msg string, f func() bool) func() {
-	log = log.CloneWithAddedDepth(1)
-	log.CDebugf(ctx, "+ %s", msg)
-	return func() { log.CDebugf(ctx, "- %s -> %v", msg, f()) }
-}
-
-func (g *GlobalContext) Trace(msg string, f func() error) func() {
-	return Trace(g.Log.CloneWithAddedDepth(1), msg, f)
-}
-
-func (g *GlobalContext) ExitTrace(msg string, f func() error) func() {
-	return func() { g.Log.CloneWithAddedDepth(1).Debug("| %s -> %s", msg, ErrToOk(f())) }
-}
-
-func (g *GlobalContext) CTrace(ctx context.Context, msg string, f func() error) func() {
-	return CTrace(ctx, g.Log.CloneWithAddedDepth(1), msg, f)
-}
-
-func (g *GlobalContext) CTraceTimed(ctx context.Context, msg string, f func() error) func() {
-	return CTraceTimed(ctx, g.Log.CloneWithAddedDepth(1), msg, f, g.Clock())
-}
-
-func (g *GlobalContext) CVTrace(ctx context.Context, lev VDebugLevel, msg string, f func() error) func() {
-	g.VDL.CLogf(ctx, lev, "+ %s", msg)
-	return func() { g.VDL.CLogf(ctx, lev, "- %s -> %v", msg, ErrToOk(f())) }
-}
-
-func (g *GlobalContext) CVTraceTimed(ctx context.Context, lev VDebugLevel, msg string, f func() error) func() {
+func (g *GlobalContext) CVTrace(ctx context.Context, lev VDebugLevel, msg string, err *error) func() {
 	cl := g.Clock()
 	g.VDL.CLogf(ctx, lev, "+ %s", msg)
 	start := cl.Now()
 	return func() {
-		g.VDL.CLogf(ctx, lev, "- %s -> %v [time=%s]", msg, f(), cl.Since(start))
+		g.VDL.CLogf(ctx, lev, "- %s -> %v [time=%s]", msg, ErrToOkPtr(err), cl.Since(start))
 	}
 }
 
@@ -588,24 +577,6 @@ func (g *GlobalContext) CTimeTracer(ctx context.Context, label string, enabled b
 
 func (g *GlobalContext) CTimeBuckets(ctx context.Context) (context.Context, *profiling.TimeBuckets) {
 	return profiling.WithTimeBuckets(ctx, g.Clock(), g.Log)
-}
-
-func (g *GlobalContext) ExitTraceOK(msg string, f func() bool) func() {
-	return func() { g.Log.Debug("| %s -> %v", msg, f()) }
-}
-
-func (g *GlobalContext) TraceOK(msg string, f func() bool) func() {
-	return TraceOK(g.Log.CloneWithAddedDepth(1), msg, f)
-}
-
-func (g *GlobalContext) CTraceOK(ctx context.Context, msg string, f func() bool) func() {
-	return CTraceOK(ctx, g.Log.CloneWithAddedDepth(1), msg, f)
-}
-
-func (g *GlobalContext) CVTraceOK(ctx context.Context, lev VDebugLevel, msg string, f func() bool) func() {
-	g.VDL.CLogf(ctx, lev, "+ %s", msg)
-	return func() { g.VDL.CLogf(ctx, lev, "- %s -> %v", msg, f()) }
-
 }
 
 // SplitByRunes splits string by runes
@@ -663,13 +634,15 @@ func Digest(r io.Reader) (string, error) {
 }
 
 // TimeLog calls out with the time since start.  Use like this:
-//    defer TimeLog("MyFunc", time.Now(), e.G().Log.Warning)
+//
+//	defer TimeLog("MyFunc", time.Now(), e.G().Log.Warning)
 func TimeLog(name string, start time.Time, out func(string, ...interface{})) {
 	out("time> %s: %s", name, time.Since(start))
 }
 
 // CTimeLog calls out with the time since start.  Use like this:
-//    defer CTimeLog(ctx, "MyFunc", time.Now(), e.G().Log.Warning)
+//
+//	defer CTimeLog(ctx, "MyFunc", time.Now(), e.G().Log.Warning)
 func CTimeLog(ctx context.Context, name string, start time.Time, out func(context.Context, string, ...interface{})) {
 	out(ctx, "time> %s: %s", name, time.Since(start))
 }
@@ -803,20 +776,16 @@ var adminFeatureList = map[keybase1.UID]bool{
 	"46fa8104092d0a680ad854bfc8507700": true, // | xgess        |
 	"69da56f622a2ac750b8e590c3658a700": true, // | jzila        |
 	"ef2e49961eddaa77094b45ed635cfc00": true, // | strib        |
-	"ebbe1d99410ab70123262cf8dfc87900": true, // | akalin       |
-	"4c230ae8d2f922dc2ccc1d2f94890700": true, // | marcopolo    |
 	"9403ede05906b942fd7361f40a679500": true, // | jinyang      |
 	"e0b4166c9c839275cf5633ff65c3e819": true, // | chrisnojima  |
 	"5f72055750c37c02a630122781508219": true, // | jakob223     |
 	"d95f137b3b4a3600bc9e39350adba819": true, // | cecileb      |
 	"eb08cb06e608ea41bd893946445d7919": true, // | mlsteele     |
 	"4a2c5d27346497ad64e3b7d457a1f919": true, // | pzduniak     |
-	"673a740cd20fb4bd348738b16d228219": true, // | zanderz      |
 	"743338e8d5987e0e5077f0fddc763f19": true, // | taruti       |
 	"ee71dbc8e4e3e671e29a94caef5e1b19": true, // | zapu         |
 	"8c7c57995cd14780e351fc90ca7dc819": true, // | ayoubd       |
 	"b848bce3d54a76e4da323aad2957e819": true, // | modalduality |
-	"f06926a91bc53c80561ee4e74813dc19": true, // | aimeedavid   |
 }
 
 // IsKeybaseAdmin returns true if uid is a keybase admin.
@@ -876,7 +845,7 @@ func ShredFile(filename string) error {
 		if err != nil {
 			return err
 		}
-		if err := ioutil.WriteFile(filename, noise, stat.Mode().Perm()); err != nil {
+		if err := os.WriteFile(filename, noise, stat.Mode().Perm()); err != nil {
 			return err
 		}
 	}
@@ -1015,10 +984,14 @@ func Once(f func()) func() {
 }
 
 func RuntimeGroup() keybase1.RuntimeGroup {
-	switch runtime.GOOS {
-	case "linux", "dragonfly", "freebsd", "netbsd", "openbsd":
+	return runtimeGroup(runtime.GOOS)
+}
+
+func runtimeGroup(osname string) keybase1.RuntimeGroup {
+	switch osname {
+	case "linux", "dragonfly", "freebsd", "netbsd", "openbsd", "android":
 		return keybase1.RuntimeGroup_LINUXLIKE
-	case "darwin":
+	case "darwin", "ios":
 		return keybase1.RuntimeGroup_DARWINLIKE
 	case "windows":
 		return keybase1.RuntimeGroup_WINDOWSLIKE
@@ -1064,13 +1037,17 @@ func FindPreferredKBFSMountDirs() (mountDirs []string) {
 }
 
 var kbfsPathInnerRegExp = func() *regexp.Regexp {
-	const socialAssertion = `[-_a-zA-Z0-9.]+@[a-zA-Z.]+`
+	// e.g. alice@twitter
+	const regularAssertion = `[-_a-zA-Z0-9.+]+@[a-zA-Z.]+`
+	// e.g. [bob@keybase.io]@email
+	const emailAssertion = `\[[-_+a-zA-Z0-9.]+@[-_a-zA-Z0-9.]+\]@[a-zA-Z.]+`
+	const socialAssertion = `(?:` + regularAssertion + `)|(?:` + emailAssertion + `)`
 	const user = `(?:(?:` + kbun.UsernameRE + `)|(?:` + socialAssertion + `))`
 	const usernames = user + `(?:,` + user + `)*`
 	const teamName = kbun.UsernameRE + `(?:\.` + kbun.UsernameRE + `)*`
 	const tlfType = "/(?:private|public|team)$"
-	// TODO support name suffix e.g. conflict
-	const tlf = "/(?:(?:private|public)/" + usernames + "(?:#" + usernames + ")?|team/" + teamName + `)(?:/|$)`
+	const suffix = `(?: \([-_a-zA-Z0-9 #]+\))?`
+	const tlf = "/(?:(?:private|public)/" + usernames + "(?:#" + usernames + ")?|team/" + teamName + ")" + suffix + "(?:/|$)"
 	const specialFiles = "/(?:.kbfs_.+)"
 	return regexp.MustCompile(`^(?:(?:` + tlf + `)|(?:` + tlfType + `)|(?:` + specialFiles + `))`)
 }()
@@ -1081,15 +1058,22 @@ func IsKBFSAfterKeybasePath(afterKeybase string) bool {
 	return len(afterKeybase) == 0 || kbfsPathInnerRegExp.MatchString(afterKeybase)
 }
 
-func getKBFSAfterMountPath(afterKeybase string, backslash bool) string {
+func getKBFSAfterMountPath(afterKeybase string, isWindows bool) string {
 	afterMount := afterKeybase
 	if len(afterMount) == 0 {
 		afterMount = "/"
 	}
-	if backslash {
-		return strings.Replace(afterMount, "/", `\`, -1)
+
+	if !isWindows {
+		return afterMount
 	}
-	return afterMount
+
+	// Encode path names for Windows
+	elems := strings.Split(afterMount, "/")
+	for i, elem := range elems {
+		elems[i] = EncodeKbfsNameForWindows(elem)
+	}
+	return strings.Join(elems, "\\")
 }
 
 func getKBFSDeeplinkPath(afterKeybase string) string {
@@ -1123,6 +1107,7 @@ func GetKBFSPathInfo(standardPath string) (pathInfo keybase1.KBFSPathInfo, err e
 }
 
 func GetSafeFilename(filename string) (safeFilename string) {
+	filename = filepath.Base(filename)
 	if !utf8.ValidString(filename) {
 		return url.PathEscape(filename)
 	}
@@ -1139,4 +1124,173 @@ func GetSafeFilename(filename string) (safeFilename string) {
 func GetSafePath(path string) (safePath string) {
 	dir, file := filepath.Split(path)
 	return filepath.Join(dir, GetSafeFilename(file))
+}
+
+func FindFilePathWithNumberSuffix(parentDir string, basename string, useArbitraryName bool) (filePath string, err error) {
+	ext := filepath.Ext(basename)
+	if useArbitraryName {
+		return filepath.Join(parentDir, strconv.FormatInt(time.Now().UnixNano(), 16)+ext), nil
+	}
+	destPath := filepath.Join(parentDir, basename)
+	basename = basename[:len(basename)-len(ext)]
+	// keep a sane limit on the loop.
+	for suffix := 1; suffix < 100000; suffix++ {
+		_, err := os.Stat(destPath)
+		if os.IsNotExist(err) {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		destPath = filepath.Join(parentDir, fmt.Sprintf("%s (%d)%s", basename, suffix, ext))
+	}
+	// Could race but it should be rare enough so fine.
+	return destPath, nil
+}
+
+func JsonwStringArray(a []string) *jsonw.Wrapper {
+	aj := jsonw.NewArray(len(a))
+	for i, s := range a {
+		_ = aj.SetIndex(i, jsonw.NewString(s))
+	}
+	return aj
+}
+
+var throttleBatchClock = clockwork.NewRealClock()
+
+type throttleBatchEmpty struct{}
+
+func isEmptyThrottleData(arg interface{}) bool {
+	_, ok := arg.(throttleBatchEmpty)
+	return ok
+}
+
+func ThrottleBatch(f func(interface{}), batcher func(interface{}, interface{}) interface{},
+	reset func() interface{}, delay time.Duration, leadingFire bool) (func(interface{}), func()) {
+	var lock sync.Mutex
+	var closeLock sync.Mutex
+	var lastCalled time.Time
+	var creation func(interface{})
+	hasStored := false
+	scheduled := false
+	stored := reset()
+	cancelCh := make(chan struct{})
+	closed := false
+	creation = func(arg interface{}) {
+		lock.Lock()
+		defer lock.Unlock()
+		elapsed := throttleBatchClock.Since(lastCalled)
+		isEmpty := isEmptyThrottleData(arg)
+		leading := leadingFire || hasStored
+		if !isEmpty {
+			stored = batcher(stored, arg)
+			hasStored = true
+		}
+		if elapsed > delay && (!isEmpty || hasStored) && leading {
+			f(stored)
+			stored = reset()
+			hasStored = false
+			lastCalled = throttleBatchClock.Now()
+		} else if !scheduled && !isEmpty {
+			scheduled = true
+			go func() {
+				select {
+				case <-throttleBatchClock.After(delay - elapsed):
+					lock.Lock()
+					scheduled = false
+					lock.Unlock()
+					creation(throttleBatchEmpty{})
+				case <-cancelCh:
+					return
+				}
+			}()
+		}
+	}
+	return creation, func() {
+		closeLock.Lock()
+		defer closeLock.Unlock()
+		if closed {
+			return
+		}
+		closed = true
+		close(cancelCh)
+	}
+}
+
+// Format a proof for web-of-trust. Does not support all proof types.
+func NewWotProof(proofType keybase1.ProofType, key, value string) (res keybase1.WotProof, err error) {
+	switch proofType {
+	case keybase1.ProofType_TWITTER, keybase1.ProofType_GITHUB, keybase1.ProofType_REDDIT,
+		keybase1.ProofType_COINBASE, keybase1.ProofType_HACKERNEWS, keybase1.ProofType_FACEBOOK,
+		keybase1.ProofType_GENERIC_SOCIAL, keybase1.ProofType_ROOTER:
+		return keybase1.WotProof{
+			ProofType: proofType,
+			Name:      key,
+			Username:  value,
+		}, nil
+	case keybase1.ProofType_GENERIC_WEB_SITE:
+		return keybase1.WotProof{
+			ProofType: proofType,
+			Protocol:  key,
+			Hostname:  value,
+		}, nil
+	case keybase1.ProofType_DNS:
+		return keybase1.WotProof{
+			ProofType: proofType,
+			Protocol:  key,
+			Domain:    value,
+		}, nil
+	default:
+		return res, fmt.Errorf("unexpected proof type: %v", proofType)
+	}
+}
+
+// Format a web-of-trust proof for gui display.
+func NewWotProofUI(mctx MetaContext, proof keybase1.WotProof) (res keybase1.WotProofUI, err error) {
+	iconKey := ProofIconKey(mctx, proof.ProofType, proof.Name)
+	res = keybase1.WotProofUI{
+		SiteIcon:         MakeProofIcons(mctx, iconKey, ProofIconTypeSmall, 16),
+		SiteIconDarkmode: MakeProofIcons(mctx, iconKey, ProofIconTypeSmallDarkmode, 16),
+	}
+	switch proof.ProofType {
+	case keybase1.ProofType_TWITTER, keybase1.ProofType_GITHUB, keybase1.ProofType_REDDIT,
+		keybase1.ProofType_COINBASE, keybase1.ProofType_HACKERNEWS, keybase1.ProofType_FACEBOOK,
+		keybase1.ProofType_GENERIC_SOCIAL, keybase1.ProofType_ROOTER:
+		res.Type = proof.Name
+		res.Value = proof.Username
+	case keybase1.ProofType_GENERIC_WEB_SITE:
+		res.Type = proof.Protocol
+		res.Value = proof.Hostname
+	case keybase1.ProofType_DNS:
+		res.Type = "dns"
+		res.Value = proof.Domain
+	default:
+		return res, fmt.Errorf("unexpected proof type: %v", proof.ProofType)
+	}
+	return res, nil
+}
+
+func ProofIconKey(mctx MetaContext, proofType keybase1.ProofType, genericKeyAndFallback string) (iconKey string) {
+	switch proofType {
+	case keybase1.ProofType_TWITTER:
+		return "twitter"
+	case keybase1.ProofType_GITHUB:
+		return "github"
+	case keybase1.ProofType_REDDIT:
+		return "reddit"
+	case keybase1.ProofType_HACKERNEWS:
+		return "hackernews"
+	case keybase1.ProofType_FACEBOOK:
+		return "facebook"
+	case keybase1.ProofType_GENERIC_SOCIAL:
+		serviceType := mctx.G().GetProofServices().GetServiceType(mctx.Ctx(), genericKeyAndFallback)
+		if serviceType != nil {
+			return serviceType.GetLogoKey()
+		}
+		return genericKeyAndFallback
+	case keybase1.ProofType_GENERIC_WEB_SITE, keybase1.ProofType_DNS:
+		return "web"
+	default:
+		return genericKeyAndFallback
+	}
 }

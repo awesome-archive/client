@@ -1,19 +1,12 @@
 /*
  * File to stash local debug changes to. Never check this in with changes
  */
-import {NativeModules, YellowBox} from 'react-native'
-import {noop} from 'lodash-es'
+import {LogBox} from 'react-native'
+import {serverConfig} from 'react-native-kb'
+import noop from 'lodash/noop'
 
-const nativeBridge = NativeModules.KeybaseEngine || {test: 'fallback'}
-
-// Uncomment this to disable yellowboxes
-// console.disableYellowBox = true
-//
-// Ignore some yellowboxes on 3rd party libs we can't control
-YellowBox.ignoreWarnings([
-  "Module RNFetchBlob requires main queue setup since it overrides `constantsToExport` but doesn't implement `requiresMainQueueSetup`. In a future release React Native will default to initializing all native modules on a background thread unless explicitly opted-out of.",
-  "Module RCTCameraManager requires main queue setup since it overrides `constantsToExport` but doesn't implement `requiresMainQueueSetup`. In a future release React Native will default to initializing all native modules on a background thread unless explicitly opted-out of.",
-])
+// Toggle this to disable yellowboxes
+LogBox.ignoreAllLogs()
 
 // store the vanilla console helpers
 window.console._log = window.console.log
@@ -22,14 +15,18 @@ window.console._error = window.console.error
 window.console._info = window.console.info
 
 // uncomment this to watch the RN bridge traffic: https://github.com/facebook/react-native/commit/77e48f17824870d30144a583be77ec5c9cf9f8c5
-// require('MessageQueue').spy(msg => console._log('queuespy: ', msg, JSON.stringify(msg).length))
+// require('react-native/Libraries/BatchedBridge/MessageQueue').spy(msg => {
+//   if (msg.module !== 'WebSocketModule') {
+//     console._log('queuespy: ', msg, JSON.stringify(msg).length)
+//   }
+// })
 // uncomment this to watch for event loop stalls: https://github.com/facebook/react-native/blob/0.59-stable/Libraries/Interaction/BridgeSpyStallHandler.js
-// require('InteractionStallDebugger').install({thresholdMS: 100})
+// require('react-native/Libraries/Interaction/InteractionStallDebugger').install({thresholdMS: 100})
 
 // Set this to true if you want to turn off most console logging so you can profile easier
 const PERF = false
 
-let config = {
+const config = {
   allowMultipleInstances: false,
   enableActionLogging: true, // Log actions to the log
   enableStoreLogging: false, // Log full store changes
@@ -39,7 +36,7 @@ let config = {
   ignoreDisconnectOverlay: false,
   immediateStateLogging: false, // Don't wait for idle to log state
   isDevApplePushToken: false, // Use a dev push token
-  isTesting: nativeBridge.test === '1' || (NativeModules.Storybook && NativeModules.Storybook.isStorybook), // Is running a unit test
+  isTesting: false, // NativeModules.Storybook.isStorybook, // Is running a unit test
   partyMode: false,
   printOutstandingRPCs: false, // Periodically print rpcs we're waiting for
   printOutstandingTimerListeners: false, // Periodically print listeners to the second clock
@@ -47,11 +44,10 @@ let config = {
   printRPCBytes: false, // Print raw b64-encoded bytes going over the wire
   printRPCStats: false, // print detailed info on stats
   printRPCWaitingSession: false,
-  reduxSagaLogger: false, // Print saga debug info
-  reduxSagaLoggerMasked: true, // Print saga debug info masked out
   showDevTools: false,
   skipAppFocusActions: false,
-  skipSecondaryDevtools: false,
+  skipExtensions: true,
+  skipSecondaryDevtools: true,
   userTimings: false, // Add user timings api to timeline in chrome
   virtualListMarks: false, // If true add constraints to items in virtual lists so we can tell when measuring is incorrect
 }
@@ -59,22 +55,43 @@ let config = {
 // Developer settings
 if (__DEV__) {
   config.enableActionLogging = true
-  config.enableStoreLogging = true
+  config.enableStoreLogging = false
   config.immediateStateLogging = false
   // Move this outside the if statement to get notifications working
   // with a "Profile" build on a phone.
   config.isDevApplePushToken = true
-  config.printOutstandingRPCs = true
-  config.printOutstandingTimerListeners = true
+  config.printOutstandingRPCs = false
+  config.printOutstandingTimerListeners = false
   config.printRPCWaitingSession = false
-  config.printRPC = true
-  config.printRPCStats = true
-  config.reduxSagaLoggerMasked = false
+  config.printRPC = false
+  // TODO is this even used?
+  config.printRPCStats = false
   config.userTimings = false
 
   // uncomment this to watch the RN bridge traffic: https://github.com/facebook/react-native/commit/77e48f17824870d30144a583be77ec5c9cf9f8c5
   // MessageQueue.spy(msg => console._log('queuespy: ', msg, JSON.stringify(msg).length))
 }
+
+// uncomment if doing local archive builds
+// const debuggingOnLocalArchiveBuild = true
+// if (debuggingOnLocalArchiveBuild) {
+//   for (let i = 0; i < 50; ++i) {
+//     console.log('TEMP dev push token!')
+//   }
+//   config.isDevApplePushToken = true
+// }
+
+// const debuggingReleaseBuild = false
+// if (debuggingReleaseBuild) {
+//   for (let i = 0; i < 50; ++i) {
+//     console.log('TEMP debug release build one')
+//   }
+//   // in release we don't get console logs on ios, so instead use native logger and edit the objc side
+//   window.console.log = (...a) => NativeModules.NativeLogger.log([['e', a.join(' ')]])
+//   window.console.warn = window.console.log
+//   window.console.error = window.console.log
+//   window.console.info = window.console.log
+// }
 
 if (PERF) {
   console.warn('\n\n\nlocal debug PERF is ONNNNNn!!!!!1!!!11!!!!\nAll console.logs disabled!\n\n\n')
@@ -92,24 +109,16 @@ if (PERF) {
   config.printOutstandingRPCs = false
   config.printOutstandingTimerListeners = false
   config.printRPC = false
-  config.reduxSagaLogger = false
-  config.reduxSagaLoggerMasked = false
   config.userTimings = true
 }
 
-if (nativeBridge.serverConfig) {
+if (serverConfig) {
   try {
-    const serverConfig = JSON.parse(nativeBridge.serverConfig)
-    if (serverConfig.lastLoggedInUser) {
-      const userConfig = serverConfig[serverConfig.lastLoggedInUser] || {}
+    const sc = JSON.parse(serverConfig)
+    if (sc.lastLoggedInUser) {
+      const userConfig = sc[sc.lastLoggedInUser] || {}
       if (userConfig.printRPCStats) {
         config.printRPCStats = true
-      }
-      if (userConfig.chatIndexProfilingEnabled) {
-        config.featureFlagsOverride = (config.featureFlagsOverride || '') + ',chatIndexProfilingEnabled'
-      }
-      if (userConfig.dbCleanEnabled) {
-        config.featureFlagsOverride = (config.featureFlagsOverride || '') + ',dbCleanEnabled'
       }
     }
   } catch (e) {}
@@ -132,9 +141,8 @@ export const {
   printRPC,
   printRPCBytes,
   printRPCStats,
-  reduxSagaLogger,
-  reduxSagaLoggerMasked,
   showDevTools,
+  skipExtensions,
   skipSecondaryDevtools,
   userTimings,
   virtualListMarks,

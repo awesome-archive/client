@@ -6,8 +6,7 @@ import FloatingMenu from '../floating-menu'
 import Icon from '../icon'
 import SafeAreaView, {SafeAreaViewTop} from '../safe-area-view'
 import * as Styles from '../../styles'
-import {Action, Props, LeftActionProps} from './types'
-import {hoistNonReactStatic} from '../../util/container'
+import type {Action, Props, LeftActionProps} from '.'
 
 const MAX_RIGHT_ACTIONS = 3
 
@@ -92,7 +91,7 @@ export class HeaderHocHeader extends React.Component<Props, State> {
               styles.titleContainer,
               onLeftAction && styles.titleContainerRightPadding,
               rightActions.length && styles.titleContainerLeftPadding,
-            ])}
+            ] as const)}
           >
             {this.props.titleComponent}
           </Box>
@@ -107,10 +106,7 @@ export class HeaderHocHeader extends React.Component<Props, State> {
       </Box>
     )
 
-    if (Styles.isAndroid) {
-      return header
-    }
-    return !this.props.underNotch ? <SafeAreaViewTop>{header}</SafeAreaViewTop> : header
+    return header
   }
 }
 
@@ -125,14 +121,15 @@ export const LeftAction = ({
   onLeftAction,
   theme,
   customIconColor,
+  style,
 }: LeftActionProps): React.ReactElement => (
-  <Box style={Styles.collapseStyles([styles.leftAction, hasTextTitle && styles.grow])}>
-    {onLeftAction &&
-      (leftAction === 'cancel' ? (
-        <Text type="BodyBigLink" style={styles.action} onClick={onLeftAction}>
-          {leftActionText || customCancelText || 'Cancel'}
-        </Text>
-      ) : (
+  <Box style={Styles.collapseStyles([styles.leftAction, hasTextTitle && styles.grow, style])}>
+    {onLeftAction && leftAction === 'cancel' ? (
+      <Text type="BodyBigLink" style={styles.action} onClick={onLeftAction}>
+        {leftActionText || customCancelText || 'Cancel'}
+      </Text>
+    ) : (
+      (onLeftAction || leftAction === 'back') && (
         <BackButton
           badgeNumber={badgeNumber}
           hideBackLabel={hideBackLabel}
@@ -145,49 +142,53 @@ export const LeftAction = ({
               : Styles.globalColors.black_50)
           }
           style={styles.action}
-          onClick={onLeftAction}
+          onClick={onLeftAction ?? undefined}
         />
-      ))}
+      )
+    )}
   </Box>
 )
 
-const RightActions = ({
-  floatingMenuVisible,
-  hasTextTitle,
-  hideFloatingMenu,
-  rightActions,
-  showFloatingMenu,
-}): React.ReactElement => (
-  <Box style={Styles.collapseStyles([styles.rightActions, hasTextTitle && styles.grow])}>
-    <Box style={styles.rightActionsWrapper}>
-      {rightActions &&
-        rightActions
-          .slice(
-            0,
-            rightActions && rightActions.length <= MAX_RIGHT_ACTIONS
-              ? MAX_RIGHT_ACTIONS
-              : MAX_RIGHT_ACTIONS - 1
-          )
-          .map((action, index) => renderAction(action, index))}
-      <RightActionsOverflow
-        floatingMenuVisible={floatingMenuVisible}
-        hideFloatingMenu={hideFloatingMenu}
-        rightActions={rightActions}
-        showFloatingMenu={showFloatingMenu}
-      />
+const RightActions = (p: {
+  floatingMenuVisible: boolean
+  hasTextTitle: boolean
+  hideFloatingMenu: () => void
+  rightActions: Props['rightActions']
+  showFloatingMenu: () => void
+}) => {
+  const {floatingMenuVisible, hasTextTitle, hideFloatingMenu, rightActions, showFloatingMenu} = p
+  return (
+    <Box style={Styles.collapseStyles([styles.rightActions, hasTextTitle && styles.grow])}>
+      <Box style={styles.rightActionsWrapper}>
+        {rightActions
+          ?.slice(0, rightActions.length <= MAX_RIGHT_ACTIONS ? MAX_RIGHT_ACTIONS : MAX_RIGHT_ACTIONS - 1)
+          .map((action, index) => (action ? renderAction(action, index) : null))}
+        <RightActionsOverflow
+          floatingMenuVisible={floatingMenuVisible}
+          hideFloatingMenu={hideFloatingMenu}
+          rightActions={rightActions}
+          showFloatingMenu={showFloatingMenu}
+        />
+      </Box>
     </Box>
-  </Box>
-)
+  )
+}
 
-const RightActionsOverflow = ({floatingMenuVisible, hideFloatingMenu, rightActions, showFloatingMenu}) =>
-  rightActions && rightActions.length > MAX_RIGHT_ACTIONS ? (
+const RightActionsOverflow = (p: {
+  floatingMenuVisible: boolean
+  hideFloatingMenu: () => void
+  rightActions: Props['rightActions']
+  showFloatingMenu: () => void
+}) => {
+  const {floatingMenuVisible, hideFloatingMenu, rightActions, showFloatingMenu} = p
+  return rightActions && rightActions.length > MAX_RIGHT_ACTIONS ? (
     <>
-      <Icon fontSize={22} onClick={showFloatingMenu} style={styles.action} type="iconfont-ellipsis" />
+      <Icon onClick={showFloatingMenu} style={styles.action} type="iconfont-ellipsis" />
       <FloatingMenu
         visible={floatingMenuVisible}
         items={rightActions.slice(MAX_RIGHT_ACTIONS - 1).map(action => ({
-          onClick: action.onPress,
-          title: action.label || 'You need to specify a label', // TODO: remove this after updates are fully integrated
+          onClick: action?.onPress,
+          title: action?.label || 'You need to specify a label', // TODO: remove this after updates are fully integrated
         }))}
         onHidden={hideFloatingMenu}
         position="bottom left"
@@ -195,6 +196,7 @@ const RightActionsOverflow = ({floatingMenuVisible, hideFloatingMenu, rightActio
       />
     </>
   ) : null
+}
 
 const renderAction = (action: Action, index: number): React.ReactNode =>
   action.custom ? (
@@ -205,7 +207,6 @@ const renderAction = (action: Action, index: number): React.ReactNode =>
     <Icon
       color={action.iconColor || undefined}
       key={action.label || index}
-      fontSize={22}
       onClick={action.onPress}
       style={styles.action}
       type={action.icon}
@@ -221,22 +222,19 @@ const renderAction = (action: Action, index: number): React.ReactNode =>
     </Text>
   )
 
-function HeaderHoc<P extends {}>(WrappedComponent: React.ComponentType<P>) {
-  const HeaderHocWrapper = (props: P & Props) => (
+/** TODO likely deprecate this **/
+export const HeaderHocWrapper = (props: Props & {children: React.ReactNode; skipHeader?: boolean}) => {
+  const {customSafeAreaTopStyle, children, customSafeAreaBottomStyle, skipHeader} = props
+  return (
     <Box style={styles.container}>
-      {!!props.customSafeAreaTopStyle && <SafeAreaViewTop style={props.customSafeAreaTopStyle} />}
-      <HeaderHocHeader {...props} />
+      {!!customSafeAreaTopStyle && <SafeAreaViewTop style={customSafeAreaTopStyle} />}
+      {!skipHeader && <HeaderHocHeader {...props} />}
       <Box style={styles.grow}>
-        <Box style={styles.innerWrapper}>
-          <WrappedComponent {...props as P} />
-        </Box>
+        <Box style={styles.innerWrapper}>{children}</Box>
       </Box>
-      {!!props.customSafeAreaBottomStyle && <SafeAreaView style={props.customSafeAreaBottomStyle} />}
+      {!!customSafeAreaBottomStyle && <SafeAreaView style={customSafeAreaBottomStyle} />}
     </Box>
   )
-
-  hoistNonReactStatic(HeaderHocWrapper, WrappedComponent)
-  return HeaderHocWrapper
 }
 
 // If layout is changed here, please make sure the Files header is updated as
@@ -247,7 +245,7 @@ const styles = Styles.styleSheetCreate(() => ({
     common: {
       opacity: 1,
       paddingBottom: Styles.globalMargins.tiny,
-      paddingLeft: Styles.globalMargins.tiny,
+      paddingLeft: 0,
       paddingRight: Styles.globalMargins.tiny,
       paddingTop: Styles.globalMargins.tiny,
     },
@@ -255,22 +253,18 @@ const styles = Styles.styleSheetCreate(() => ({
       paddingLeft: Styles.globalMargins.small,
       paddingRight: Styles.globalMargins.small,
     },
+    isIOS: {
+      paddingLeft: Styles.globalMargins.tiny,
+    },
   }),
-  actionPressable: {
-    opacity: 0.3,
-  },
-  borderless: {
-    borderBottomWidth: 0,
-  },
+  actionPressable: {opacity: 0.3},
+  borderless: {borderBottomWidth: 0},
   container: {
     ...Styles.globalStyles.flexBoxColumn,
     height: '100%',
     position: 'relative',
-    width: '100%',
   },
-  grow: {
-    flexGrow: 1,
-  },
+  grow: {flexGrow: 1},
   header: Styles.platformStyles({
     common: {
       ...Styles.globalStyles.flexBoxRow,
@@ -279,28 +273,23 @@ const styles = Styles.styleSheetCreate(() => ({
       borderBottomWidth: 1,
       borderStyle: 'solid',
       justifyContent: 'flex-start',
-      width: '100%',
     },
     isAndroid: {
       backgroundColor: Styles.globalColors.white,
       height: 56,
     },
-    isIOS: {
-      height: 44,
+    isIOS: {height: 44},
+    isTablet: {
+      height: 40 + Styles.headerExtraHeight,
     },
   }),
-  innerWrapper: {
-    ...Styles.globalStyles.fillAbsolute,
-  },
+  innerWrapper: {...Styles.globalStyles.fillAbsolute},
   leftAction: Styles.platformStyles({
     common: {
       ...Styles.globalStyles.flexBoxColumn,
       alignItems: 'flex-start',
       flexShrink: 1,
       justifyContent: 'flex-start',
-    },
-    isIOS: {
-      paddingLeft: Styles.globalMargins.tiny,
     },
   }),
   rightActions: Styles.platformStyles({
@@ -310,16 +299,10 @@ const styles = Styles.styleSheetCreate(() => ({
       flexShrink: 1,
       justifyContent: 'flex-end',
     },
-    isIOS: {
-      paddingRight: Styles.globalMargins.tiny,
-    },
+    isIOS: {paddingRight: Styles.globalMargins.tiny},
   }),
-  rightActionsWrapper: {
-    ...Styles.globalStyles.flexBoxRow,
-  },
-  title: {
-    color: Styles.globalColors.black,
-  },
+  rightActionsWrapper: {...Styles.globalStyles.flexBoxRow},
+  title: {color: Styles.globalColors.black},
   titleContainer: Styles.platformStyles({
     common: {
       ...Styles.globalStyles.flexBoxColumn,
@@ -328,27 +311,57 @@ const styles = Styles.styleSheetCreate(() => ({
       flexShrink: 2,
       justifyContent: 'center',
     },
-    isAndroid: {
-      alignItems: 'flex-start',
-    },
+    isAndroid: {alignItems: 'flex-start'},
     isIOS: {
       paddingLeft: Styles.globalMargins.tiny,
       paddingRight: Styles.globalMargins.tiny,
     },
   }),
   titleContainerLeftPadding: Styles.platformStyles({
-    isAndroid: {
-      paddingLeft: Styles.globalMargins.small,
-    },
+    isAndroid: {paddingLeft: Styles.globalMargins.small},
   }),
   titleContainerRightPadding: Styles.platformStyles({
-    isAndroid: {
-      paddingRight: Styles.globalMargins.small,
-    },
+    isAndroid: {paddingRight: Styles.globalMargins.small},
   }),
-  titleTextContainer: {
-    ...Styles.globalStyles.fillAbsolute,
-  },
+  titleTextContainer: {...Styles.globalStyles.fillAbsolute},
 }))
 
-export default HeaderHoc
+const noop = () => {}
+const HeaderLeftBlank_ = () => (
+  <LeftAction badgeNumber={0} leftAction="back" onLeftAction={noop} style={{opacity: 0}} />
+)
+export const HeaderLeftBlank = React.memo(HeaderLeftBlank_, () => true)
+
+const HeaderLeftArrow_ = (hp: {
+  canGoBack?: boolean
+  badgeNumber?: number
+  onPress: () => void
+  tintColor: string
+}) =>
+  hp.canGoBack ?? true ? (
+    <LeftAction
+      badgeNumber={hp.badgeNumber ?? 0}
+      leftAction="back"
+      onLeftAction={hp.onPress} // react navigation makes sure this onPress can only happen once
+      customIconColor={hp.tintColor}
+    />
+  ) : null
+
+export const HeaderLeftArrow = React.memo(HeaderLeftArrow_)
+
+const HeaderLeftCancel_ = (hp: {
+  canGoBack?: boolean
+  badgeNumber?: number
+  onPress: () => void
+  tintColor: string
+}) =>
+  hp.canGoBack ?? true ? (
+    <LeftAction
+      badgeNumber={0}
+      leftAction="cancel"
+      onLeftAction={hp.onPress} // react navigation makes sure this onPress can only happen once
+      customIconColor={hp.tintColor}
+    />
+  ) : null
+
+export const HeaderLeftCancel = React.memo(HeaderLeftCancel_)

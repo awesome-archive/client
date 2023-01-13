@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../../../../common-adapters'
 import * as Styles from '../../../../../styles'
 import {WalletPopup} from '../../../../common'
@@ -41,7 +40,7 @@ const SetDefaultAccountPopup = (props: Props) => {
       <Kb.Box2 centerChildren={true} direction="vertical" style={styles.flexOne} fullWidth={true}>
         <Kb.Box style={styles.avatarAndIcon}>
           <Kb.Icon type={Styles.isMobile ? 'icon-wallet-64' : 'icon-wallet-48'} />
-          <Kb.Avatar size={32} username={props.username} style={Kb.avatarCastPlatformStyles(styles.avatar)} />
+          <Kb.Avatar size={32} username={props.username} style={styles.avatar} />
         </Kb.Box>
         <Kb.Text
           center={true}

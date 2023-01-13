@@ -2,17 +2,42 @@ import * as ChatGen from './chat2-gen'
 import * as Constants from '../constants/config'
 import * as Container from '../util/container'
 import * as DeeplinksGen from './deeplinks-gen'
+import * as ConfigGen from './config-gen'
+import * as EngineGen from './engine-gen-gen'
 import * as ProfileGen from './profile-gen'
 import * as RouteTreeGen from './route-tree-gen'
-import * as Saga from '../util/saga'
 import * as Tabs from '../constants/tabs'
 import * as WalletsGen from './wallets-gen'
+import * as TeamsGen from './teams-gen'
+import * as CryptoGen from '../actions/crypto-gen'
+import * as CrytoConstants from '../constants/crypto'
+import type * as CryptoTypes from '../constants/types/crypto'
+import {validTeamname, validTeamnamePart} from '../constants/teamname'
 import URL from 'url-parse'
 import logger from '../logger'
 
-const handleKeybaseLink = (_: Container.TypedState, action: DeeplinksGen.HandleKeybaseLinkPayload) => {
+const teamPageActions = ['add_or_invite', 'manage_settings', 'join'] as const
+type TeamPageAction = typeof teamPageActions[number]
+const isTeamPageAction = (a: any): a is TeamPageAction => teamPageActions.includes(a)
+
+const handleTeamPageLink = (teamname: string, action?: TeamPageAction) => {
+  return [
+    TeamsGen.createShowTeamByName({
+      addMembers: action === 'add_or_invite' ? true : undefined,
+      initialTab: action === 'manage_settings' ? 'settings' : undefined,
+      join: action === 'join' ? true : undefined,
+      teamname,
+    }),
+  ]
+}
+
+const handleShowUserProfileLink = (username: string) => {
+  return [RouteTreeGen.createSwitchTab({tab: Tabs.peopleTab}), ProfileGen.createShowUserProfile({username})]
+}
+
+const handleKeybaseLink = (_: unknown, action: DeeplinksGen.HandleKeybaseLinkPayload) => {
   const error =
-    "We couldn't read this link. The link might be bad, or your Keybase app might be out of date and need to be updated."
+    "We couldn't read this link. The link might be bad, or your Keybase app might be out of date and needs to be updated."
   const parts = action.payload.link.split('/')
   // List guaranteed to contain at least one elem.
   switch (parts[0]) {
@@ -22,6 +47,13 @@ const handleKeybaseLink = (_: Container.TypedState, action: DeeplinksGen.HandleK
           parts.length === 4 && parts[3] ? ProfileGen.createUpdateUsername({username: parts[3]}) : null,
           ProfileGen.createAddProof({platform: parts[2], reason: 'appLink'}),
         ]
+      } else if (parts[1] === 'show' && parts.length === 3) {
+        // Username is basically a team name part, we can use the same logic to
+        // validate deep link.
+        const username = parts[2]
+        if (username.length && validTeamnamePart(username)) {
+          return handleShowUserProfileLink(username)
+        }
       }
       break
     // Fall-through
@@ -33,15 +65,25 @@ const handleKeybaseLink = (_: Container.TypedState, action: DeeplinksGen.HandleK
         return [
           RouteTreeGen.createSwitchTab({tab: Tabs.fsTab}),
           RouteTreeGen.createNavigateAppend({
-            path: [{props: {path: `/keybase/${decoded}`}, selected: 'main'}],
+            path: [{props: {path: `/keybase/${decoded}`}, selected: 'fsRoot'}],
           }),
         ]
       } catch (e) {
         logger.warn("Coudn't decode KBFS URI")
         return []
       }
-    case 'chat':
+    case 'convid':
       if (parts.length === 2) {
+        return [
+          ChatGen.createNavigateToThread({
+            conversationIDKey: parts[1],
+            reason: 'navChanged',
+          }),
+        ]
+      }
+      break
+    case 'chat':
+      if (parts.length === 2 || parts.length === 3) {
         if (parts[1].includes('#')) {
           const teamChat = parts[1].split('#')
           if (teamChat.length !== 2) {
@@ -53,18 +95,52 @@ const handleKeybaseLink = (_: Container.TypedState, action: DeeplinksGen.HandleK
             ]
           }
           const [teamname, channelname] = teamChat
+          const highlightMessageID = parseInt(parts[2], 10)
+          if (highlightMessageID < 0) {
+            logger.warn(`invalid chat message id: ${highlightMessageID}`)
+            return []
+          }
           return [
-            RouteTreeGen.createSwitchTab({tab: Tabs.chatTab}),
-            ChatGen.createPreviewConversation({channelname, reason: 'appLink', teamname}),
+            ChatGen.createPreviewConversation({
+              channelname,
+              highlightMessageID,
+              reason: 'appLink',
+              teamname,
+            }),
           ]
         } else {
+          const highlightMessageID = parseInt(parts[2], 10)
+          if (highlightMessageID < 0) {
+            logger.warn(`invalid chat message id: ${highlightMessageID}`)
+            return []
+          }
           return [
-            RouteTreeGen.createSwitchTab({tab: Tabs.chatTab}),
-            ChatGen.createPreviewConversation({participants: parts[1].split(','), reason: 'appLink'}),
+            ChatGen.createPreviewConversation({
+              highlightMessageID,
+              participants: parts[1].split(','),
+              reason: 'appLink',
+            }),
           ]
         }
       }
       break
+    case 'team-page': // keybase://team-page/{team_name}/{manage_settings,add_or_invite}?
+      if (parts.length >= 2) {
+        const teamName = parts[1]
+        if (teamName.length && validTeamname(teamName)) {
+          const actionPart = parts[2]
+          const action = isTeamPageAction(actionPart) ? actionPart : undefined
+          return handleTeamPageLink(teamName, action)
+        }
+      }
+      break
+    case 'incoming-share':
+      return RouteTreeGen.createNavigateAppend({path: ['incomingShareNew']})
+    case 'team-invite-link':
+      return TeamsGen.createOpenInviteLink({
+        inviteID: parts[1],
+        inviteKey: parts[2] || '',
+      })
     default:
     // Fall through to the error return below.
   }
@@ -76,9 +152,22 @@ const handleKeybaseLink = (_: Container.TypedState, action: DeeplinksGen.HandleK
   ]
 }
 
+const handleServiceAppLink = (
+  _: unknown,
+  action: EngineGen.Keybase1NotifyServiceHandleKeybaseLinkPayload
+) => {
+  const link = action.payload.params.link
+  if (action.payload.params.deferred && !link.startsWith('keybase://team-invite-link/')) {
+    return
+  }
+  return DeeplinksGen.createHandleKeybaseLink({
+    link: link,
+  })
+}
+
 const handleAppLink = (state: Container.TypedState, action: DeeplinksGen.LinkPayload) => {
   if (action.payload.link.startsWith('web+stellar:')) {
-    return WalletsGen.createValidateSEP7Link({link: action.payload.link})
+    return WalletsGen.createValidateSEP7Link({fromQR: false, link: action.payload.link})
   } else if (action.payload.link.startsWith('keybase://')) {
     const link = action.payload.link.replace('keybase://', '')
     return DeeplinksGen.createHandleKeybaseLink({link})
@@ -96,18 +185,62 @@ const handleAppLink = (state: Container.TypedState, action: DeeplinksGen.LinkPay
         RouteTreeGen.createNavigateAppend({path: ['settingsAddPhone']}),
       ]
     } else if (username && username !== 'app') {
-      return [
-        RouteTreeGen.createNavigateAppend({path: [Tabs.peopleTab]}),
-        ProfileGen.createShowUserProfile({username}),
-      ]
+      return handleShowUserProfileLink(username)
+    }
+
+    const teamLink = Constants.urlToTeamDeepLink(url)
+    if (teamLink) {
+      return handleTeamPageLink(teamLink.teamName, teamLink.action)
     }
   }
   return false
 }
 
-function* deeplinksSaga() {
-  yield* Saga.chainAction2(DeeplinksGen.link, handleAppLink)
-  yield* Saga.chainAction2(DeeplinksGen.handleKeybaseLink, handleKeybaseLink)
+const handleSaltpackOpenFile = (
+  state: Container.TypedState,
+  action: DeeplinksGen.SaltpackFileOpenPayload
+) => {
+  const path =
+    typeof action.payload.path === 'string' ? action.payload.path : action.payload.path.stringValue()
+
+  if (!state.config.loggedIn) {
+    console.warn(
+      'Tried to open a saltpack file before being logged in. Stashing the file path for after log in.'
+    )
+    return ConfigGen.createSetStartupFile({
+      startupFile: new Container.HiddenString(path),
+    })
+  }
+  let operation: CryptoTypes.Operations | null = null
+  if (CrytoConstants.isPathSaltpackEncrypted(path)) {
+    operation = CrytoConstants.Operations.Decrypt
+  } else if (CrytoConstants.isPathSaltpackSigned(path)) {
+    operation = CrytoConstants.Operations.Verify
+  } else {
+    logger.warn(
+      'Deeplink received saltpack file path not ending in ".encrypted.saltpack" or ".signed.saltpack"'
+    )
+    return
+  }
+
+  return [
+    // Clear previously set startupFile so that subsequent startups/logins do not route to the crypto tab with a stale startupFile
+    ConfigGen.createSetStartupFile({
+      startupFile: new Container.HiddenString(''),
+    }),
+    RouteTreeGen.createSwitchTab({tab: Tabs.cryptoTab}),
+    CryptoGen.createOnSaltpackOpenFile({
+      operation,
+      path: new Container.HiddenString(path),
+    }),
+  ]
 }
 
-export default deeplinksSaga
+const initDeeplinks = () => {
+  Container.listenAction(DeeplinksGen.link, handleAppLink)
+  Container.listenAction(EngineGen.keybase1NotifyServiceHandleKeybaseLink, handleServiceAppLink)
+  Container.listenAction(DeeplinksGen.handleKeybaseLink, handleKeybaseLink)
+  Container.listenAction(DeeplinksGen.saltpackFileOpen, handleSaltpackOpenFile)
+}
+
+export default initDeeplinks

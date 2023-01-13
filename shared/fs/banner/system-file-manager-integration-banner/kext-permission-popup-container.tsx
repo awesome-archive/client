@@ -1,24 +1,23 @@
-import {namedConnect} from '../../../util/container'
+import * as React from 'react'
+import * as Container from '../../../util/container'
 import * as FsGen from '../../../actions/fs-gen'
-import KextPermissionPopup from './kext-permission-popup'
 import * as RouteTreeGen from '../../../actions/route-tree-gen'
+import KextPermissionPopup from './kext-permission-popup'
 
-const mapStateToProps = state => ({
-  driverStatus: state.fs.sfmi.driverStatus,
-})
-
-const mapDispatchToProps = dispatch => ({
-  onCancel: () => dispatch(RouteTreeGen.createNavigateUp()),
-  openSecurityPrefs: () => dispatch(FsGen.createOpenSecurityPreferences()),
-})
-
-export default namedConnect(
-  mapStateToProps,
-  mapDispatchToProps,
-  (s, d, _: {}) => ({
-    driverStatus: s.driverStatus,
-    onCancel: d.onCancel,
-    openSecurityPrefs: d.openSecurityPrefs,
-  }),
-  'KextPermissionPopup'
-)(KextPermissionPopup)
+const KPPContainer = () => {
+  const driverStatus = Container.useSelector(state => state.fs.sfmi.driverStatus)
+  const dispatch = Container.useDispatch()
+  const onCancel = React.useCallback(() => dispatch(RouteTreeGen.createNavigateUp()), [dispatch])
+  const openSecurityPrefs = React.useCallback(
+    () => dispatch(FsGen.createOpenSecurityPreferences()),
+    [dispatch]
+  )
+  return (
+    <KextPermissionPopup
+      driverStatus={driverStatus}
+      onCancel={onCancel}
+      openSecurityPrefs={openSecurityPrefs}
+    />
+  )
+}
+export default KPPContainer

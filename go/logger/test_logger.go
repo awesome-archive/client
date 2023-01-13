@@ -35,9 +35,8 @@ type TestLogBackend interface {
 // test that is trying to test an error condition.  No context tags
 // are logged.
 type TestLogger struct {
-	log          TestLogBackend
-	extraDepth   int
-	failReported bool
+	log        TestLogBackend
+	extraDepth int
 	sync.Mutex
 }
 
@@ -48,15 +47,27 @@ func NewTestLogger(log TestLogBackend) *TestLogger {
 // Verify TestLogger fully implements the Logger interface.
 var _ Logger = (*TestLogger)(nil)
 
+// Whether "TEST FAILED" has output for a particular test is stored globally.
+// Because some tests use multiple instances of TestLogger so storing
+// it there would result in multiple "TEST FAILED" per test.
+// This way has the drawback that when two tests in different packages
+// share a name, only one of their "TEST FAILED" will print.
+var globalFailReportedLock sync.Mutex
+var globalFailReported = make(map[string]struct{})
+
 // ctx can be `nil`
 func (log *TestLogger) common(ctx context.Context, lvl logging.Level, useFatal bool, fmts string, arg ...interface{}) {
 	if log.log.Failed() {
-		log.Lock()
-		if !log.failReported {
-			log.log.Logf("TEST FAILED: %s", log.log.Name())
+		globalFailReportedLock.Lock()
+		name := log.log.Name()
+		if _, reported := globalFailReported[name]; !reported {
+			log.log.Logf("TEST FAILED: %s", name)
+			globalFailReported[name] = struct{}{}
 		}
-		log.failReported = true
-		log.Unlock()
+		globalFailReportedLock.Unlock()
+		if stringListContains(strings.ToLower(os.Getenv("KEYBASE_TEST_LOG_AFTER_FAIL")), []string{"0", "false", "n", "no"}) {
+			return
+		}
 	}
 
 	if os.Getenv("KEYBASE_TEST_DUP_LOG_TO_STDOUT") != "" {
@@ -98,7 +109,7 @@ func (log *TestLogger) prefixCaller(extraDepth int, lvl logging.Level, fmts stri
 }
 
 func (log *TestLogger) Debug(fmts string, arg ...interface{}) {
-	log.common(context.TODO(), logging.INFO, false, fmts, arg...)
+	log.common(context.TODO(), logging.DEBUG, false, fmts, arg...)
 }
 
 func (log *TestLogger) CDebugf(ctx context.Context, fmts string,
@@ -178,9 +189,17 @@ func (log *TestLogger) CloneWithAddedDepth(depth int) Logger {
 	var clone TestLogger
 	clone.log = log.log
 	clone.extraDepth = log.extraDepth + depth
-	clone.failReported = log.failReported
 	return &clone
 }
 
 // no-op stubs to fulfill the Logger interface
 func (log *TestLogger) SetExternalHandler(_ ExternalHandler) {}
+
+func stringListContains(s string, a []string) bool {
+	for _, t := range a {
+		if s == t {
+			return true
+		}
+	}
+	return false
+}

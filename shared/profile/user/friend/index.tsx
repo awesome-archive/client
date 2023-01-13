@@ -21,8 +21,9 @@ class Friend extends React.PureComponent<Props> {
         >
           <Kb.Avatar size={64} username={p.username} style={styles.avatar} showFollowingStatus={true} />
           <Kb.ConnectedUsernames
-            type={Styles.isMobile ? 'BodySmallSemibold' : 'BodySemibold'}
-            usernames={[p.username]}
+            type={Styles.isMobile ? 'BodySmallBold' : 'BodyBold'}
+            usernames={p.username}
+            onUsernameClicked="profile"
             colorBroken={true}
             colorFollowing={true}
           />
@@ -46,10 +47,10 @@ const styles = Styles.styleSheetCreate(() => ({
   fullname: Styles.platformStyles({
     isElectron: {
       textAlign: 'center',
-      whiteSpace: 'nowrap',
       width: 80,
       wordBreak: 'break-all',
     },
+    isMobile: {backgroundColor: Styles.globalColors.fastBlank},
   }),
 }))
 

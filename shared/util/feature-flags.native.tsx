@@ -1,29 +1,12 @@
-import {FeatureFlags} from './feature-flags'
+import type {FeatureFlags} from './feature-flags'
 import {featureFlagsOverride} from '../local-debug.native'
 
-let features = featureFlagsOverride && featureFlagsOverride.split(',')
+const features = featureFlagsOverride && featureFlagsOverride.split(',')
 
 const featureOn = (key: keyof FeatureFlags) => features.includes(key)
 
 const ff: FeatureFlags = {
   admin: __DEV__,
-  airdrop: true,
-  chatIndexProfilingEnabled: false,
-  conflictResolution: false,
-  darkMode: true,
-  dbCleanEnabled: false,
-  fastAccountSwitch: false,
-  foldersInProfileTab: false,
-  kbfsOfflineMode: false,
-  lagRadar: false,
-  moveOrCopy: false,
-  newTeamBuildingForChatAllowMakeTeam: false,
-  outOfDateBanner: false,
-  plansEnabled: false,
-  proofProviders: true,
-  resetPipeline: false,
-  stellarExternalPartners: true,
-  wonderland: false,
 }
 
 // load overrides

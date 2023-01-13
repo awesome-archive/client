@@ -1,9 +1,9 @@
 import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import {AccountID} from '../../constants/types/wallets'
+import type {AccountID} from '../../constants/types/wallets'
+import AddAccount from '../nav-header/add-account'
 import WalletRow from './wallet-row/container'
-import flags from '../../util/feature-flags'
 
 type AddProps = {
   onAddNew: () => void
@@ -12,55 +12,40 @@ type AddProps = {
 
 const rowHeight = 48
 
-const _AddWallet = (props: AddProps & Kb.OverlayParentProps) => {
-  const menuItems = [
-    {onClick: () => props.onAddNew(), title: 'Create a new account'},
-    {onClick: () => props.onLinkExisting(), title: 'Link an existing Stellar account'},
-  ]
+const AddWallet = (props: AddProps) => {
+  const {toggleShowingPopup, showingPopup, popup, popupAnchor} = Kb.usePopup(attachTo => (
+    <Kb.FloatingMenu
+      attachTo={attachTo}
+      closeOnSelect={true}
+      items={[
+        {icon: 'iconfont-new', onClick: () => props.onAddNew(), title: 'Create a new account'},
+        {
+          icon: 'iconfont-identity-stellar',
+          onClick: () => props.onLinkExisting(),
+          title: 'Link an existing Stellar account',
+        },
+      ]}
+      onHidden={toggleShowingPopup}
+      visible={showingPopup}
+      position="bottom center"
+    />
+  ))
 
   return (
-    <Kb.ClickableBox onClick={props.toggleShowingMenu} ref={props.setAttachmentRef}>
+    <Kb.ClickableBox onClick={toggleShowingPopup} ref={popupAnchor}>
       <Kb.Box2
         style={styles.addContainerBox}
         direction="horizontal"
         fullWidth={true}
         className="hover_background_color_blueGreyDark"
       >
-        <Kb.Icon type="icon-wallet-placeholder-add-32" style={Kb.iconCastPlatformStyles(styles.icon)} />
+        <Kb.Icon type="icon-wallet-placeholder-add-32" style={styles.icon} />
         <Kb.Text type="BodySemibold">Add an account</Kb.Text>
       </Kb.Box2>
-      <Kb.FloatingMenu
-        attachTo={props.getAttachmentRef}
-        closeOnSelect={true}
-        items={menuItems}
-        onHidden={props.toggleShowingMenu}
-        visible={props.showingMenu}
-        position="bottom center"
-      />
+      {popup}
     </Kb.ClickableBox>
   )
 }
-
-const AddWallet = Kb.OverlayParentHOC(_AddWallet)
-
-const JoinAirdrop = (p: {onJoinAirdrop: (() => void) | null; inAirdrop: boolean; selected: boolean}) => (
-  <Kb.ClickableBox onClick={p.onJoinAirdrop || undefined}>
-    <Kb.Box2
-      style={Styles.collapseStyles([
-        styles.joinAirdrop,
-        p.selected && {backgroundColor: Styles.globalColors.purpleLight},
-      ])}
-      direction="horizontal"
-      fullWidth={true}
-      className="hover_background_color_blueGreyDark"
-    >
-      <Kb.Icon type="icon-airdrop-logo-32" style={Kb.iconCastPlatformStyles(styles.icon)} />
-      <Kb.Text negative={p.selected} type="BodySemibold">
-        {p.inAirdrop ? 'Airdrop' : 'Join the airdrop'}
-      </Kb.Text>
-    </Kb.Box2>
-  </Kb.ClickableBox>
-)
 
 const WhatIsStellar = (props: {onWhatIsStellar: () => void}) => (
   <Kb.ClickableBox onClick={props.onWhatIsStellar} style={styles.whatIsStellar}>
@@ -75,13 +60,9 @@ const WhatIsStellar = (props: {onWhatIsStellar: () => void}) => (
 
 export type Props = {
   accountIDs: Array<AccountID>
-  airdropIsLive: boolean
-  airdropSelected: boolean
   style?: Styles.StylesCrossPlatform
   loading: boolean
-  inAirdrop: boolean
   onAddNew: () => void
-  onJoinAirdrop: (() => void) | null
   onLinkExisting: () => void
   onWhatIsStellar: () => void
   title: string
@@ -97,10 +78,6 @@ type Row =
       type: 'add wallet'
       key?: string
     }
-  | {
-      type: 'join airdrop'
-      key?: string
-    }
 
 class WalletList extends React.Component<Props> {
   _renderRow = (_: number, row: Row) => {
@@ -113,15 +90,6 @@ class WalletList extends React.Component<Props> {
             key={row.type}
             onAddNew={this.props.onAddNew}
             onLinkExisting={this.props.onLinkExisting}
-          />
-        )
-      case 'join airdrop':
-        return (
-          <JoinAirdrop
-            key={row.type}
-            onJoinAirdrop={this.props.onJoinAirdrop}
-            inAirdrop={this.props.inAirdrop}
-            selected={this.props.airdropSelected}
           />
         )
       default:
@@ -142,17 +110,15 @@ class WalletList extends React.Component<Props> {
       accountID => ({accountID, key: accountID, type: 'wallet'} as const)
     )
 
-    if (flags.airdrop && this.props.airdropIsLive) {
-      const joinAirdrop = 'join airdrop'
-      rows.push({key: joinAirdrop, type: joinAirdrop})
-    }
-
     return (
       <>
         {this.props.loading && <Kb.ProgressIndicator style={styles.progressHeader} />}
         <Kb.BoxGrow>
           <Kb.List items={rows} renderItem={this._renderRow} keyProperty="key" style={this.props.style} />
         </Kb.BoxGrow>
+        <Kb.Box2 direction="vertical" gap={Styles.isMobile ? 'tiny' : 'xtiny'} style={styles.addAccount}>
+          <AddAccount />
+        </Kb.Box2>
         <WhatIsStellar onWhatIsStellar={this.props.onWhatIsStellar} />
       </>
     )
@@ -162,6 +128,21 @@ class WalletList extends React.Component<Props> {
 const styles = Styles.styleSheetCreate(
   () =>
     ({
+      addAccount: Styles.platformStyles({
+        isElectron: {
+          backgroundColor: Styles.globalColors.blueGrey,
+          flexShrink: 0,
+          padding: Styles.globalMargins.xsmall,
+          width: '100%',
+        },
+        isMobile: {
+          ...Styles.padding(Styles.globalMargins.tiny, Styles.globalMargins.small),
+          backgroundColor: Styles.globalColors.fastBlank,
+          flexShrink: 0,
+          width: '100%',
+        },
+        isTablet: {backgroundColor: Styles.globalColors.transparent},
+      }),
       addContainerBox: {alignItems: 'center', height: rowHeight},
       icon: {
         height: Styles.globalMargins.mediumLarge,
@@ -173,10 +154,6 @@ const styles = Styles.styleSheetCreate(
         paddingLeft: Styles.globalMargins.tiny,
         position: 'relative',
         top: -1,
-      },
-      joinAirdrop: {
-        alignItems: 'center',
-        height: rowHeight,
       },
       progressHeader: {
         height: 18,

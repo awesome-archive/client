@@ -1,130 +1,137 @@
+import * as Constants from '../../../../constants/chat2'
+import * as Container from '../../../../util/container'
+import * as Kb from '../../../../common-adapters'
 import * as React from 'react'
-import * as Types from '../../../../constants/types/chat2'
-import {Box, Box2} from '../../../../common-adapters'
+import * as Styles from '../../../../styles'
+import EmojiRow from '../emoji-row/container'
 import ReactButton from '../react-button/container'
 import ReactionTooltip from '../reaction-tooltip/container'
-import EmojiRow from '../react-button/emoji-row/container'
-import {
-  borderRadius,
-  classNames,
-  globalColors,
-  globalMargins,
-  isMobile,
-  platformStyles,
-  styleSheetCreate,
-} from '../../../../styles'
+import type * as Types from '../../../../constants/types/chat2'
+import {ConvoIDContext, OrdinalContext} from '../ids-context'
+
+// Get array of emoji names in the order of their earliest reaction
+const getOrderedReactions = (reactions?: Types.Reactions) => {
+  if (!reactions) {
+    return []
+  }
+
+  const scoreMap = new Map(
+    [...reactions.entries()].map(([key, value]) => {
+      return [
+        key,
+        [...value.users].reduce(
+          (minTimestamp, reaction) => Math.min(minTimestamp, reaction.timestamp),
+          Infinity
+        ),
+      ]
+    })
+  )
+  return [...reactions.keys()].sort((a, b) => scoreMap.get(a)! - scoreMap.get(b)!)
+}
+
+const ReactionsRow = React.memo(function ReactonsRowContainer() {
+  const conversationIDKey = React.useContext(ConvoIDContext)
+  const ordinal = React.useContext(OrdinalContext)
+  const reactions = Container.useSelector(state => {
+    const message = Constants.getMessage(state, conversationIDKey, ordinal)
+    const reactions = message?.reactions
+    return reactions
+  })
+
+  const emojis = React.useMemo(() => {
+    return getOrderedReactions(reactions)
+  }, [reactions])
+
+  return emojis.length === 0 ? null : (
+    <Kb.Box2 direction="horizontal" gap="xtiny" fullWidth={true} style={styles.container}>
+      {emojis.map((emoji, idx) => (
+        <RowItem key={String(idx)} emoji={emoji} />
+      ))}
+      {Styles.isMobile ? (
+        <ReactButton showBorder={true} style={styles.button} />
+      ) : (
+        <EmojiRow className={Styles.classNames([btnClassName, newBtnClassName])} style={styles.emojiRow} />
+      )}
+    </Kb.Box2>
+  )
+})
 
 export type Props = {
-  btnClassName?: string
-  newBtnClassName?: string
+  activeEmoji: string
   conversationIDKey: Types.ConversationIDKey
   emojis: Array<string>
   ordinal: Types.Ordinal
-}
-
-type State = {
-  activeEmoji: string
+  setActiveEmoji: (s: string) => void
+  setHideMobileTooltip: () => void
+  setShowMobileTooltip: () => void
   showMobileTooltip: boolean
 }
 
-class ReactionsRow extends React.Component<Props, State> {
-  state = {
-    activeEmoji: '',
-    showMobileTooltip: false,
-  }
-  _attachmentRefs: {[K in string]: React.Component<any> | null} = {}
+const btnClassName = 'WrapperMessage-emojiButton'
+const newBtnClassName = 'WrapperMessage-newEmojiButton'
 
-  _setHoveringButton = (hovering: boolean, emojiName: string) => {
-    this._setActiveEmoji(hovering ? emojiName : '')
-  }
-
-  _setActiveEmoji = (emojiName: string) =>
-    this.setState(s => (s.activeEmoji === emojiName ? null : {activeEmoji: emojiName}))
-
-  _setShowMobileTooltip = (showMobileTooltip: boolean) =>
-    this.setState(s => (s.showMobileTooltip === showMobileTooltip ? null : {showMobileTooltip}))
-
-  _newAttachmentRef: any = null
-  _getNewAttachmentRef = () => this._newAttachmentRef
-  _setNewAttachmentRef = r => (this._newAttachmentRef = r)
-
-  render() {
-    return this.props.emojis.length === 0 ? null : (
-      <Box2 direction="horizontal" gap="xtiny" fullWidth={true} style={styles.container}>
-        {this.props.emojis.map(emoji => (
-          <Box
-            onMouseOver={() => this._setHoveringButton(true, emoji)}
-            onMouseLeave={() => this._setHoveringButton(false, emoji)}
-            key={emoji}
-          >
-            <ReactButton
-              ref={ref => (this._attachmentRefs[emoji] = ref)}
-              className={this.props.btnClassName}
-              conversationIDKey={this.props.conversationIDKey}
-              emoji={emoji}
-              onLongPress={() => this._setShowMobileTooltip(true)}
-              ordinal={this.props.ordinal}
-              style={styles.button}
-            />
-            <ReactionTooltip
-              attachmentRef={() => this._attachmentRefs[emoji]}
-              conversationIDKey={this.props.conversationIDKey}
-              emoji={emoji}
-              onHidden={() => {}}
-              ordinal={this.props.ordinal}
-              visible={this.state.activeEmoji === emoji}
-            />
-          </Box>
-        ))}
-        {isMobile ? (
-          <ReactButton
-            conversationIDKey={this.props.conversationIDKey}
-            ref={this._setNewAttachmentRef}
-            getAttachmentRef={this._getNewAttachmentRef}
-            onLongPress={() => this._setShowMobileTooltip(true)}
-            ordinal={this.props.ordinal}
-            showBorder={true}
-            style={styles.button}
-          />
-        ) : (
-          <EmojiRow
-            className={classNames([this.props.btnClassName, this.props.newBtnClassName])}
-            conversationIDKey={this.props.conversationIDKey}
-            ordinal={this.props.ordinal}
-            style={styles.emojiRow}
-          />
-        )}
-        <ReactionTooltip
-          conversationIDKey={this.props.conversationIDKey}
-          onHidden={() => this._setShowMobileTooltip(false)}
-          ordinal={this.props.ordinal}
-          visible={this.state.showMobileTooltip}
-        />
-      </Box2>
-    )
-  }
+type IProps = {
+  emoji: string
 }
+const RowItem = React.memo(function RowItem(p: IProps) {
+  const conversationIDKey = React.useContext(ConvoIDContext)
+  const ordinal = React.useContext(OrdinalContext)
+  const {emoji} = p
 
-const styles = styleSheetCreate(
+  const popupAnchor = React.useRef<Kb.Box2 | null>(null)
+  const [showingPopup, setShowingPopup] = React.useState(false)
+
+  const showPopup = React.useCallback(() => {
+    setShowingPopup(true)
+  }, [])
+  const hidePopup = React.useCallback(() => {
+    setShowingPopup(false)
+  }, [])
+
+  const popup = showingPopup ? (
+    <ReactionTooltip
+      attachmentRef={() => popupAnchor.current}
+      conversationIDKey={conversationIDKey}
+      emoji={emoji}
+      onHidden={hidePopup}
+      ordinal={ordinal}
+      visible={true}
+    />
+  ) : null
+
+  return (
+    <Kb.Box2 direction="vertical" onMouseOver={showPopup} onMouseLeave={hidePopup} ref={popupAnchor}>
+      <ReactButton
+        className={btnClassName}
+        emoji={emoji}
+        onLongPress={Styles.isMobile ? () => setShowingPopup(true) : undefined}
+        style={styles.button}
+      />
+      {popup}
+    </Kb.Box2>
+  )
+})
+
+const styles = Styles.styleSheetCreate(
   () =>
     ({
-      button: {marginBottom: globalMargins.tiny},
+      button: {marginBottom: Styles.globalMargins.tiny},
       container: {
         alignItems: 'flex-start',
         flexWrap: 'wrap',
         paddingRight: 66,
-        paddingTop: globalMargins.tiny,
+        paddingTop: Styles.globalMargins.tiny,
       },
       emojiRow: {
-        backgroundColor: globalColors.white,
-        borderColor: globalColors.black_10,
-        borderRadius,
+        backgroundColor: Styles.globalColors.white,
+        borderColor: Styles.globalColors.black_10,
+        borderRadius: Styles.borderRadius,
         borderStyle: 'solid',
         borderWidth: 1,
-        marginBottom: globalMargins.tiny,
-        paddingRight: globalMargins.xtiny,
+        marginBottom: Styles.globalMargins.tiny,
+        paddingRight: Styles.globalMargins.xtiny,
       },
-      visibilityHidden: platformStyles({isElectron: {visibility: 'hidden'}}),
+      visibilityHidden: Styles.platformStyles({isElectron: {visibility: 'hidden'}}),
     } as const)
 )
 

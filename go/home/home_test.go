@@ -78,12 +78,12 @@ func TestContactResolutionPeoplePage(t *testing.T) {
 	require.NoError(t, err)
 	err = u.Login(tc.G)
 	require.NoError(t, err)
-	kbtest.ProvisionNewDeviceKex(&tc, &tc2, u, libkb.DeviceTypeDesktop)
+	kbtest.ProvisionNewDeviceKex(&tc, &tc2, u, keybase1.DeviceTypeV2_DESKTOP)
 
 	resolutions := []contacts.ContactResolution{{
 		Description: "Jakob - (216) 555-2222",
 		ResolvedUser: keybase1.User{
-			Uid:      keybase1.UID(34),
+			Uid:      keybase1.UID("34"),
 			Username: "jakob223",
 		},
 	}}

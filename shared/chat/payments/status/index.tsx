@@ -1,7 +1,7 @@
 import * as React from 'react'
 import * as Styles from '../../../styles'
-import * as Types from '../../../constants/types/chat2'
-import * as WalletTypes from '../../../constants/types/wallets'
+import type * as Types from '../../../constants/types/chat2'
+import type * as WalletTypes from '../../../constants/types/wallets'
 import {SendPaymentPopup} from '../../conversation/messages/message-popup/payment/container'
 import PaymentStatusError from './error'
 import Text from '../../../common-adapters/text'
@@ -32,18 +32,31 @@ export type Props = {
   text: string
 }
 
-const getIcon = status => {
+const getIcon = (status: Status) => {
   switch (status) {
     case 'completed':
       return 'iconfont-success'
     case 'claimable':
-      return 'iconfont-time'
+      return 'iconfont-success'
     case 'pending':
-      return 'iconfont-time'
+      return 'iconfont-clock'
     case 'error':
       return 'iconfont-remove'
     default:
-      return 'iconfont-time'
+      return 'iconfont-clock'
+  }
+}
+
+const statusColor = (s: Status) => {
+  switch (s) {
+    case 'completed':
+      return Styles.globalColors.purpleDarkOrWhite
+    case 'claimable':
+      return undefined
+    case 'pending':
+      return Styles.globalColors.black_50OrWhite
+    case 'error':
+      return Styles.globalColors.redDarkOrWhite
   }
 }
 
@@ -71,17 +84,22 @@ class PaymentStatus extends React.Component<Props, State> {
         ref={this.statusRef}
         type="BodyExtrabold"
         allowFontScaling={!!this.props.allowFontScaling}
-        style={styles[this.props.status]}
         onClick={this._showPopup}
       >
         {' '}
-        {this.props.text}{' '}
-        <Kb.Icon
-          type={getIcon(this.props.status)}
-          fontSize={12}
-          boxStyle={styles.iconBoxStyle}
-          style={styles[this.props.status + 'Icon']}
-        />{' '}
+        <Kb.Text
+          type="BodyExtrabold"
+          allowFontScaling={!!this.props.allowFontScaling}
+          style={styles[this.props.status]}
+        >
+          {this.props.text}{' '}
+          <Kb.Icon
+            type={getIcon(this.props.status)}
+            fontSize={12}
+            boxStyle={styles.iconBoxStyle}
+            color={statusColor(this.props.status)}
+          />
+        </Kb.Text>{' '}
       </Kb.Text>
     )
     const popups = this.props.isSendError ? (
@@ -97,7 +115,9 @@ class PaymentStatus extends React.Component<Props, State> {
         visible={this.state.showPopup}
         paymentID={this.props.paymentID}
         position="top center"
+        ordinal={this.props.message.id}
         message={this.props.message}
+        conversationIDKey={this.props.message.conversationIDKey}
         onHidden={this._hidePopup}
       />
     )
@@ -124,18 +144,18 @@ const styles = Styles.styleSheetCreate(
   () =>
     ({
       claimable: {
-        backgroundColor: Styles.globalColors.black_05OrBlack_60,
+        backgroundColor: Styles.globalColors.purple_10OrPurple,
         borderRadius: Styles.globalMargins.xxtiny,
-        color: Styles.globalColors.black_50OrWhite,
+        color: Styles.globalColors.purpleDarkOrWhite,
+        paddingLeft: Styles.globalMargins.xtiny,
+        paddingRight: Styles.globalMargins.xtiny,
       },
-      claimableIcon: {},
       completed: {
         backgroundColor: Styles.globalColors.purple_10OrPurple,
         borderRadius: Styles.globalMargins.xxtiny,
         color: Styles.globalColors.purpleDarkOrWhite,
-      },
-      completedIcon: {
-        color: Styles.globalColors.purpleDarkOrWhite,
+        paddingLeft: Styles.globalMargins.xtiny,
+        paddingRight: Styles.globalMargins.xtiny,
       },
       container: Styles.platformStyles({
         isElectron: {
@@ -146,9 +166,8 @@ const styles = Styles.styleSheetCreate(
         backgroundColor: Styles.globalColors.red_10OrRed,
         borderRadius: Styles.globalMargins.xxtiny,
         color: Styles.globalColors.redDarkOrWhite,
-      },
-      errorIcon: {
-        color: Styles.globalColors.redDarkOrWhite,
+        paddingLeft: Styles.globalMargins.xtiny,
+        paddingRight: Styles.globalMargins.xtiny,
       },
       iconBoxStyle: Styles.platformStyles({
         isElectron: {
@@ -156,12 +175,11 @@ const styles = Styles.styleSheetCreate(
         },
       }),
       pending: {
-        backgroundColor: Styles.globalColors.black_05OrBlack_60,
+        backgroundColor: Styles.globalColors.greyLight,
         borderRadius: Styles.globalMargins.xxtiny,
         color: Styles.globalColors.black_50OrWhite,
-      },
-      pendingIcon: {
-        color: Styles.globalColors.black_50OrWhite,
+        paddingLeft: Styles.globalMargins.xtiny,
+        paddingRight: Styles.globalMargins.xtiny,
       },
     } as const)
 )

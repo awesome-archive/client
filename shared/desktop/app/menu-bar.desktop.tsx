@@ -1,15 +1,27 @@
 // Entrypoint for the menubar node part
-import menubar from 'menubar'
-import * as SafeElectron from '../../util/safe-electron.desktop'
-import {isDarwin, isWindows, isLinux} from '../../constants/platform'
-import {resolveImage, resolveRootAsURL} from './resolve-root.desktop'
-import {showDevTools, skipSecondaryDevtools} from '../../local-debug.desktop'
+import * as ConfigGen from '../../actions/config-gen'
+import * as Chat2Gen from '../../actions/chat2-gen'
+import * as Electron from 'electron'
 import logger from '../../logger'
+import {isDarwin, isWindows, isLinux, getAssetPath} from '../../constants/platform.desktop'
+import {menubar} from 'menubar'
+import {showDevTools, skipSecondaryDevtools} from '../../local-debug'
+import {getMainWindow} from './main-window.desktop'
+import getIcons from '../../menubar/icons'
+import os from 'os'
+import {assetRoot, htmlPrefix} from './html-root.desktop'
+import KB2 from '../../util/electron.desktop'
 
-const htmlFile = resolveRootAsURL('dist', `menubar${__DEV__ ? '.dev' : ''}.html?param=`)
+const {mainWindowDispatch} = KB2.functions
 
-let icon = ''
-let selectedIcon = ''
+const htmlFile = `${htmlPrefix}${assetRoot}menubar${__FILE_SUFFIX__}.html?param=menubar`
+
+// support dynamic dark mode system bar in big sur
+const useImageTemplate = os.platform() === 'darwin' && parseInt(os.release().split('.')[0], 10) >= 20
+
+let iconPath = getIcons('regular', false, Electron.nativeTheme.shouldUseDarkColors)
+// only use imageTemplate if its not badged, else we lose the orange
+let iconPathIsBadged = false
 
 type Bounds = {
   x: number
@@ -18,33 +30,52 @@ type Bounds = {
   height: number
 }
 
-export default (menubarWindowIDCallback: (id: number) => void) => {
+const MenuBar = (menubarWindowIDCallback: (id: number) => void) => {
+  const icon = Electron.nativeImage.createFromPath(getAssetPath('images', 'menubarIcon', iconPath))
+  if (useImageTemplate && !iconPathIsBadged) {
+    icon.setTemplateImage(true)
+  }
   const mb = menubar({
-    hasShadow: true,
-    height: 480,
-    icon: resolveImage(
-      'menubarIcon',
-      isWindows
-        ? 'icon-windows-keybase-menubar-regular-black-16@2x.png'
-        : 'icon-keybase-menubar-regular-white-22@2x.png'
-    ),
-    index: htmlFile,
+    browserWindow: {
+      hasShadow: true,
+      height: 640,
+      resizable: false,
+      transparent: true,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        nodeIntegrationInWorker: false,
+        preload: `${assetRoot}preload${__FILE_SUFFIX__}.bundle.js`,
+      },
+      width: 360,
+    },
+    icon,
+    index: false,
     preloadWindow: true,
-    resizable: false,
     // Without this flag set, menubar will hide the dock icon when the app
     // ready event fires. We manage the dock icon ourselves, so this flag
     // prevents menubar from changing the state.
     showDockIcon: true,
-    transparent: true,
-    webPreferences: {
-      nodeIntegration: true,
-      nodeIntegrationInWorker: false,
-    },
-    width: 360,
   })
 
-  const updateIcon = (selected: boolean) => {
-    mb.tray.setImage(resolveImage('menubarIcon', selected ? selectedIcon : icon))
+  Electron.app.on('ready', () => {
+    mb.window
+      ?.loadURL(htmlFile)
+      .then(() => {})
+      .catch(() => {})
+  })
+
+  const updateIcon = () => {
+    try {
+      const resolved = getAssetPath('images', 'menubarIcon', iconPath)
+      const i = Electron.nativeImage.createFromPath(resolved)
+      if (useImageTemplate && !iconPathIsBadged) {
+        i.setTemplateImage(true)
+      }
+      mb.tray.setImage(i)
+    } catch (err) {
+      console.error('menu icon err: ' + err)
+    }
   }
 
   type Action = {
@@ -56,41 +87,73 @@ export default (menubarWindowIDCallback: (id: number) => void) => {
     }
   }
 
-  mb.on('ready', () => {
-    SafeElectron.getApp().on('KBmenu' as any, (_: string, action: Action) => {
-      switch (action.type) {
-        case 'showTray': {
-          icon = action.payload.icon
-          selectedIcon = action.payload.iconSelected
-          updateIcon(false)
-          const dock = SafeElectron.getApp().dock
-          if (dock && dock.isVisible()) {
-            SafeElectron.getApp().setBadgeCount(action.payload.desktopAppBadgeCount)
-          }
-          break
+  Electron.ipcMain.handle('KBmenu', (_: any, action: Action) => {
+    switch (action.type) {
+      case 'showTray': {
+        iconPath = action.payload.icon
+        iconPathIsBadged = action.payload.desktopAppBadgeCount > 0
+        updateIcon()
+        const dock = Electron.app.dock
+        if (dock?.isVisible()) {
+          Electron.app.badgeCount = action.payload.desktopAppBadgeCount
         }
-      }
-    })
 
-    menubarWindowIDCallback(mb.window.id)
+        // Windows just lets us set (or unset, with null) a single 16x16 icon
+        // to be used as an overlay in the bottom right of the taskbar icon.
+        if (isWindows) {
+          const mw = getMainWindow()
+          const overlay =
+            action.payload.desktopAppBadgeCount > 0
+              ? getAssetPath('images', 'icons', 'icon-windows-badge.png')
+              : null
+          // @ts-ignore overlay can be a string but TS is wrong
+          mw?.setOverlayIcon(overlay, 'new activity')
+        }
+
+        break
+      }
+    }
+  })
+
+  mb.on('ready', () => {
+    // ask for an update in case we missed one
+    mainWindowDispatch(
+      ConfigGen.createRemoteWindowWantsProps({
+        component: 'menubar',
+        param: '',
+      })
+    )
+
+    mb.tray.setIgnoreDoubleClickEvents(true)
+
+    mb.window && menubarWindowIDCallback(mb.window.id)
 
     if (showDevTools && !skipSecondaryDevtools) {
-      mb.window.webContents.openDevTools({mode: 'detach'})
+      mb.window?.webContents.openDevTools({mode: 'detach'})
     }
 
     // Hack: open widget when left/right/double clicked
-    mb.tray.on('right-click', (e: Electron.Event, bounds: Bounds) => {
-      e.preventDefault()
-      setImmediate(() => mb.tray.emit('click', {...e}, {...bounds}))
+    mb.tray.on('right-click', (e: Electron.KeyboardEvent, bounds: Bounds) => {
+      // @ts-ignore
+      e?.preventDefault()
+      setTimeout(() => mb.tray.emit('click', {...e}, {...bounds}), 0)
     })
-    mb.tray.on('double-click', (e: Electron.Event) => e.preventDefault())
+    mb.tray.on('double-click', (e: Electron.KeyboardEvent) => {
+      // @ts-ignore
+      e?.preventDefault()
+    })
 
     // prevent the menubar's window from dying when we quit
     // We remove any existing listeners to close because menubar has one that deletes the reference to mb.window
-    mb.window.removeAllListeners('close')
-    mb.window.on('close', (event: Electron.Event) => {
+
+    mb.window?.removeAllListeners('close')
+    mb.window?.on('close', event => {
       event.preventDefault()
       mb.hideWindow()
+    })
+
+    mb.window?.on('show', () => {
+      mainWindowDispatch(ConfigGen.createUpdateWindowShown({component: 'menu'}))
     })
 
     if (isLinux) {
@@ -99,14 +162,14 @@ export default (menubarWindowIDCallback: (id: number) => void) => {
 
     const adjustForWindows = () => {
       // Account for different taskbar positions on Windows
-      if (!isWindows || !mb.window || !mb.tray) {
+      if (!isWindows || !mb.window) {
         return
       }
-      const cursorPoint = SafeElectron.getScreen().getCursorScreenPoint()
-      const screenSize = SafeElectron.getScreen().getDisplayNearestPoint(cursorPoint).workArea
+      const cursorPoint = Electron.screen.getCursorScreenPoint()
+      const screenSize = Electron.screen.getDisplayNearestPoint(cursorPoint).workArea
       const menuBounds = mb.window.getBounds()
       logger.info('Showing menu:', cursorPoint, screenSize)
-      let iconBounds = mb.tray.getBounds()
+      const iconBounds = mb.tray.getBounds()
       let x = iconBounds.x
       let y = iconBounds.y - iconBounds.height - menuBounds.height
 
@@ -130,21 +193,22 @@ export default (menubarWindowIDCallback: (id: number) => void) => {
           logger.info('- start menu on bottom -')
         }
       }
-      mb.setOption('x', x)
-      mb.setOption('y', y)
+      mb.window.setPosition(x, y)
     }
 
     mb.on('show', () => {
+      mainWindowDispatch(
+        Chat2Gen.createInboxRefresh({
+          reason: 'widgetRefresh',
+        })
+      )
       adjustForWindows()
-      isDarwin && updateIcon(true)
     })
-    mb.on('hide', () => {
-      isDarwin && updateIcon(false)
-    })
+    mb.on('hide', () => {})
     mb.on('after-show', () => {
-      logger.info('Showing menubar at', mb.window && mb.window.getBounds())
+      logger.info('Showing menubar at', mb.window?.getBounds())
     })
-    mb.tray.on('click', (_: Electron.Event, bounds: Bounds) => {
+    mb.tray.on('click', (_, bounds: Bounds) => {
       logger.info('Clicked tray icon:', bounds)
     })
   })
@@ -153,7 +217,8 @@ export default (menubarWindowIDCallback: (id: number) => void) => {
   // without removing your status bar icon.
   if (isDarwin) {
     mb.app.on('before-quit', () => {
-      mb.tray && mb.tray.destroy()
+      mb.tray.destroy()
     })
   }
 }
+export default MenuBar

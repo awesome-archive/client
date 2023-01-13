@@ -1,8 +1,9 @@
 import * as React from 'react'
 import PeopleItem from '../item'
-import * as Types from '../../constants/types/people'
+import type * as Types from '../../constants/types/people'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
+import {FollowButton} from '../../settings/contacts-joined/buttons'
 
 const connectedUsernamesProps = {
   colorFollowing: true,
@@ -11,48 +12,57 @@ const connectedUsernamesProps = {
     fontWeight: 'normal',
   },
   onUsernameClicked: 'profile',
-  type: 'BodySemibold',
+  type: 'BodyBold',
   underline: true,
 } as const
 
 export type NewFollow = Types.FollowedNotification
 
-export type Props = Types._FollowedNotificationItem & {
+export type Props = Types.FollowedNotificationItem & {
   onClickUser: (username: string) => void
 }
 
-export default (props: Props) => {
+const FollowNotificationWrapper = (props: Props) => {
   if (props.newFollows.length === 1) {
     return <FollowNotification {...props} />
   }
   return <MultiFollowNotification {...props} />
 }
+export default FollowNotificationWrapper
 
 const FollowNotification = (props: Props) => {
   if (props.newFollows.length !== 1) {
     throw new Error('Single follow notification must have exactly one user supplied')
   }
-  const username = props.newFollows[0].username
+
+  const {newFollows, onClickUser, type} = props
+  const username = newFollows[0].username
   const usernameComponent = (
     <Kb.ConnectedUsernames
       {...connectedUsernamesProps}
-      usernames={[username]}
+      usernames={username}
       onUsernameClicked={props.onClickUser}
     />
   )
-  const desc = props.newFollows[0].contactDescription
-  const optionalExplanation = desc ? ` (${desc})` : ''
+  const desc = newFollows[0].contactDescription
+
+  const onClick = React.useCallback(() => {
+    onClickUser(username)
+  }, [username, onClickUser])
+
   return (
-    <Kb.ClickableBox onClick={() => props.onClickUser(username)}>
+    <Kb.ClickableBox onClick={type === 'follow' ? onClick : undefined}>
       <PeopleItem
         badged={props.badged}
-        icon={
-          <Kb.Avatar
-            username={username}
-            onClick={() => props.onClickUser(username)}
-            size={Styles.isMobile ? 48 : 32}
-          />
+        buttons={
+          props.type == 'contact'
+            ? [
+                <FollowButton username={username} small={true} key="follow" />,
+                <Kb.WaveButton username={username} small={true} key="wave" />,
+              ]
+            : undefined
         }
+        icon={<Kb.Avatar username={username} onClick={onClick} size={Styles.isMobile ? 48 : 32} />}
         iconContainerStyle={styles.iconContainer}
         when={props.notificationTime}
         contentStyle={styles.peopleItem}
@@ -62,8 +72,7 @@ const FollowNotification = (props: Props) => {
           <Kb.Text type="Body">{usernameComponent} followed you.</Kb.Text>
         ) : (
           <Kb.Text type="Body">
-            Your contact {usernameComponent}
-            {optionalExplanation} joined Keybase.
+            Your contact {desc} joined Keybase as {usernameComponent}.
           </Kb.Text>
         )}
       </PeopleItem>
@@ -71,10 +80,11 @@ const FollowNotification = (props: Props) => {
   )
 }
 
-export const MultiFollowNotification = (props: Props) => {
+export const MultiFollowNotification = React.memo(function MultiFollowNotification(props: Props) {
   if (props.newFollows.length <= 1) {
     throw new Error('Multi follow notification must have more than one user supplied')
   }
+
   const usernames = props.newFollows.map(f => f.username)
   const usernamesComponent = (
     <>
@@ -106,18 +116,13 @@ export const MultiFollowNotification = (props: Props) => {
       >
         {usernames.map(username => (
           <Kb.WithTooltip key={username} tooltip={username}>
-            <Kb.Avatar
-              onClick={() => props.onClickUser(username)}
-              username={username}
-              size={32}
-              style={styles.avatar}
-            />
+            <Kb.Avatar onClick="profile" username={username} size={32} style={styles.avatar} />
           </Kb.WithTooltip>
         ))}
       </Kb.ScrollView>
     </PeopleItem>
   )
-}
+})
 
 const styles = Styles.styleSheetCreate(
   () =>

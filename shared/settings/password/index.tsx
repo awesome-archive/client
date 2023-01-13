@@ -1,4 +1,4 @@
-import React, {Component} from 'react'
+import * as React from 'react'
 import * as Styles from '../../styles'
 import * as Kb from '../../common-adapters'
 
@@ -9,7 +9,7 @@ type Props = {
   newPasswordError?: string
   newPasswordConfirmError?: string
   onCancel?: () => void
-  onSave: (password: string, passwordConfirm: string) => void
+  onSave: (password: string) => void // will only be called if password.length > 8 & passwords match
   saveLabel?: string
   showTyping?: boolean
   waitingForResponse?: boolean
@@ -23,7 +23,7 @@ type State = {
   errorSaving: string
 }
 
-class UpdatePassword extends Component<Props, State> {
+class UpdatePassword extends React.Component<Props, State> {
   state: State
 
   constructor(props: Props) {
@@ -61,6 +61,11 @@ class UpdatePassword extends Component<Props, State> {
     return ''
   }
 
+  private canSubmit = () =>
+    !this.state.errorSaving &&
+    this.state.password.length >= 8 &&
+    this.state.password === this.state.passwordConfirm
+
   render() {
     const inputType = this.state.showTyping ? 'text' : 'password'
     const keyboardType = this.state.showTyping && Styles.isAndroid ? 'visible-password' : 'default'
@@ -88,8 +93,9 @@ class UpdatePassword extends Component<Props, State> {
 
     return (
       <Kb.Modal
+        backgroundStyle={styles.passwordBackground}
         banners={[
-          notification && (
+          !!notification && (
             <Kb.Banner color="yellow">
               <Kb.BannerParagraph bannerColor="yellow" content={notification} />
             </Kb.Banner>
@@ -119,30 +125,32 @@ class UpdatePassword extends Component<Props, State> {
               <Kb.Button
                 fullWidth={true}
                 label={this.props.saveLabel || 'Save'}
-                disabled={
-                  !!this.state.errorSaving ||
-                  this.state.password.length < 8 ||
-                  this.state.password !== this.state.passwordConfirm
-                }
-                onClick={() => this.props.onSave(this.state.password, this.state.passwordConfirm)}
+                disabled={!this.canSubmit()}
+                onClick={() => this.props.onSave(this.state.password)}
                 waiting={this.props.waitingForResponse}
               />
             </Kb.ButtonBar>
           ),
         }}
         header={{
-          leftButton: Styles.isMobile ? (
-            <Kb.Text type="BodyBigLink" onClick={this.props.onCancel}>
-              Cancel
-            </Kb.Text>
-          ) : null,
+          leftButton:
+            Styles.isMobile && this.props.onCancel ? (
+              <Kb.Text type="BodyBigLink" onClick={this.props.onCancel}>
+                Cancel
+              </Kb.Text>
+            ) : null,
           title: this.props.hasRandomPW ? 'Set a password' : 'Change password',
         }}
         onClose={this.props.onCancel}
       >
-        <Kb.Box2 centerChildren={true} direction="vertical" fullHeight={true} style={styles.container}>
+        <Kb.Box2
+          centerChildren={!Styles.isTablet}
+          direction="vertical"
+          fullHeight={true}
+          style={styles.container}
+        >
           <Kb.Text type="Body" style={styles.bodyText} center={true}>
-            A password is required for you to sign out and sign back in, and use the keybase.io website.
+            A password is required for you to sign out and sign back in.
           </Kb.Text>
           <Kb.RoundedBox side="top">
             <Kb.PlainInput
@@ -161,12 +169,8 @@ class UpdatePassword extends Component<Props, State> {
               value={this.state.passwordConfirm}
               onChangeText={password => this._handlePasswordConfirmChange(password)}
               onEnterKeyDown={() => {
-                if (
-                  !this.state.errorSaving &&
-                  this.state.password.length >= 8 &&
-                  this.state.password === this.state.passwordConfirm
-                ) {
-                  this.props.onSave(this.state.password, this.state.passwordConfirm)
+                if (this.canSubmit()) {
+                  this.props.onSave(this.state.password)
                 }
               }}
             />
@@ -179,7 +183,6 @@ class UpdatePassword extends Component<Props, State> {
             hintText
           )}
           <Kb.Checkbox
-            boxBackgroundColor={Styles.globalColors.white}
             label="Show typing"
             onCheck={() => this.setState(prevState => ({showTyping: !prevState.showTyping}))}
             checked={this.state.showTyping || !!this.props.showTyping}
@@ -215,6 +218,11 @@ const styles = Styles.styleSheetCreate(
         paddingBottom: Styles.globalMargins.small,
         paddingTop: Styles.globalMargins.small,
       },
+      passwordBackground: Styles.platformStyles({
+        isTablet: {
+          backgroundColor: Styles.globalColors.blueGrey,
+        },
+      }),
       passwordFormat: {
         alignSelf: 'flex-start',
         marginTop: Styles.globalMargins.xtiny,

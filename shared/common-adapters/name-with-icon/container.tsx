@@ -1,9 +1,9 @@
+import * as React from 'react'
 import * as ProfileGen from '../../actions/profile-gen'
 import * as RouteTreeGen from '../../actions/route-tree-gen'
 import * as Tracker2Gen from '../../actions/tracker2-gen'
-import NameWithIcon, {NameWithIconProps} from '.'
-import {namedConnect, isMobile} from '../../util/container'
-import {teamsTab} from '../../constants/tabs'
+import NameWithIcon, {type NameWithIconProps} from '.'
+import * as Container from '../../util/container'
 
 export type ConnectedNameWithIconProps = {
   onClick?: 'tracker' | 'profile' | NameWithIconProps['onClick']
@@ -11,54 +11,60 @@ export type ConnectedNameWithIconProps = {
 
 type OwnProps = ConnectedNameWithIconProps
 
-const mapStateToProps = () => ({})
-
-const mapDispatchToProps = dispatch => ({
-  onOpenTeamProfile: (teamname: string) => {
+const ConnectedNameWithIcon = (p: OwnProps) => {
+  const {onClick, username, teamname, ...props} = p
+  const teamID = Container.useSelector(state => state.teams.teamNameToID.get(teamname ?? ''))
+  const dispatch = Container.useDispatch()
+  const onOpenTeamProfile = React.useCallback(() => {
     dispatch(RouteTreeGen.createClearModals())
-    dispatch(
-      RouteTreeGen.createNavigateAppend({path: [teamsTab, {props: {teamname: teamname}, selected: 'team'}]})
-    )
-  },
-  onOpenTracker: (username: string) => dispatch(Tracker2Gen.createShowUser({asTracker: true, username})),
-  onOpenUserProfile: (username: string) => dispatch(ProfileGen.createShowUserProfile({username})),
-})
+    dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {teamID}, selected: 'team'}]}))
+  }, [dispatch, teamID])
+  const onOpenTracker = React.useCallback(() => {
+    username && dispatch(Tracker2Gen.createShowUser({asTracker: true, username}))
+  }, [dispatch, username])
+  const onOpenUserProfile = React.useCallback(() => {
+    username && dispatch(ProfileGen.createShowUserProfile({username}))
+  }, [dispatch, username])
 
-const mergeProps = (
-  _stateProps,
-  dispatchProps: ReturnType<typeof mapDispatchToProps>,
-  ownProps: OwnProps
-) => {
-  const {onClick, username, teamname, ...props} = ownProps
-
-  let functionOnClick
-  let clickType
-  // Since there's no tracker on mobile, we can't open it. Fallback to profile.
-  if (!isMobile && onClick === 'tracker') {
-    if (username) {
-      functionOnClick = () => dispatchProps.onOpenTracker(username)
+  let functionOnClick: NameWithIconProps['onClick']
+  let clickType: NameWithIconProps['clickType'] = 'onClick'
+  switch (onClick) {
+    case 'tracker': {
+      if (!Container.isMobile) {
+        if (username) {
+          functionOnClick = onOpenTracker
+        }
+      } else {
+        if (username) {
+          functionOnClick = onOpenUserProfile
+        } else if (teamID) {
+          functionOnClick = onOpenTeamProfile
+        }
+      }
+      break
     }
-    clickType = 'tracker'
-  } else if (onClick === 'profile' || (isMobile && onClick === 'tracker')) {
-    if (username) {
-      functionOnClick = () => dispatchProps.onOpenUserProfile(username)
-    } else if (teamname) {
-      functionOnClick = () => dispatchProps.onOpenTeamProfile(teamname)
+    case 'profile': {
+      if (username) {
+        functionOnClick = onOpenUserProfile
+      } else if (teamID) {
+        functionOnClick = onOpenTeamProfile
+      }
+      clickType = 'profile'
+      break
     }
-    clickType = 'profile'
+    default:
+      functionOnClick = onClick
   }
 
-  return {
-    ...props,
-    clickType,
-    onClick: functionOnClick,
-    teamname,
-    username,
-  }
+  return (
+    <NameWithIcon
+      {...props}
+      clickType={clickType}
+      onClick={functionOnClick}
+      teamname={teamname}
+      username={username}
+    />
+  )
 }
-
-const ConnectedNameWithIcon = namedConnect(mapStateToProps, mapDispatchToProps, mergeProps, 'NameWithIcon')(
-  NameWithIcon
-)
 
 export default ConnectedNameWithIcon

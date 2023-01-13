@@ -1,8 +1,7 @@
-import * as React from 'react'
 import {NativeTouchableWithoutFeedback} from '../native-wrappers.native'
 import {Box, Box2} from '../box'
 import FloatingBox from '../floating-box'
-import {Props} from '.'
+import type {Props} from '.'
 import * as Styles from '../../styles'
 
 const Overlay = (props: Props) => {
@@ -29,7 +28,7 @@ const styles = Styles.styleSheetCreate(() => ({
   container: {
     ...Styles.globalStyles.fillAbsolute,
     alignItems: 'stretch',
-    backgroundColor: Styles.globalColors.black_50,
+    backgroundColor: Styles.globalColors.black_50OrBlack_60,
     justifyContent: 'flex-end',
   },
   touchArea: {

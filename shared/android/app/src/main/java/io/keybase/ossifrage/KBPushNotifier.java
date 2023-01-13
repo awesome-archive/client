@@ -10,15 +10,17 @@ import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.RequiresApi;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationCompat.MessagingStyle;
-import android.support.v4.app.NotificationManagerCompat;
-import android.support.v4.app.Person;
-import android.support.v4.app.RemoteInput;
-import android.support.v4.graphics.drawable.IconCompat;
+
+import androidx.annotation.RequiresApi;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationCompat.MessagingStyle;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.app.Person;
+import androidx.core.app.RemoteInput;
+import androidx.core.graphics.drawable.IconCompat;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -26,6 +28,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
+import io.keybase.ossifrage.modules.NativeLogger;
 import keybase.ChatNotification;
 import keybase.Message;
 import keybase.PushNotifier;
@@ -33,7 +36,6 @@ import keybase.PushNotifier;
 public class KBPushNotifier implements PushNotifier {
   private final Context context;
   private Bundle bundle;
-
   private SmallMsgRingBuffer convMsgCache;
 
   private MessagingStyle buildStyle(Person person) {
@@ -83,8 +85,8 @@ public class KBPushNotifier implements PushNotifier {
     open_activity_intent.setPackage(context.getPackageName());
     open_activity_intent.putExtra("notification", bundle);
 
-    PendingIntent pending_intent = PendingIntent.getActivity(this.context, 0, open_activity_intent,
-      PendingIntent.FLAG_UPDATE_CURRENT);
+    // unique so our intents are deduped, else it'll reuse old ones
+    PendingIntent pending_intent = PendingIntent.getActivity(this.context, (int)(System.currentTimeMillis()/1000) , open_activity_intent, PendingIntent.FLAG_MUTABLE);
 
     return pending_intent;
   }
@@ -128,7 +130,7 @@ public class KBPushNotifier implements PushNotifier {
         PendingIntent.getBroadcast(context,
                 convData.convID.hashCode(),
                 intent,
-                PendingIntent.FLAG_UPDATE_CURRENT);
+                PendingIntent.FLAG_MUTABLE);
 
     NotificationCompat.Action action =
       new NotificationCompat.Action.Builder(R.drawable.ic_notif, "Reply", replyPendingIntent)
@@ -155,6 +157,20 @@ public class KBPushNotifier implements PushNotifier {
         .setSmallIcon(R.drawable.ic_notif)
         .setContentIntent(pending_intent)
         .setAutoCancel(true);
+
+    int notificationDefaults = NotificationCompat.DEFAULT_LIGHTS | NotificationCompat.DEFAULT_VIBRATE;
+
+    // Set notification sound
+    if (chatNotification.getSoundName().equals("default")) {
+      notificationDefaults |= NotificationCompat.DEFAULT_SOUND;
+    } else {
+      String soundResource = filenameResourceName(chatNotification.getSoundName());
+      String soundUriStr = "android.resource://" + this.context.getPackageName() + "/raw/" + soundResource;
+      Uri soundUri = Uri.parse(soundUriStr);
+      builder.setSound(soundUri);
+    }
+
+    builder.setDefaults(notificationDefaults);
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
       builder.addAction(newReplyAction(this.context, convData, pending_intent));
@@ -192,13 +208,24 @@ public class KBPushNotifier implements PushNotifier {
     notificationManager.notify(chatNotification.getConvID(), 0, builder.build());
   }
 
+  // Return the resource name of the specified file (i.e. name and no extension),
+  // suitable for use in a resource URI.
+  String filenameResourceName(String filename) {
+    if (filename.indexOf(".") >= 0) {
+      return filename.substring(0, filename.lastIndexOf("."));
+    } else {
+      // Not all filenames have an extension to be stripped.
+      return filename;
+    }
+  }
+
   void followNotification(String username, String notificationMsg) {
     Bundle bundle = (Bundle) this.bundle.clone();
     bundle.putBoolean("userInteraction", true);
     bundle.putString("type", "follow");
     bundle.putString("username", username);
 
-    NotificationCompat.Builder builder = new NotificationCompat.Builder(this.context, KeybasePushNotificationListenerService.DEVICE_CHANNEL_ID)
+    NotificationCompat.Builder builder = new NotificationCompat.Builder(this.context, KeybasePushNotificationListenerService.FOLLOW_CHANNEL_ID)
       .setSmallIcon(R.drawable.ic_notif)
       .setContentTitle("Keybase - New Follower")
       .setContentText(notificationMsg)
@@ -246,4 +273,3 @@ public class KBPushNotifier implements PushNotifier {
   }
 
 }
-

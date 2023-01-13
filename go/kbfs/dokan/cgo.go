@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 
+//go:build windows
 // +build windows
 
 package dokan
@@ -661,7 +662,7 @@ func (ctx *dokanCtx) Run(path string, flags MountFlag) error {
 	return nil
 }
 
-//nolint
+// nolint
 func dokanErrString(code int32) string {
 	switch code {
 	case C.kbfsLibDokan_ERROR:
@@ -695,7 +696,8 @@ func (ctx *dokanCtx) Free() {
 // the requestor of this file system operation. Remember to
 // call Close on the Token.
 func (fi *FileInfo) getRequestorToken() (syscall.Token, error) {
-	hdl := syscall.Handle(C.kbfsLibdokan_OpenRequestorToken(fi.ptr))
+	raw := C.kbfsLibdokan_OpenRequestorToken(fi.ptr)
+	hdl := syscall.Handle(uintptr(raw))
 	var err error
 	if hdl == syscall.InvalidHandle {
 		// Tokens are value types, so returning nil is impossible,

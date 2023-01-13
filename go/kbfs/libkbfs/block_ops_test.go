@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/keybase/client/go/kbfs/data"
+	"github.com/keybase/client/go/kbfs/env"
 	"github.com/keybase/client/go/kbfs/kbfsblock"
 	"github.com/keybase/client/go/kbfs/kbfscodec"
 	"github.com/keybase/client/go/kbfs/kbfscrypto"
@@ -90,8 +91,10 @@ type testBlockOpsConfig struct {
 	diskBlockCacheGetter
 	*testSyncedTlfGetterSetter
 	initModeGetter
-	clock    Clock
-	reporter Reporter
+	clock                        Clock
+	reporter                     Reporter
+	subscriptionManager          SubscriptionManager
+	subscriptionManagerPublisher SubscriptionManagerPublisher
 }
 
 var _ blockOpsConfig = (*testBlockOpsConfig)(nil)
@@ -132,6 +135,16 @@ func (config testBlockOpsConfig) GetSettingsDB() *SettingsDB {
 	return nil
 }
 
+func (config testBlockOpsConfig) SubscriptionManager(
+	_ SubscriptionManagerClientID, _ bool,
+	_ SubscriptionNotifier) SubscriptionManager {
+	return config.subscriptionManager
+}
+
+func (config testBlockOpsConfig) SubscriptionManagerPublisher() SubscriptionManagerPublisher {
+	return config.subscriptionManagerPublisher
+}
+
 func makeTestBlockOpsConfig(t *testing.T) testBlockOpsConfig {
 	lm := newTestLogMaker(t)
 	codecGetter := newTestCodecGetter()
@@ -141,9 +154,11 @@ func makeTestBlockOpsConfig(t *testing.T) testBlockOpsConfig {
 	dbcg := newTestDiskBlockCacheGetter(t, nil)
 	stgs := newTestSyncedTlfGetterSetter()
 	clock := clocktest.NewTestClockNow()
+	mockPublisher := NewMockSubscriptionManagerPublisher(gomock.NewController(t))
+	mockPublisher.EXPECT().PublishChange(gomock.Any()).AnyTimes()
 	return testBlockOpsConfig{codecGetter, lm, bserver, crypto, cache, dbcg,
 		stgs, testInitModeGetter{InitDefault}, clock,
-		NewReporterSimple(clock, 1)}
+		NewReporterSimple(clock, 1), nil, mockPublisher}
 }
 
 func testBlockOpsShutdown(
@@ -159,7 +174,7 @@ func TestBlockOpsReadySuccess(t *testing.T) {
 	config := makeTestBlockOpsConfig(t)
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -201,7 +216,7 @@ func TestBlockOpsReadyFailKeyGet(t *testing.T) {
 	config := makeTestBlockOpsConfig(t)
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -229,7 +244,7 @@ func TestBlockOpsReadyFailServerHalfGet(t *testing.T) {
 	config.cp = badServerHalfMaker{config.cryptoPure()}
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -258,7 +273,7 @@ func TestBlockOpsReadyFailEncryption(t *testing.T) {
 	config.cp = badBlockEncryptor{config.cryptoPure()}
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -284,7 +299,7 @@ func TestBlockOpsReadyFailEncode(t *testing.T) {
 	config.testCodecGetter.codec = badEncoder{config.codec}
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -311,7 +326,7 @@ func TestBlockOpsReadyTooSmallEncode(t *testing.T) {
 	config.codec = tooSmallEncoder{config.codec}
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -329,7 +344,7 @@ func TestBlockOpsGetSuccess(t *testing.T) {
 	config := makeTestBlockOpsConfig(t)
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -355,7 +370,7 @@ func TestBlockOpsGetSuccess(t *testing.T) {
 	err = bops.Get(ctx, kmd2,
 		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
 			KeyGen: keyGen, Context: bCtx},
-		decryptedBlock, data.NoCacheEntry)
+		decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.NoError(t, err)
 	require.Equal(t, block, decryptedBlock)
 }
@@ -367,7 +382,7 @@ func TestBlockOpsGetFailServerGet(t *testing.T) {
 	config := makeTestBlockOpsConfig(t)
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -383,7 +398,7 @@ func TestBlockOpsGetFailServerGet(t *testing.T) {
 	err = bops.Get(ctx, kmd,
 		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
 			KeyGen: latestKeyGen, Context: bCtx},
-		&decryptedBlock, data.NoCacheEntry)
+		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
 }
 
@@ -412,7 +427,7 @@ func TestBlockOpsGetFailVerify(t *testing.T) {
 	config.bserver = badGetBlockServer{config.bserver}
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -433,7 +448,7 @@ func TestBlockOpsGetFailVerify(t *testing.T) {
 	err = bops.Get(ctx, kmd,
 		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
 			KeyGen: latestKeyGen, Context: bCtx},
-		&decryptedBlock, data.NoCacheEntry)
+		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.IsType(t, kbfshash.HashMismatchError{}, errors.Cause(err))
 }
 
@@ -444,7 +459,7 @@ func TestBlockOpsGetFailKeyGet(t *testing.T) {
 	config := makeTestBlockOpsConfig(t)
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -465,7 +480,7 @@ func TestBlockOpsGetFailKeyGet(t *testing.T) {
 	err = bops.Get(ctx, kmd,
 		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
 			KeyGen: latestKeyGen + 1, Context: bCtx},
-		&decryptedBlock, data.NoCacheEntry)
+		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.EqualError(t, err, fmt.Sprintf(
 		"no key for block decryption (keygen=%d)", latestKeyGen+1))
 }
@@ -514,7 +529,7 @@ func TestBlockOpsGetFailDecode(t *testing.T) {
 	config.codec = &badDecoder
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -538,7 +553,7 @@ func TestBlockOpsGetFailDecode(t *testing.T) {
 	err = bops.Get(ctx, kmd,
 		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
 			KeyGen: latestKeyGen, Context: bCtx},
-		&decryptedBlock, data.NoCacheEntry)
+		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.Equal(t, decodeErr, err)
 }
 
@@ -560,7 +575,7 @@ func TestBlockOpsGetFailDecrypt(t *testing.T) {
 	config.cp = badBlockDecryptor{config.cryptoPure()}
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	tlfID := tlf.FakeID(0, tlf.Private)
@@ -581,7 +596,7 @@ func TestBlockOpsGetFailDecrypt(t *testing.T) {
 	err = bops.Get(ctx, kmd,
 		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
 			KeyGen: latestKeyGen, Context: bCtx},
-		&decryptedBlock, data.NoCacheEntry)
+		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.EqualError(t, err, "could not decrypt block")
 }
 
@@ -596,7 +611,7 @@ func TestBlockOpsDeleteSuccess(t *testing.T) {
 	config.bserver = bserver
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	// Expect one call to delete several blocks.
@@ -634,7 +649,7 @@ func TestBlockOpsDeleteFail(t *testing.T) {
 	config.bserver = bserver
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	b1 := data.BlockPointer{ID: kbfsblock.FakeID(1)}
@@ -670,7 +685,7 @@ func TestBlockOpsArchiveSuccess(t *testing.T) {
 	config.bserver = bserver
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	// Expect one call to archive several blocks.
@@ -705,7 +720,7 @@ func TestBlockOpsArchiveFail(t *testing.T) {
 	config.bserver = bserver
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
-		0)
+		0, env.EmptyAppStateUpdater{})
 	defer testBlockOpsShutdown(ctx, t, bops)
 
 	b1 := data.BlockPointer{ID: kbfsblock.FakeID(1)}

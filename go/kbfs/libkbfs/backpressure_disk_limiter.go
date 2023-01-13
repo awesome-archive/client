@@ -24,18 +24,18 @@ import (
 // Let U be the (approximate) resource usage of the journal and F be
 // the free resources. Then we want to enforce
 //
-//   U <= min(k(U+F), L),
+//	U <= min(k(U+F), L),
 //
 // where 0 < k <= 1 is some fraction, and L > 0 is the absolute
 // resource usage limit. But in addition to that, we want to set
 // thresholds 0 <= m <= M <= 1 such that we apply proportional
 // backpressure (with a given maximum delay) when
 //
-//   m <= max(U/(k(U+F)), U/L) <= M,
+//	m <= max(U/(k(U+F)), U/L) <= M,
 //
 // which is equivalent to
 //
-//   m <= U/min(k(U+F), L) <= M.
+//	m <= U/min(k(U+F), L) <= M.
 //
 // Note that this type doesn't do any locking, so it's the caller's
 // responsibility to do so.
@@ -78,8 +78,8 @@ func newBackpressureTracker(minThreshold, maxThreshold, limitFrac float64,
 		return nil, errors.Errorf("1.0 < maxThreshold=%f",
 			maxThreshold)
 	}
-	if limitFrac < 0.01 {
-		return nil, errors.Errorf("limitFrac=%f < 0.01", limitFrac)
+	if limitFrac <= 0 {
+		return nil, errors.Errorf("limitFrac=%f <= 0", limitFrac)
 	}
 	if limitFrac > 1.0 {
 		return nil, errors.Errorf("limitFrac=%f > 1.0", limitFrac)
@@ -263,7 +263,7 @@ func (bt *backpressureTracker) getStatus() backpressureTrackerStatus {
 // thresholds 0 <= m <= M such that we apply proportional backpressure
 // (with a given maximum delay) when
 //
-//   m <= (U+R)/Q <= M.
+//	m <= (U+R)/Q <= M.
 //
 // Note that this type doesn't do any locking, so it's the caller's
 // responsibility to do so.

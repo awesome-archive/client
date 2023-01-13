@@ -4,6 +4,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/keybase/cli"
@@ -49,8 +50,7 @@ Disable a previously set policy
 		},
 		Flags: append(getConversationResolverFlags(), []cli.Flag{
 			cli.StringFlag{
-				Name: "r, role",
-				// TODO HOTPOT-599 add bot (but not restricted bot) role
+				Name:  "r, role",
 				Usage: "team role (owner, admin, writer, reader, none)",
 			},
 		}...),
@@ -80,6 +80,10 @@ func (c *CmdChatSetConvMinWriterRole) Run() (err error) {
 	conv, err := c.resolve(context.TODO())
 	if err != nil {
 		return err
+	}
+
+	if conv.Info.MembersType != chat1.ConversationMembersType_TEAM {
+		return errors.New("can only set minimum role to post in team conversations")
 	}
 
 	if c.role != nil {
@@ -113,6 +117,9 @@ func (c *CmdChatSetConvMinWriterRole) ParseArgv(ctx *cli.Context) (err error) {
 		role, err := ParseRole(ctx)
 		if err != nil {
 			return err
+		}
+		if role.IsBotLike() {
+			return fmt.Errorf("Bot roles cannot be used for min writer role setting")
 		}
 		c.role = &role
 	}

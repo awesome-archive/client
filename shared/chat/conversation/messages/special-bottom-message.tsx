@@ -1,26 +1,17 @@
 import * as Constants from '../../../constants/chat2'
+import * as Container from '../../../util/container'
 import * as React from 'react'
-import * as Types from '../../../constants/types/chat2'
 import OldProfileReset from './system-old-profile-reset-notice/container'
 import ResetUser from './reset-user/container'
-import {namedConnect} from '../../../util/container'
+import type * as Types from '../../../constants/types/chat2'
+import {ConvoIDContext} from './ids-context'
 
 type Props = {
   showResetParticipants: Types.ConversationIDKey | null
   showSuperseded: Types.ConversationIDKey | null
-  measure: (() => void) | null
 }
 
 class BottomMessage extends React.PureComponent<Props> {
-  componentDidUpdate(prevProps: Props) {
-    if (
-      this.props.measure &&
-      (this.props.showResetParticipants !== prevProps.showResetParticipants ||
-        this.props.showSuperseded !== prevProps.showSuperseded)
-    ) {
-      this.props.measure()
-    }
-  }
   render() {
     if (this.props.showResetParticipants) {
       return <ResetUser conversationIDKey={this.props.showResetParticipants} />
@@ -32,28 +23,21 @@ class BottomMessage extends React.PureComponent<Props> {
   }
 }
 
-type OwnProps = {
-  conversationIDKey: Types.ConversationIDKey
-  measure: (() => void) | null
-}
+const BottomMessageContainer = React.memo(function BottomMessageContainer() {
+  const conversationIDKey = React.useContext(ConvoIDContext)
+  const showResetParticipants = Container.useSelector(state => {
+    const meta = Constants.getMeta(state, conversationIDKey)
+    return meta.resetParticipants.size !== 0
+  })
+  const showSuperseded = Container.useSelector(state => {
+    const meta = Constants.getMeta(state, conversationIDKey)
+    return !!meta.wasFinalizedBy || meta.supersededBy !== Constants.noConversationIDKey
+  })
 
-const mapStateToProps = (state, ownProps: OwnProps) => {
-  const meta = Constants.getMeta(state, ownProps.conversationIDKey)
-  const showResetParticipants = !meta.resetParticipants.isEmpty() ? ownProps.conversationIDKey : null
-  const showSuperseded =
-    meta && (meta.wasFinalizedBy || meta.supersededBy !== Constants.noConversationIDKey)
-      ? ownProps.conversationIDKey
-      : null
-
-  return {
-    measure: ownProps.measure,
-    showResetParticipants,
-    showSuperseded,
+  const props = {
+    showResetParticipants: showResetParticipants ? conversationIDKey : null,
+    showSuperseded: showSuperseded ? conversationIDKey : null,
   }
-}
-const mapDispatchToProps = () => ({})
-const mergeProps = (stateProps, dispatchProps) => ({...stateProps, ...dispatchProps})
-
-export default namedConnect(mapStateToProps, mapDispatchToProps, mergeProps, 'BottomMessage')(
-  BottomMessage
-) as any
+  return <BottomMessage {...props} />
+})
+export default BottomMessageContainer

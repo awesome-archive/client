@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 
+//go:build !windows
 // +build !windows
 
 // Keybase file system
@@ -19,6 +20,7 @@ import (
 	"github.com/keybase/client/go/kbfs/libfs"
 	"github.com/keybase/client/go/kbfs/libfuse"
 	"github.com/keybase/client/go/kbfs/libkbfs"
+	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/logger"
 )
 
@@ -56,7 +58,7 @@ func getUsageString(ctx libkbfs.Context) string {
 }
 
 func start() *libfs.Error {
-	ctx := env.NewContext()
+	ctx := env.NewContextWithPerfLog(libkb.KBFSPerfLogFileName)
 
 	kbfsParams := libkbfs.AddFlags(flag.CommandLine, ctx)
 	platformParams := libfuse.AddPlatformFlags(flag.CommandLine)

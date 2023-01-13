@@ -1,33 +1,24 @@
 // File to map action type to loggable action.
 // We don't want to log every part of the action, just the useful bits.
-
 import * as RouteTreeGen from '../actions/route-tree-gen'
 import * as Chat2Gen from '../actions/chat2-gen'
+import * as PushGen from '../actions/push-gen'
 import * as ConfigGen from '../actions/config-gen'
 import * as GregorGen from '../actions/gregor-gen'
 import * as EngineGen from '../actions/engine-gen-gen'
 import * as WaitingGen from '../actions/waiting-gen'
-import * as EntitiesGen from '../actions/entities-gen'
-import {TypedState} from '../constants/reducer'
+import type {TypedActions, TypedActionsMap} from '../actions/typed-actions-gen'
 
 // If you use nullTransform it'll not be logged at all
 const nullTransform = () => null
+const defaultTransformer = ({type}: TypedActions) => ({type})
+const fullOutput = (a: TypedActions) => a
 
-const entityTransformer = (
-  action:
-    | EntitiesGen.DeleteEntityPayload
-    | EntitiesGen.MergeEntityPayload
-    | EntitiesGen.ReplaceEntityPayload
-    | EntitiesGen.SubtractEntityPayload
-) => ({
-  payload: {keyPath: action.payload.keyPath},
-  type: action.type,
-})
+type ATM = {
+  [Property in keyof TypedActionsMap]?: (a: TypedActionsMap[Property]) => Object | null
+}
 
-const defaultTransformer = ({type}) => ({type})
-const fullOutput = a => a
-
-const actionTransformMap = {
+const actionTransformMap: ATM = {
   [RouteTreeGen.switchTab]: fullOutput,
   [RouteTreeGen.switchLoggedIn]: fullOutput,
   [RouteTreeGen.navigateAppend]: action => ({
@@ -39,18 +30,22 @@ const actionTransformMap = {
     type: action.type,
   }),
 
-  [EntitiesGen.deleteEntity]: entityTransformer,
-  [EntitiesGen.mergeEntity]: entityTransformer,
-  [EntitiesGen.replaceEntity]: entityTransformer,
-  [EntitiesGen.subtractEntity]: entityTransformer,
-
-  _loadAvatarHelper: nullTransform,
   [ConfigGen.daemonHandshakeWait]: fullOutput,
   [GregorGen.pushOOBM]: nullTransform,
   [ConfigGen.changedFocus]: nullTransform,
   [EngineGen.chat1NotifyChatChatTypingUpdate]: nullTransform,
 
-  [Chat2Gen.selectConversation]: fullOutput,
+  [PushGen.notification]: a => {
+    const {notification} = a.payload
+    // @ts-ignore don't try and narrow, if it exists we want it
+    const {conversationIDKey, type, userInteraction} = notification
+    return {
+      payload: {conversationIDKey, type, userInteraction},
+      type: a.type,
+    }
+  },
+  [Chat2Gen.selectedConversation]: fullOutput,
+  [Chat2Gen.navigateToThread]: fullOutput,
   [Chat2Gen.metaNeedsUpdating]: fullOutput,
   [Chat2Gen.updateMoreToLoad]: fullOutput,
   [Chat2Gen.setConversationOffline]: fullOutput,
@@ -73,7 +68,7 @@ const actionTransformMap = {
     type: a.type,
   }),
   [Chat2Gen.messagesAdd]: a => ({
-    payload: {context: a.context},
+    payload: {context: a.payload.context},
     type: a.type,
   }),
   [Chat2Gen.messagesWereDeleted]: a => ({
@@ -87,9 +82,12 @@ const actionTransformMap = {
   [WaitingGen.clearWaiting]: fullOutput,
 }
 
-const transformActionForLog = (action: any, state: TypedState) =>
-  actionTransformMap[action.type]
-    ? actionTransformMap[action.type](action, state)
-    : defaultTransformer(action)
+const transformActionForLog = (action: TypedActions) => {
+  const custom = actionTransformMap[action.type]
+  if (custom) {
+    return custom(action as any)
+  }
+  return defaultTransformer(action)
+}
 
 export default transformActionForLog

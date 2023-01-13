@@ -1,8 +1,8 @@
 import * as React from 'react'
 import * as Styles from '../styles'
-import {Props} from './scroll-view'
+import type {Props} from './scroll-view'
 
-const ScrollView = React.forwardRef((props: Props, ref) => {
+const ScrollView = React.forwardRef(function ScrollView(props: Props, ref) {
   const {
     alwaysBounceHorizontal,
     alwaysBounceVertical,
@@ -59,9 +59,11 @@ const ScrollView = React.forwardRef((props: Props, ref) => {
 })
 
 const styles = Styles.styleSheetCreate(() => ({
-  overflowAuto: {
-    overflow: 'auto',
-  },
+  overflowAuto: Styles.platformStyles({
+    isElectron: {
+      overflow: 'auto',
+    },
+  }),
 }))
 
 export default ScrollView

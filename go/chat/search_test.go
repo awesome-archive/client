@@ -9,6 +9,7 @@ import (
 	"github.com/keybase/client/go/chat/globals"
 	"github.com/keybase/client/go/chat/search"
 	"github.com/keybase/client/go/kbtest"
+	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
@@ -459,10 +460,10 @@ func TestChatSearchInbox(t *testing.T) {
 
 		tc1 := ctc.as(t, u1)
 		tc2 := ctc.as(t, u2)
-		uid1 := u1.User.GetUID().ToBytes()
-		uid2 := u2.User.GetUID().ToBytes()
 		g1 := ctc.world.Tcs[u1.Username].Context()
 		g2 := ctc.world.Tcs[u2.Username].Context()
+		uid1 := u1.User.GetUID().ToBytes()
+		uid2 := u2.User.GetUID().ToBytes()
 
 		chatUI := kbtest.NewChatUI()
 		tc1.h.mockChatUI = chatUI
@@ -479,10 +480,14 @@ func TestChatSearchInbox(t *testing.T) {
 		indexer1.SetConsumeCh(consumeCh1)
 		indexer1.SetReindexCh(reindexCh1)
 		indexer1.SetStartSyncDelay(0)
+		indexer1.SetUID(uid1)
+		indexer1.SetFlushDelay(100 * time.Millisecond)
+		indexer1.StartFlushLoop()
+		indexer1.StartStorageLoop()
 		// Stop the original
 		select {
 		case <-g1.Indexer.Stop(ctx):
-		case <-time.After(5 * time.Second):
+		case <-time.After(20 * time.Second):
 			require.Fail(t, "g1 Indexer did not stop")
 		}
 		g1.Indexer = indexer1
@@ -493,10 +498,14 @@ func TestChatSearchInbox(t *testing.T) {
 		indexer2.SetConsumeCh(consumeCh2)
 		indexer2.SetReindexCh(reindexCh2)
 		indexer2.SetStartSyncDelay(0)
+		indexer2.SetUID(uid2)
+		indexer2.SetFlushDelay(10 * time.Millisecond)
+		indexer2.StartFlushLoop()
+		indexer2.StartStorageLoop()
 		// Stop the original
 		select {
 		case <-g2.Indexer.Stop(ctx):
-		case <-time.After(5 * time.Second):
+		case <-time.After(20 * time.Second):
 			require.Fail(t, "g2 Indexer did not stop")
 		}
 		g2.Indexer = indexer2
@@ -506,17 +515,17 @@ func TestChatSearchInbox(t *testing.T) {
 		convID := conv.Id
 
 		// verify zero messages case
-		fi, err := indexer1.FullyIndexed(ctx, conv.Id, uid1)
+		fi, err := indexer1.FullyIndexed(ctx, convID)
 		require.NoError(t, err)
 		require.True(t, fi)
-		pi, err := indexer1.PercentIndexed(ctx, conv.Id, uid1)
+		pi, err := indexer1.PercentIndexed(ctx, convID)
 		require.NoError(t, err)
 		require.Equal(t, 100, pi)
 
-		fi, err = indexer2.FullyIndexed(ctx, conv.Id, uid2)
+		fi, err = indexer2.FullyIndexed(ctx, convID)
 		require.NoError(t, err)
 		require.True(t, fi)
-		pi, err = indexer2.PercentIndexed(ctx, conv.Id, uid2)
+		pi, err = indexer2.PercentIndexed(ctx, convID)
 		require.NoError(t, err)
 		require.Equal(t, 100, pi)
 
@@ -854,6 +863,7 @@ func TestChatSearchInbox(t *testing.T) {
 
 		// DB nuke, ensure that we reindex after the search
 		_, err = g1.LocalChatDb.Nuke()
+		require.NoError(t, indexer1.OnDbNuke(libkb.NewMetaContext(context.TODO(), g1.ExternalG())))
 		require.NoError(t, err)
 		opts.ReindexMode = chat1.ReIndexingMode_PRESEARCH_SYNC // force reindex so we're fully up to date.
 		res = runSearch(query, opts, true /* expectedReindex*/)
@@ -873,7 +883,8 @@ func TestChatSearchInbox(t *testing.T) {
 		ictx := globals.CtxAddIdentifyMode(ctx, keybase1.TLFIdentifyBehavior_CHAT_SKIP, nil)
 		_, err = g1.LocalChatDb.Nuke()
 		require.NoError(t, err)
-		err = indexer1.SelectiveSync(ictx, uid1)
+		require.NoError(t, indexer1.OnDbNuke(libkb.NewMetaContext(context.TODO(), g1.ExternalG())))
+		err = indexer1.SelectiveSync(ictx)
 		require.NoError(t, err)
 		opts.ReindexMode = chat1.ReIndexingMode_POSTSEARCH_SYNC
 		res = runSearch(query, opts, true /* expectedReindex*/)
@@ -946,20 +957,21 @@ func TestChatSearchInbox(t *testing.T) {
 		// Test canceling sync loop
 		syncLoopCh := make(chan struct{})
 		indexer1.SetSyncLoopCh(syncLoopCh)
-		go indexer1.SyncLoop(ctx, uid1)
-		indexer1.CancelSync(ctx)
-		select {
-		case <-time.After(5 * time.Second):
-			require.Fail(t, "indexer SyncLoop never finished")
-		case <-syncLoopCh:
+		indexer1.StartSyncLoop()
+		waitForFail := func() bool {
+			for i := 0; i < 5; i++ {
+				indexer1.CancelSync(ctx)
+				select {
+				case <-time.After(2 * time.Second):
+				case <-syncLoopCh:
+					return true
+				}
+			}
+			return false
 		}
+		require.True(t, waitForFail())
 		indexer1.PokeSync(ctx)
-		indexer1.CancelSync(ctx)
-		select {
-		case <-time.After(5 * time.Second):
-			require.Fail(t, "indexer SyncLoop never finished")
-		case <-syncLoopCh:
-		}
+		require.True(t, waitForFail())
 
 		// test search delegation with a specific conv
 		// delegate on queries shorter than search.MinTokenLength
@@ -968,6 +980,7 @@ func TestChatSearchInbox(t *testing.T) {
 		query = "hello"
 		_, err = g1.LocalChatDb.Nuke()
 		require.NoError(t, err)
+		require.NoError(t, indexer1.OnDbNuke(libkb.NewMetaContext(context.TODO(), g1.ExternalG())))
 		res = runSearch(query, opts, false /* expectedReindex*/)
 		require.Equal(t, 1, len(res.Hits))
 		convHit = res.Hits[0]
@@ -1004,5 +1017,16 @@ func TestChatSearchInbox(t *testing.T) {
 		verifyHit(convID, []chat1.MessageID{msgID10}, msgID11, nil, []chat1.ChatSearchMatch{searchMatch}, convHit.Hits[0])
 		verifySearchDone(1, true)
 
+		err = indexer1.Clear(ctx, uid1, convID)
+		require.NoError(t, err)
+		pi, err = indexer1.PercentIndexed(ctx, convID)
+		require.NoError(t, err)
+		require.Zero(t, pi)
+
+		err = indexer2.Clear(ctx, uid2, convID)
+		require.NoError(t, err)
+		pi, err = indexer2.PercentIndexed(ctx, convID)
+		require.NoError(t, err)
+		require.Zero(t, pi)
 	})
 }

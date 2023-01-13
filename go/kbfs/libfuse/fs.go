@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 //
+//go:build !windows
 // +build !windows
 
 package libfuse
@@ -11,7 +12,6 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +29,7 @@ import (
 	kbname "github.com/keybase/client/go/kbun"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/logger"
+	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
@@ -63,8 +64,6 @@ type FS struct {
 	root *Root
 
 	platformParams PlatformParams
-
-	quotaUsage *libkbfs.EventuallyConsistentQuotaUsage
 
 	inodeLock sync.Mutex
 	nextInode uint64
@@ -120,7 +119,6 @@ func NewFS(config libkbfs.Config, conn *fuse.Conn, debug bool,
 		WriteTimeout: 10 * time.Second,
 	}
 
-	quLog := config.MakeLogger(libkbfs.QuotaUsageLogModule("FS"))
 	fs := &FS{
 		config:         config,
 		conn:           conn,
@@ -132,9 +130,7 @@ func NewFS(config libkbfs.Config, conn *fuse.Conn, debug bool,
 		notifications:  libfs.NewFSNotifications(log),
 		root:           NewRoot(),
 		platformParams: platformParams,
-		quotaUsage: libkbfs.NewEventuallyConsistentQuotaUsage(
-			config, quLog, config.MakeVLogger(quLog)),
-		nextInode: 2, // root is 1
+		nextInode:      2, // root is 1
 	}
 	fs.root.private = &FolderList{
 		fs:      fs,
@@ -312,7 +308,7 @@ func (f *FS) WithContext(ctx context.Context) context.Context {
 				ctx = context.WithValue(ctx, CtxIDKey, id)
 			}
 
-			if runtime.GOOS == "darwin" {
+			if libkb.RuntimeGroup() == keybase1.RuntimeGroup_DARWINLIKE {
 				// Timeout operations before they hit the osxfuse time limit,
 				// so we don't hose the entire mount (Fixed in OSXFUSE 3.2.0).
 				// The timeout is 60 seconds, but it looks like sometimes it
@@ -393,6 +389,12 @@ const quotaUsageStaleTolerance = 10 * time.Second
 
 // Statfs implements the fs.FSStatfser interface for FS.
 func (f *FS) Statfs(ctx context.Context, req *fuse.StatfsRequest, resp *fuse.StatfsResponse) error {
+	ctx, maybeUnmounting, cancel := wrapCtxWithShorterTimeoutForUnmount(ctx, f.log, int(req.Pid))
+	defer cancel()
+	if maybeUnmounting {
+		f.log.CInfof(ctx, "Statfs: maybeUnmounting=true")
+	}
+
 	*resp = fuse.StatfsResponse{
 		Bsize:   fuseBlockSize,
 		Namelen: ^uint32(0),
@@ -406,15 +408,17 @@ func (f *FS) Statfs(ctx context.Context, req *fuse.StatfsRequest, resp *fuse.Sta
 		return nil
 	}
 
-	if session, err := idutil.GetCurrentSessionIfPossible(
-		ctx, f.config.KBPKI(), true); err != nil {
+	session, err := idutil.GetCurrentSessionIfPossible(
+		ctx, f.config.KBPKI(), true)
+	if err != nil {
 		return err
 	} else if session == (idutil.SessionInfo{}) {
 		// If user is not logged in, don't bother getting quota info. Otherwise
 		// reading a public TLF while logged out can fail on macOS.
 		return nil
 	}
-	_, usageBytes, _, limitBytes, err := f.quotaUsage.Get(
+	_, usageBytes, _, limitBytes, err := f.config.GetQuotaUsage(
+		session.UID.AsUserOrTeam()).Get(
 		ctx, quotaUsageStaleTolerance/2, quotaUsageStaleTolerance)
 	if err != nil {
 		f.vlog.CLogf(ctx, libkb.VLog1, "Getting quota usage error: %v", err)

@@ -1,10 +1,9 @@
-import * as React from 'react'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
 import * as RPCTypes from '../../../constants/types/rpc-gen'
 import {globalColors} from '../../../styles'
 import {SignupScreen, InfoIcon} from '../../../signup/common'
-import {ButtonType} from '../../../common-adapters/button'
+import type {ButtonType} from '../../../common-adapters/button'
 
 export type Props = {
   deviceName: string
@@ -37,11 +36,11 @@ const ExplainDevice = (props: Props) => {
           </Kb.Text>
           <Kb.Box2 direction="horizontal" alignItems="center" gap="xtiny">
             {explainingMobile ? (
-              <Kb.Icon type="iconfont-nav-more" color={globalColors.black} />
+              <Kb.Icon type="iconfont-nav-2-hamburger" color={globalColors.black} />
             ) : (
               <Kb.Text type="Body">Settings</Kb.Text>
             )}
-            <Kb.Text type="Body">> Your account, and change your</Kb.Text>
+            <Kb.Text type="Body">{`> Your account, and change your`}</Kb.Text>
           </Kb.Box2>
           <Kb.Text type="Body">password.</Kb.Text>
         </Kb.Box2>
@@ -51,7 +50,6 @@ const ExplainDevice = (props: Props) => {
 }
 
 ExplainDevice.navigationOptions = {
-  header: null,
   headerBottomStyle: {height: undefined},
   headerLeft: null, // no back button
   headerRightActions: () => (

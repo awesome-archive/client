@@ -1,202 +1,204 @@
 import * as React from 'react'
+import * as Chat2Gen from '../../../../actions/chat2-gen'
 import * as Kb from '../../../../common-adapters'
-import {AllowedColors} from '../../../../common-adapters/text'
+import * as Container from '../../../../util/container'
 import * as Styles from '../../../../styles'
 import {SimpleTopLine} from './top-line'
 import {BottomLine} from './bottom-line'
 import {Avatars, TeamAvatar} from '../../../avatars'
 import * as RowSizes from '../sizes'
-import * as ChatTypes from '../../../../constants/types/chat2'
+import type * as Types from '../../../../constants/types/chat2'
 import SwipeConvActions from './swipe-conv-actions'
+import shallowEqual from 'shallowequal'
+import './small-team.css'
 
 export type Props = {
+  conversationIDKey: Types.ConversationIDKey
+  isInWidget: boolean
+  isSelected: boolean
+  layoutIsTeam?: boolean
+  layoutName?: string
+  layoutSnippet?: string
+  layoutTime?: number
+  swipeCloseRef?: React.MutableRefObject<(() => void) | null>
+}
+
+const SmallTeam = React.memo(function SmallTeam(p: Props) {
+  const {isSelected, layoutTime} = p
+  const {layoutSnippet} = p
+  const {conversationIDKey, isInWidget, swipeCloseRef} = p
+  const {layoutName, layoutIsTeam} = p
+
+  const isMuted = Container.useSelector(state => state.chat2.mutedMap.get(conversationIDKey) ?? false)
+  const dispatch = Container.useDispatch()
+  const onHideConversation = React.useCallback(() => {
+    dispatch(Chat2Gen.createHideConversation({conversationIDKey}))
+  }, [dispatch, conversationIDKey])
+  const onMuteConversation = React.useCallback(() => {
+    dispatch(Chat2Gen.createMuteConversation({conversationIDKey, muted: !isMuted}))
+  }, [dispatch, conversationIDKey, isMuted])
+  const _onSelectConversation = React.useCallback(() => {
+    if (isInWidget) {
+      dispatch(Chat2Gen.createOpenChatFromWidget({conversationIDKey}))
+    } else {
+      dispatch(Chat2Gen.createNavigateToThread({conversationIDKey, reason: 'inboxSmall'}))
+    }
+  }, [dispatch, conversationIDKey, isInWidget])
+
+  const onSelectConversation = isSelected ? undefined : _onSelectConversation
+
+  const backgroundColor = isInWidget
+    ? Styles.globalColors.white
+    : isSelected
+    ? Styles.globalColors.blue
+    : Styles.isPhone
+    ? Styles.globalColors.fastBlank
+    : Styles.globalColors.blueGrey
+
+  return (
+    <SwipeConvActions
+      isMuted={isMuted}
+      onHideConversation={onHideConversation}
+      onMuteConversation={onMuteConversation}
+      swipeCloseRef={swipeCloseRef}
+      extraData={conversationIDKey}
+    >
+      <Kb.ClickableBox
+        className={Styles.classNames('small-row', {selected: isSelected})}
+        onClick={onSelectConversation}
+        style={
+          isInWidget
+            ? Styles.collapseStyles([styles.container, {backgroundColor: backgroundColor}])
+            : styles.container
+        }
+      >
+        <Kb.Box style={Styles.collapseStyles([styles.rowContainer, styles.fastBlank] as const)}>
+          <RowAvatars
+            layoutName={layoutName}
+            layoutIsTeam={layoutIsTeam}
+            conversationIDKey={conversationIDKey}
+            backgroundColor={backgroundColor}
+            isMuted={isMuted}
+            isSelected={isSelected}
+          />
+          <Kb.Box style={Styles.collapseStyles([styles.conversationRow, styles.fastBlank])}>
+            <Kb.Box2 direction="vertical" style={styles.withBottomLine} fullWidth={true}>
+              <SimpleTopLine
+                isSelected={isSelected}
+                isInWidget={isInWidget}
+                showGear={!isInWidget}
+                layoutName={layoutName}
+                layoutIsTeam={layoutIsTeam}
+                layoutTime={layoutTime}
+                conversationIDKey={conversationIDKey}
+              />
+            </Kb.Box2>
+            <Kb.Box2 direction="vertical" style={styles.bottom} fullWidth={true}>
+              <BottomLine
+                isInWidget={isInWidget}
+                conversationIDKey={conversationIDKey}
+                backgroundColor={backgroundColor}
+                layoutSnippet={layoutSnippet}
+                isSelected={isSelected}
+              />
+            </Kb.Box2>
+          </Kb.Box>
+        </Kb.Box>
+      </Kb.ClickableBox>
+    </SwipeConvActions>
+  )
+})
+
+type RowAvatarProps = {
+  conversationIDKey: Types.ConversationIDKey
   backgroundColor?: string
-  channelname?: string
-  draft?: string
-  hasBadge: boolean
-  hasBottomLine: boolean
-  hasResetUsers: boolean
-  hasUnread: boolean
-  iconHoverColor: string
-  isDecryptingSnippet: boolean
-  isFinalized: boolean
   isMuted: boolean
   isSelected: boolean
-  isTypingSnippet: boolean
-  onHideConversation: () => void
-  onMuteConversation: () => void
-  onSelectConversation: () => void
-  participantNeedToRekey: boolean
-  participants: Array<string>
-  showBold: boolean
-  snippet: string
-  snippetDecoration: string
-  subColor: AllowedColors
-  teamname: string
-  conversationIDKey: ChatTypes.ConversationIDKey
-  timestamp: string
-  usernameColor: string
-  youAreReset: boolean
-  youNeedToRekey: boolean
-  isInWidget?: boolean
+  layoutName?: string
+  layoutIsTeam?: boolean
 }
+const RowAvatars = React.memo(function RowAvatars(p: RowAvatarProps) {
+  const {conversationIDKey, backgroundColor, isMuted, isSelected, layoutName, layoutIsTeam} = p
 
-type State = {
-  isHovered: boolean
-  showMenu: boolean
-}
-
-const SmallTeamBox = Styles.isMobile
-  ? Kb.ClickableBox
-  : Styles.styled(Kb.Box)(() => ({
-      '& .conversation-gear': {display: 'none'},
-      ':hover .conversation-gear': {display: 'unset'},
-      ':hover .conversation-timestamp': {display: 'none'},
-    }))
-
-class SmallTeam extends React.PureComponent<Props, State> {
-  state = {
-    isHovered: false,
-    showMenu: false,
-  }
-
-  _onMouseLeave = () => this.setState({isHovered: false})
-  _onMouseOver = () => this.setState({isHovered: true})
-  _onForceShowMenu = () => this.setState({showMenu: true})
-  _onForceHideMenu = () => this.setState({showMenu: false})
-
-  _backgroundColor = () =>
-    // props.backgroundColor should always override hover styles, otherwise, there's a
-    // moment when the conversation is loading that the selected inbox row is styled
-    // with hover styles instead of props.backgroundColor.
-    this.props.isSelected
-      ? this.props.backgroundColor
-      : this.state.isHovered
-      ? Styles.globalColors.blueGreyDark
-      : this.props.backgroundColor
-
-  render() {
-    const props = this.props
-    const clickProps = {
-      onClick: props.onSelectConversation,
-      ...(Styles.isMobile ? {onLongPress: this._onForceShowMenu} : {}),
-      onMouseLeave: this._onMouseLeave,
-      onMouseOver: this._onMouseOver,
+  const partOneTwo = Container.useSelector(state => {
+    const participantInfo = state.chat2.participantMap.get(conversationIDKey)
+    let part: Array<string>
+    if (participantInfo?.name.length) {
+      // Filter out ourselves unless it's our 1:1 conversation
+      part = participantInfo.name.filter((participant, _, list) =>
+        list.length === 1 ? true : participant !== state.config.username
+      )
+    } else if (layoutIsTeam && layoutName) {
+      part = [layoutName]
+    } else {
+      part = layoutName?.split(',') ?? []
     }
+    return part
+  }, shallowEqual)
+  const participantOne = partOneTwo[0]
+  const participantTwo = partOneTwo[1]
+  const teamname = Container.useSelector(state =>
+    state.chat2.metaMap.get(conversationIDKey)?.teamname ?? layoutIsTeam ? layoutName : ''
+  )
+  const isLocked = Container.useSelector(state => {
+    const meta = state.chat2.metaMap.get(conversationIDKey)
     return (
-      <SwipeConvActions
-        isMuted={this.props.isMuted}
-        onHideConversation={this.props.onHideConversation}
-        onMuteConversation={this.props.onMuteConversation}
-      >
-        <SmallTeamBox
-          {...clickProps}
-          style={Styles.collapseStyles([{backgroundColor: this._backgroundColor()}, styles.container])}
-        >
-          <Kb.Box style={Styles.collapseStyles([styles.rowContainer, styles.fastBlank])}>
-            {props.teamname ? (
-              <TeamAvatar
-                teamname={props.teamname}
-                isMuted={props.isMuted}
-                isSelected={this.props.isSelected}
-                isHovered={this.state.isHovered}
-              />
-            ) : (
-              <Avatars
-                backgroundColor={this._backgroundColor()}
-                isHovered={this.state.isHovered}
-                isMuted={props.isMuted}
-                isLocked={props.youNeedToRekey || props.participantNeedToRekey || props.isFinalized}
-                isSelected={props.isSelected}
-                participants={props.participants}
-              />
-            )}
-            <Kb.Box style={Styles.collapseStyles([styles.conversationRow, styles.fastBlank])}>
-              <Kb.Box
-                style={Styles.collapseStyles([
-                  Styles.globalStyles.flexBoxColumn,
-                  styles.flexOne,
-                  {justifyContent: props.hasBottomLine ? 'flex-end' : 'center'},
-                ])}
-              >
-                <SimpleTopLine
-                  backgroundColor={props.backgroundColor}
-                  hasUnread={props.hasUnread}
-                  hasBadge={props.hasBadge}
-                  iconHoverColor={props.iconHoverColor}
-                  isSelected={props.isSelected}
-                  participants={props.teamname ? [props.teamname] : props.participants}
-                  showBold={props.showBold}
-                  showGear={!props.isInWidget}
-                  forceShowMenu={this.state.showMenu}
-                  onForceHideMenu={this._onForceHideMenu}
-                  subColor={props.subColor}
-                  timestamp={props.timestamp}
-                  usernameColor={props.usernameColor}
-                  teamname={props.teamname}
-                  conversationIDKey={props.conversationIDKey}
-                  {...(props.channelname ? {channelname: props.channelname} : {})}
-                />
-              </Kb.Box>
-              {props.hasBottomLine && (
-                <Kb.Box
-                  style={Styles.collapseStyles([
-                    Styles.globalStyles.flexBoxColumn,
-                    styles.flexOne,
-                    {justifyContent: 'flex-start'},
-                  ])}
-                >
-                  <BottomLine
-                    backgroundColor={props.backgroundColor}
-                    participantNeedToRekey={props.participantNeedToRekey}
-                    youAreReset={props.youAreReset}
-                    showBold={props.showBold}
-                    snippet={props.snippet}
-                    snippetDecoration={props.snippetDecoration}
-                    subColor={props.subColor}
-                    hasResetUsers={props.hasResetUsers}
-                    youNeedToRekey={props.youNeedToRekey}
-                    isSelected={props.isSelected}
-                    isDecryptingSnippet={props.isDecryptingSnippet}
-                    isTypingSnippet={props.isTypingSnippet}
-                    draft={props.draft}
-                  />
-                </Kb.Box>
-              )}
-            </Kb.Box>
-          </Kb.Box>
-        </SmallTeamBox>
-      </SwipeConvActions>
+      meta?.rekeyers?.has(state.config.username) || (meta?.rekeyers.size ?? 0) > 0 || !!meta?.wasFinalizedBy
     )
-  }
-}
+  })
+
+  return teamname ? (
+    <TeamAvatar teamname={teamname} isMuted={isMuted} isSelected={isSelected} isHovered={false} />
+  ) : (
+    <Avatars
+      backgroundColor={backgroundColor}
+      isMuted={isMuted}
+      isLocked={isLocked}
+      isSelected={isSelected}
+      participantOne={participantOne}
+      participantTwo={participantTwo}
+    />
+  )
+})
 
 const styles = Styles.styleSheetCreate(() => ({
-  container: {flexShrink: 0, height: RowSizes.smallRowHeight},
+  bottom: {justifyContent: 'flex-start'},
+  container: Styles.platformStyles({
+    common: {
+      flexShrink: 0,
+      height: RowSizes.smallRowHeight,
+    },
+    isMobile: {
+      marginLeft: Styles.globalMargins.xtiny,
+      marginRight: Styles.globalMargins.xtiny,
+    },
+  }),
   conversationRow: {
     ...Styles.globalStyles.flexBoxColumn,
     flexGrow: 1,
     height: '100%',
     justifyContent: 'center',
-    paddingLeft: 8,
-    paddingRight: 8,
+    paddingLeft: Styles.globalMargins.tiny,
   },
   fastBlank: Styles.platformStyles({
-    isMobile: {
-      backgroundColor: Styles.globalColors.fastBlank,
-    },
+    isPhone: {backgroundColor: Styles.globalColors.fastBlank},
   }),
-  flexOne: {
-    flex: 1,
-  },
+  flexOne: {flex: 1},
   rowContainer: Styles.platformStyles({
     common: {
       ...Styles.globalStyles.flexBoxRow,
       alignItems: 'center',
       height: '100%',
+      paddingLeft: Styles.globalMargins.xsmall,
+      paddingRight: Styles.globalMargins.xsmall,
     },
     isElectron: Styles.desktopStyles.clickable,
   }),
+  withBottomLine: {
+    justifyContent: 'flex-end',
+    paddingBottom: Styles.globalMargins.xxtiny,
+  },
+  withoutBottomLine: {justifyContent: 'center'},
 }))
 
 export {SmallTeam}

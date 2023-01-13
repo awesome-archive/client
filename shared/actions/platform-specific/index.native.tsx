@@ -3,36 +3,46 @@ import * as RPCTypes from '../../constants/types/rpc-gen'
 import * as RPCChatTypes from '../../constants/types/rpc-chat-gen'
 import * as SettingsConstants from '../../constants/settings'
 import * as PushConstants from '../../constants/push'
+import * as RouterConstants from '../../constants/router2'
 import * as ConfigGen from '../config-gen'
+import * as Chat2Gen from '../chat2-gen'
 import * as ProfileGen from '../profile-gen'
 import * as SettingsGen from '../settings-gen'
 import * as WaitingGen from '../waiting-gen'
 import * as EngineGen from '../engine-gen-gen'
-import * as Flow from '../../util/flow'
 import * as Tabs from '../../constants/tabs'
 import * as RouteTreeGen from '../route-tree-gen'
-import * as Saga from '../../util/saga'
-// this CANNOT be an import *, totally screws up the packager
-import {
-  Alert,
-  Linking,
-  NativeModules,
-  NativeEventEmitter,
-  ActionSheetIOS,
-  CameraRoll,
-  PermissionsAndroid,
-  Clipboard,
-} from 'react-native'
-// eslint-ignore-next-line messed up export in module. fixed in the next update
+import * as LoginGen from '../login-gen'
+import * as Types from '../../constants/types/chat2'
+import * as MediaLibrary from 'expo-media-library'
+import type * as FsTypes from '../../constants/types/fs'
+import {getEngine} from '../../engine/require'
+import {Alert, Linking, ActionSheetIOS, PermissionsAndroid} from 'react-native'
+import Clipboard from '@react-native-clipboard/clipboard'
 import NetInfo from '@react-native-community/netinfo'
-import RNFetchBlob from 'rn-fetch-blob'
-import * as PushNotifications from 'react-native-push-notification'
-import {Permissions} from 'react-native-unimodules'
+import PushNotificationIOS from '@react-native-community/push-notification-ios'
 import {isIOS, isAndroid} from '../../constants/platform'
-import pushSaga, {getStartupDetailsFromInitialPush} from './push.native'
+import {
+  initPushListener,
+  getStartupDetailsFromInitialPush,
+  getStartupDetailsFromInitialShare,
+} from './push.native'
 import * as Container from '../../util/container'
 import * as Contacts from 'expo-contacts'
 import {launchImageLibraryAsync} from '../../util/expo-image-picker'
+import {_getNavigator} from '../../constants/router2'
+import * as ExpoLocation from 'expo-location'
+import * as ExpoTaskManager from 'expo-task-manager'
+import {
+  getDefaultCountryCode,
+  androidOpenSettings,
+  androidShare,
+  androidShareText,
+  androidUnlink,
+  fsCacheDir,
+  fsDownloadDir,
+  androidAppColorSchemeChanged,
+} from 'react-native-kb'
 
 const requestPermissionsToWrite = async () => {
   if (isAndroid) {
@@ -55,16 +65,18 @@ const requestPermissionsToWrite = async () => {
 
 export const requestLocationPermission = async (mode: RPCChatTypes.UIWatchPositionPerm) => {
   if (isIOS) {
-    const {status, permissions} = await Permissions.getAsync(Permissions.LOCATION)
     switch (mode) {
       case RPCChatTypes.UIWatchPositionPerm.base:
-        if (status === Permissions.PermissionStatus.DENIED) {
-          throw new Error('Please allow Keybase to access your location in the phone settings.')
+        {
+          const iosFGPerms = await ExpoLocation.requestForegroundPermissionsAsync()
+          if (iosFGPerms.ios?.scope === 'none') {
+            throw new Error('Please allow Keybase to access your location in the phone settings.')
+          }
         }
         break
       case RPCChatTypes.UIWatchPositionPerm.always: {
-        const iOSPerms = permissions[Permissions.LOCATION].ios
-        if (!iOSPerms || iOSPerms.scope !== 'always') {
+        const iosBGPerms = await ExpoLocation.requestBackgroundPermissionsAsync()
+        if (iosBGPerms.status !== ExpoLocation.PermissionStatus.GRANTED) {
           throw new Error(
             'Please allow Keybase to access your location even if the app is not running for live location.'
           )
@@ -72,65 +84,67 @@ export const requestLocationPermission = async (mode: RPCChatTypes.UIWatchPositi
         break
       }
     }
-  }
-  if (isAndroid) {
-    const permissionStatus = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      {
-        buttonNegative: 'Cancel',
-        buttonPositive: 'OK',
-        message: 'Keybase needs access to your location in order to post it.',
-        title: 'Keybase Location Permission',
-      }
-    )
-    if (permissionStatus !== 'granted') {
+  } else if (isAndroid) {
+    const androidBGPerms = await ExpoLocation.requestForegroundPermissionsAsync()
+    if (androidBGPerms.status !== ExpoLocation.PermissionStatus.GRANTED) {
       throw new Error('Unable to acquire location permissions')
     }
   }
 }
 
-export const saveAttachmentDialog = async (filePath: string) => {
-  const goodPath = filePath
-  logger.debug('saveAttachment: ', goodPath)
-  await requestPermissionsToWrite()
-  return CameraRoll.saveToCameraRoll(goodPath)
-}
-
 export async function saveAttachmentToCameraRoll(filePath: string, mimeType: string): Promise<void> {
   const fileURL = 'file://' + filePath
-  const saveType = mimeType.startsWith('video') ? 'video' : 'photo'
+  const saveType: 'video' | 'photo' = mimeType.startsWith('video') ? 'video' : 'photo'
   const logPrefix = '[saveAttachmentToCameraRoll] '
   try {
     await requestPermissionsToWrite()
     logger.info(logPrefix + `Attempting to save as ${saveType}`)
-    await CameraRoll.saveToCameraRoll(fileURL, saveType)
+    await MediaLibrary.saveToLibraryAsync(fileURL)
     logger.info(logPrefix + 'Success')
   } catch (e) {
     // This can fail if the user backgrounds too quickly, so throw up a local notification
     // just in case to get their attention.
-    PushNotifications.localNotification({
-      message: `Failed to save ${saveType} to camera roll`,
-    })
+    isIOS &&
+      PushNotificationIOS.addNotificationRequest({
+        body: `Failed to save ${saveType} to camera roll`,
+        id: Math.floor(Math.random() * Math.pow(2, 32)).toString(),
+      })
     logger.debug(logPrefix + 'failed to save: ' + e)
     throw e
   } finally {
-    RNFetchBlob.fs.unlink(filePath)
+    try {
+      await androidUnlink(filePath)
+    } catch (_) {
+      logger.warn('failed to unlink')
+    }
   }
 }
 
-export const showShareActionSheetFromURL = async (options: {
-  url?: any | null
-  message?: any | null
-  mimeType?: string | null
+const onShareAction = async (_: unknown, action: ConfigGen.ShowShareActionSheetPayload) => {
+  const {filePath, message, mimeType} = action.payload
+  await showShareActionSheet({filePath, message, mimeType})
+}
+
+export const showShareActionSheet = async (options: {
+  filePath?: string
+  message?: string
+  mimeType: string
 }) => {
   if (isIOS) {
     return new Promise((resolve, reject) =>
-      ActionSheetIOS.showShareActionSheetWithOptions(options, reject, resolve)
+      ActionSheetIOS.showShareActionSheetWithOptions(
+        {
+          message: options.message,
+          url: options.filePath,
+        },
+        reject,
+        resolve
+      )
     )
   } else {
-    if (!options.url && options.message) {
+    if (!options.filePath && options.message) {
       try {
-        await NativeModules.ShareFiles.shareText(options.message, options.mimeType)
+        await androidShareText(options.message, options.mimeType)
         return {completed: true, method: ''}
       } catch (_) {
         return {completed: false, method: ''}
@@ -138,7 +152,7 @@ export const showShareActionSheetFromURL = async (options: {
     }
 
     try {
-      await NativeModules.ShareFiles.share(options.url, options.mimeType)
+      await androidShare(options.filePath ?? '', options.mimeType)
       return {completed: true, method: ''}
     } catch (_) {
       return {completed: false, method: ''}
@@ -146,71 +160,21 @@ export const showShareActionSheetFromURL = async (options: {
   }
 }
 
-// Shows the shareactionsheet for a file, and deletes the file afterwards
-export const showShareActionSheetFromFile = async (filePath: string) => {
-  await showShareActionSheetFromURL({url: 'file://' + filePath})
-  return RNFetchBlob.fs.unlink(filePath)
-}
-
 const openAppSettings = async () => {
   if (isAndroid) {
-    NativeModules.NativeSettings.open()
+    androidOpenSettings()
   } else {
     const settingsURL = 'app-settings:'
     const can = await Linking.canOpenURL(settingsURL)
     if (can) {
-      Linking.openURL(settingsURL)
+      return Linking.openURL(settingsURL)
     } else {
       logger.warn('Unable to open app settings')
     }
   }
 }
 
-export const getContentTypeFromURL = async (
-  url: string,
-  cb: (arg0: {error?: any; statusCode?: number; contentType?: string; disposition?: string}) => void
-) => {
-  // For some reason HEAD doesn't work on Android. So just GET one byte.
-  // TODO: fix HEAD for Android and get rid of this hack.
-  if (isAndroid) {
-    try {
-      const response = await fetch(url, {headers: {Range: 'bytes=0-0'}, method: 'GET'}) // eslint-disable-line no-undef
-      let contentType = ''
-      let disposition = ''
-      let statusCode = response.status
-      if (
-        statusCode === 200 ||
-        statusCode === 206 ||
-        // 416 can happen if the file is empty.
-        statusCode === 416
-      ) {
-        contentType = response.headers.get('Content-Type') || ''
-        disposition = response.headers.get('Content-Disposition') || ''
-        statusCode = 200 // Treat 200, 206, and 416 as 200.
-      }
-      cb({contentType, disposition, statusCode})
-    } catch (error) {
-      console.log(error)
-      cb({error})
-    }
-  } else {
-    try {
-      const response = await fetch(url, {method: 'HEAD'}) // eslint-disable-line no-undef
-      let contentType = ''
-      let disposition = ''
-      if (response.status === 200) {
-        contentType = response.headers.get('Content-Type') || ''
-        disposition = response.headers.get('Content-Disposition') || ''
-      }
-      cb({contentType, disposition, statusCode: response.status})
-    } catch (error) {
-      console.log(error)
-      cb({error})
-    }
-  }
-}
-
-const updateChangedFocus = (_: Container.TypedState, action: ConfigGen.MobileAppStatePayload) => {
+const updateChangedFocus = (_: unknown, action: ConfigGen.MobileAppStatePayload) => {
   let appFocused: boolean
   let logState: RPCTypes.MobileAppState
   switch (action.payload.nextAppState) {
@@ -227,7 +191,6 @@ const updateChangedFocus = (_: Container.TypedState, action: ConfigGen.MobileApp
       logState = RPCTypes.MobileAppState.inactive
       break
     default:
-      Flow.ifFlowComplainsAboutThisFunctionYouHaventHandledAllCasesInASwitch(action.payload.nextAppState)
       appFocused = false
       logState = RPCTypes.MobileAppState.foreground
   }
@@ -237,151 +200,167 @@ const updateChangedFocus = (_: Container.TypedState, action: ConfigGen.MobileApp
 }
 
 let _lastPersist = ''
-function* persistRoute(state: Container.TypedState, action: ConfigGen.PersistRoutePayload) {
-  const path = action.payload.path
-  const tab = path[2] // real top is the root of the tab (aka chatRoot) and not the tab itself
-  if (!tab) return
+const persistRoute = async (_state: Container.TypedState, action: ConfigGen.PersistRoutePayload) => {
+  const {path} = action.payload
   let param = {}
-  let routeName = ''
-  // top level tab?
-  if (tab.routeName === 'tabs.chatTab') {
-    const convo = path[path.length - 1]
-    // a specific convo?
-    if (convo.routeName === 'chatConversation') {
-      routeName = convo.routeName
-      param = {selectedConversationIDKey: state.chat2.selectedConversation}
-    } else {
-      // just the inbox
-      routeName = tab.routeName
+  let routeName = Tabs.peopleTab
+
+  if (path) {
+    const cur = RouterConstants.getTab(null)
+    if (cur) {
+      routeName = cur
     }
-  } else if (Tabs.isValidInitialTabString(tab.routeName)) {
-    routeName = tab.routeName
-    if (routeName === _lastPersist) {
-      // skip rewriting this
-      return
-    }
-  } else {
-    return // don't write, keep the last
+
+    const ap = RouterConstants.getVisiblePath()
+    ap.some(r => {
+      if (r.name == 'chatConversation') {
+        param = {
+          // @ts-ignore TODO better param typing
+          selectedConversationIDKey: r.params?.conversationIDKey as Types.ConversationIDKey | undefined,
+        }
+        return true
+      }
+      return false
+    })
   }
 
   const s = JSON.stringify({param, routeName})
-  _lastPersist = routeName
-  yield Saga.spawn(() =>
-    RPCTypes.configGuiSetValueRpcPromise({
-      path: 'ui.routeState2',
-      value: {isNull: false, s},
-    }).catch(() => {})
-  )
+  // don't keep rewriting
+  if (_lastPersist === s) {
+    return
+  }
+  await RPCTypes.configGuiSetValueRpcPromise({
+    path: 'ui.routeState2',
+    value: {isNull: false, s},
+  })
+  _lastPersist = s
 }
 
-const updateMobileNetState = async (
-  _: Container.TypedState,
-  action: ConfigGen.OsNetworkStatusChangedPayload
-) => {
+// only send when different, we get called a bunch where this doesn't actually change
+let _lastNetworkType: ConfigGen.OsNetworkStatusChangedPayload['payload']['type'] | undefined
+const updateMobileNetState = async (_: unknown, action: ConfigGen.OsNetworkStatusChangedPayload) => {
   try {
-    await RPCTypes.appStateUpdateMobileNetStateRpcPromise({state: action.payload.type})
+    const {type} = action.payload
+    if (type === _lastNetworkType) {
+      return false as const
+    }
+    _lastNetworkType = type
+    await RPCTypes.appStateUpdateMobileNetStateRpcPromise({state: type})
   } catch (err) {
     console.warn('Error sending mobileNetStateUpdate', err)
   }
+  return false as const
 }
 
 const initOsNetworkStatus = async () => {
-  const {type} = await NetInfo.getConnectionInfo()
+  const {type} = await NetInfo.fetch()
   return ConfigGen.createOsNetworkStatusChanged({isInit: true, online: type !== 'none', type})
 }
 
-function* setupNetInfoWatcher() {
-  const channel = Saga.eventChannel(emitter => {
-    NetInfo.addEventListener('connectionChange', ({type}) => emitter(type))
-    return () => {}
-  }, Saga.buffers.sliding(1))
-
-  while (true) {
-    const status = yield Saga.take(channel)
-    yield Saga.put(ConfigGen.createOsNetworkStatusChanged({online: status !== 'none', type: status}))
-  }
+const setupNetInfoWatcher = (listenerApi: Container.ListenerApi) => {
+  NetInfo.addEventListener(({type}) => {
+    listenerApi.dispatch(ConfigGen.createOsNetworkStatusChanged({online: type !== 'none', type}))
+  })
 }
 
 // TODO rewrite this, v slow
-function* loadStartupDetails() {
+const loadStartupDetails = async (listenerApi: Container.ListenerApi) => {
   let startupWasFromPush = false
-  let startupConversation = undefined
-  let startupFollowUser = ''
-  let startupLink = ''
-  let startupTab = undefined
-  const startupSharePath = undefined
+  let startupConversation: Types.ConversationIDKey | undefined = undefined
+  let startupPushPayload: string | undefined = undefined
+  let startupFollowUser: string = ''
+  let startupLink: string = ''
+  let startupTab: Tabs.Tab | 'blank' | undefined = undefined
+  let startupSharePath: FsTypes.LocalPath | undefined = undefined
+  let startupShareText: string | undefined = undefined
 
-  const routeStateTask = yield Saga._fork(async () => {
-    try {
-      const v = await RPCTypes.configGuiGetValueRpcPromise({path: 'ui.routeState2'})
-      return v.s || ''
-    } catch (_) {
-      return undefined
-    }
-  })
-  const linkTask = yield Saga._fork(Linking.getInitialURL)
-  const initialPush = yield Saga._fork(getStartupDetailsFromInitialPush)
-  const [routeState, link, push] = yield Saga.join(routeStateTask, linkTask, initialPush)
+  const [routeState, link, push, share] = await Promise.all([
+    Container.neverThrowPromiseFunc(async () =>
+      RPCTypes.configGuiGetValueRpcPromise({path: 'ui.routeState2'}).then(v => v.s || '')
+    ),
+    Container.neverThrowPromiseFunc(Linking.getInitialURL),
+    Container.neverThrowPromiseFunc(getStartupDetailsFromInitialPush),
+    Container.neverThrowPromiseFunc(getStartupDetailsFromInitialShare),
+  ] as const)
+  logger.info('routeState load', routeState)
 
   // Clear last value to be extra safe bad things don't hose us forever
-  yield Saga._fork(async () => {
-    try {
-      await RPCTypes.configGuiSetValueRpcPromise({
-        path: 'ui.routeState2',
-        value: {isNull: false, s: ''},
-      })
-    } catch (_) {}
-  })
+  try {
+    await RPCTypes.configGuiSetValueRpcPromise({
+      path: 'ui.routeState2',
+      value: {isNull: false, s: ''},
+    })
+  } catch (_) {}
 
   // Top priority, push
   if (push) {
+    logger.info('initialState: push', push.startupConversation, push.startupFollowUser)
     startupWasFromPush = true
     startupConversation = push.startupConversation
-    startupFollowUser = push.startupFollowUser
+    startupFollowUser = push.startupFollowUser ?? ''
+    startupPushPayload = push.startupPushPayload
   } else if (link) {
+    logger.info('initialState: link', link)
     // Second priority, deep link
     startupLink = link
+  } else if (share?.fileUrl || share?.text) {
+    logger.info('initialState: share')
+    startupSharePath = share.fileUrl || undefined
+    startupShareText = share.text || undefined
   } else if (routeState) {
     // Last priority, saved from last session
     try {
       const item = JSON.parse(routeState)
       if (item) {
         startupConversation = (item.param && item.param.selectedConversationIDKey) || undefined
+        logger.info('initialState: routeState', startupConversation)
         startupTab = item.routeName || undefined
       }
     } catch (_) {
+      logger.info('initialState: routeState parseFail')
       startupConversation = undefined
       startupTab = undefined
     }
   }
 
-  yield Saga.put(
+  // never allow this case
+  if (startupTab === 'blank') {
+    startupTab = undefined
+  }
+
+  listenerApi.dispatch(
     ConfigGen.createSetStartupDetails({
       startupConversation,
       startupFollowUser,
       startupLink,
+      startupPushPayload,
       startupSharePath,
+      startupShareText,
       startupTab,
       startupWasFromPush,
     })
   )
 }
 
-function* waitForStartupDetails(state: Container.TypedState, action: ConfigGen.DaemonHandshakePayload) {
+const waitForStartupDetails = async (
+  state: Container.TypedState,
+  action: ConfigGen.DaemonHandshakePayload,
+  listenerApi: Container.ListenerApi
+) => {
   // loadStartupDetails finished already
   if (state.config.startupDetailsLoaded) {
     return
   }
   // Else we have to wait for the loadStartupDetails to finish
-  yield Saga.put(
+  listenerApi.dispatch(
     ConfigGen.createDaemonHandshakeWait({
       increment: true,
       name: 'platform.native-waitStartupDetails',
       version: action.payload.version,
     })
   )
-  yield Saga.take(ConfigGen.setStartupDetails)
-  yield Saga.put(
+  await listenerApi.take(action => action.type === ConfigGen.setStartupDetails)
+  listenerApi.dispatch(
     ConfigGen.createDaemonHandshakeWait({
       increment: false,
       name: 'platform.native-waitStartupDetails',
@@ -390,119 +369,78 @@ function* waitForStartupDetails(state: Container.TypedState, action: ConfigGen.D
   )
 }
 
-const copyToClipboard = (_: Container.TypedState, action: ConfigGen.CopyToClipboardPayload) => {
+const copyToClipboard = (_: unknown, action: ConfigGen.CopyToClipboardPayload) => {
   Clipboard.setString(action.payload.text)
 }
 
-const handleFilePickerError = (_: Container.TypedState, action: ConfigGen.FilePickerErrorPayload) => {
+const handleFilePickerError = (_: unknown, action: ConfigGen.FilePickerErrorPayload) => {
   Alert.alert('Error', action.payload.error.message)
 }
 
 const editAvatar = async () => {
   try {
     const result = await launchImageLibraryAsync('photo')
-    return result.cancelled === true
+    return result.cancelled
       ? null
       : RouteTreeGen.createNavigateAppend({
           path: [{props: {image: result}, selected: 'profileEditAvatar'}],
         })
   } catch (error) {
-    return ConfigGen.createFilePickerError({error: new Error(error)})
+    return ConfigGen.createFilePickerError({error: new Error(error as any)})
   }
 }
 
-const openAppStore = () =>
+const openAppStore = async () =>
   Linking.openURL(
     isAndroid
       ? 'http://play.google.com/store/apps/details?id=io.keybase.ossifrage'
       : 'https://itunes.apple.com/us/app/keybase-crypto-for-everyone/id1044461770?mt=8'
   ).catch(() => {})
 
-const expoPermissionStatusMap = {
-  [Permissions.PermissionStatus.GRANTED]: 'granted' as const,
-  [Permissions.PermissionStatus.DENIED]: 'never_ask_again' as const,
-  [Permissions.PermissionStatus.UNDETERMINED]: 'undetermined' as const,
-}
-
-const loadContactPermissionFromNative = async () => {
-  if (isIOS) {
-    return expoPermissionStatusMap[(await Permissions.getAsync(Permissions.CONTACTS)).status]
-  }
-  return (await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CONTACTS))
-    ? 'granted'
-    : 'undetermined'
-}
-
 const loadContactPermissions = async (
-  state: Container.TypedState,
-  action: SettingsGen.LoadedContactImportEnabledPayload | ConfigGen.MobileAppStatePayload,
-  logger: Saga.SagaLogger
+  _s: unknown,
+  action: SettingsGen.LoadedContactImportEnabledPayload | ConfigGen.MobileAppStatePayload
 ) => {
   if (action.type === ConfigGen.mobileAppState && action.payload.nextAppState !== 'active') {
     // only reload on foreground
     return
   }
-  const status = await loadContactPermissionFromNative()
+  const {status} = await Contacts.getPermissionsAsync()
   logger.info(`OS status: ${status}`)
-  if (
-    isAndroid &&
-    status === 'undetermined' &&
-    ['never_ask_again', 'undetermined'].includes(state.settings.contacts.permissionStatus)
-  ) {
-    // Workaround PermissionsAndroid.check giving only a boolean. If
-    // `requestPermissions` previously told us never_ask_again that is still the
-    // status
-    return null
-  }
   return SettingsGen.createLoadedContactPermissions({status})
 }
 
-const askForContactPermissionsAndroid = async () => {
-  const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CONTACTS)
-  // status is 'granted' | 'denied' | 'never_ask_again'
-  // map 'denied' -> 'undetermined' since 'undetermined' means we can show the prompt again
-  return status === 'denied' ? 'undetermined' : status
-}
-
-const askForContactPermissionsIOS = async () => {
-  const {status} = await Permissions.askAsync(Permissions.CONTACTS)
-  return expoPermissionStatusMap[status]
-}
-
-const askForContactPermissions = () => {
-  return isAndroid ? askForContactPermissionsAndroid() : askForContactPermissionsIOS()
-}
-
-function* requestContactPermissions(
+const requestContactPermissions = async (
   _: Container.TypedState,
-  action: SettingsGen.RequestContactPermissionsPayload
-) {
+  action: SettingsGen.RequestContactPermissionsPayload,
+  listenerApi: Container.ListenerApi
+) => {
   const {thenToggleImportOn} = action.payload
-  yield Saga.put(WaitingGen.createIncrementWaiting({key: SettingsConstants.importContactsWaitingKey}))
-  const result: Saga.RPCPromiseType<typeof askForContactPermissions> = yield askForContactPermissions()
-  if (result === 'granted' && thenToggleImportOn) {
-    yield Saga.put(SettingsGen.createEditContactImportEnabled({enable: true}))
+  listenerApi.dispatch(WaitingGen.createIncrementWaiting({key: SettingsConstants.importContactsWaitingKey}))
+  const {status} = await Contacts.requestPermissionsAsync()
+
+  if (status === Contacts.PermissionStatus.GRANTED && thenToggleImportOn) {
+    listenerApi.dispatch(
+      SettingsGen.createEditContactImportEnabled({enable: true, fromSettings: action.payload.fromSettings})
+    )
   }
-  yield Saga.sequentially([
-    Saga.put(SettingsGen.createLoadedContactPermissions({status: result})),
-    Saga.put(WaitingGen.createDecrementWaiting({key: SettingsConstants.importContactsWaitingKey})),
-  ])
+  listenerApi.dispatch(SettingsGen.createLoadedContactPermissions({status}))
+  listenerApi.dispatch(WaitingGen.createDecrementWaiting({key: SettingsConstants.importContactsWaitingKey}))
 }
 
 const manageContactsCache = async (
   state: Container.TypedState,
-  _: SettingsGen.LoadedContactImportEnabledPayload | EngineGen.Chat1ChatUiTriggerContactSyncPayload,
-  logger: Saga.SagaLogger
+  _action: SettingsGen.LoadedContactImportEnabledPayload | EngineGen.Chat1ChatUiTriggerContactSyncPayload
 ) => {
   if (state.settings.contacts.importEnabled === false) {
     await RPCTypes.contactsSaveContactListRpcPromise({contacts: []})
-    return SettingsGen.createSetContactImportedCount({count: null})
+    return SettingsGen.createSetContactImportedCount({})
   }
 
   // get permissions if we haven't loaded them for some reason
   let {permissionStatus} = state.settings.contacts
   if (permissionStatus === 'unknown') {
-    permissionStatus = await loadContactPermissionFromNative()
+    permissionStatus = (await Contacts.getPermissionsAsync()).status
   }
   const perm = permissionStatus === 'granted'
 
@@ -523,94 +461,288 @@ const manageContactsCache = async (
     contacts = await Contacts.getContactsAsync({
       fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails],
     })
-  } catch (e) {
-    logger.error(`error loading contacts: ${e.message}`)
-    return SettingsGen.createSetContactImportedCount({count: null, error: e.message})
+  } catch (_error) {
+    const error = _error as any
+    logger.error(`error loading contacts: ${error.message}`)
+    return SettingsGen.createSetContactImportedCount({error: error.message})
   }
   let defaultCountryCode: string = ''
   try {
-    defaultCountryCode = await NativeModules.Utils.getDefaultCountryCode()
+    defaultCountryCode = await getDefaultCountryCode()
     if (__DEV__ && !defaultCountryCode) {
       // behavior of parsing can be unexpectedly different with no country code.
       // iOS sim + android emu don't supply country codes, so use this one.
       defaultCountryCode = 'us'
     }
-  } catch (e) {
-    logger.warn(`Error loading default country code: ${e.message}`)
+  } catch (_error) {
+    const error = _error as any
+    logger.warn(`Error loading default country code: ${error.message}`)
   }
 
   const mapped = SettingsConstants.nativeContactsToContacts(contacts, defaultCountryCode)
   logger.info(`Importing ${mapped.length} contacts.`)
   const actions: Array<Container.TypedActions> = []
   try {
-    const newlyResolved = await RPCTypes.contactsSaveContactListRpcPromise({contacts: mapped})
+    const {newlyResolved, resolved} = await RPCTypes.contactsSaveContactListRpcPromise({contacts: mapped})
     logger.info(`Success`)
     actions.push(
       SettingsGen.createSetContactImportedCount({count: mapped.length}),
       SettingsGen.createLoadedUserCountryCode({code: defaultCountryCode})
     )
     if (newlyResolved && newlyResolved.length) {
-      PushNotifications.localNotification({
-        message: PushConstants.makeContactsResolvedMessage(newlyResolved),
-      })
+      isIOS &&
+        PushNotificationIOS.addNotificationRequest({
+          body: PushConstants.makeContactsResolvedMessage(newlyResolved),
+          id: Math.floor(Math.random() * Math.pow(2, 32)).toString(),
+        })
     }
-  } catch (e) {
-    logger.error('Error saving contacts list: ', e.message)
-    actions.push(SettingsGen.createSetContactImportedCount({count: null, error: e.message}))
+    if (state.settings.contacts.waitingToShowJoinedModal && resolved) {
+      actions.push(SettingsGen.createShowContactsJoinedModal({resolved}))
+    }
+  } catch (_error) {
+    const error = _error as any
+    logger.error('Error saving contacts list: ', error.message)
+    actions.push(SettingsGen.createSetContactImportedCount({error: error.message}))
   }
   return actions
 }
 
-function* setupDarkMode() {
-  const NativeAppearance = NativeModules.Appearance
-  if (NativeAppearance) {
-    const channel = Saga.eventChannel(emitter => {
-      const nativeEventEmitter = new NativeEventEmitter(NativeAppearance)
-      nativeEventEmitter.addListener('appearanceChanged', ({colorScheme}) => {
-        emitter(colorScheme)
-      })
-      return () => {}
-    }, Saga.buffers.sliding(1))
+const showContactsJoinedModal = (_: unknown, action: SettingsGen.ShowContactsJoinedModalPayload) =>
+  action.payload.resolved.length
+    ? [RouteTreeGen.createNavigateAppend({path: ['settingsContactsJoined']})]
+    : []
 
-    while (true) {
-      const mode = yield Saga.take(channel)
-      yield Saga.put(ConfigGen.createSetSystemDarkMode({dark: mode === 'dark'}))
+const setPermissionDeniedCommandStatus = (conversationIDKey: Types.ConversationIDKey, text: string) =>
+  Chat2Gen.createSetCommandStatusInfo({
+    conversationIDKey,
+    info: {
+      actions: [RPCChatTypes.UICommandStatusActionTyp.appsettings],
+      displayText: text,
+      displayType: RPCChatTypes.UICommandStatusDisplayTyp.error,
+    },
+  })
+
+const onChatWatchPosition = async (_: unknown, action: EngineGen.Chat1ChatUiChatWatchPositionPayload) => {
+  const response = action.payload.response
+  response.result(0)
+  try {
+    await requestLocationPermission(action.payload.params.perm)
+  } catch (_error) {
+    const error = _error as any
+    logger.info('failed to get location perms: ' + error.message)
+    return setPermissionDeniedCommandStatus(
+      Types.conversationIDToKey(action.payload.params.convID),
+      `Failed to access location. ${error.message}`
+    )
+  }
+
+  locationRefs++
+
+  if (locationRefs === 1) {
+    try {
+      logger.info('location start')
+      await ExpoLocation.startLocationUpdatesAsync(locationTaskName, {
+        deferredUpdatesDistance: 65,
+        pausesUpdatesAutomatically: true,
+      })
+      logger.info('location start success')
+    } catch {
+      logger.info('location start failed')
+      locationRefs--
+    }
+  }
+  return []
+}
+
+const onChatClearWatch = async () => {
+  locationRefs--
+  if (locationRefs <= 0) {
+    try {
+      logger.info('location end start')
+      await ExpoLocation.stopLocationUpdatesAsync(locationTaskName)
+      logger.info('location end success')
+    } catch {
+      logger.info('location end failed')
     }
   }
 }
 
-export function* platformConfigSaga() {
-  yield* Saga.chainGenerator<ConfigGen.PersistRoutePayload>(ConfigGen.persistRoute, persistRoute)
-  yield* Saga.chainAction2(ConfigGen.mobileAppState, updateChangedFocus)
-  yield* Saga.chainAction2(ConfigGen.openAppSettings, openAppSettings)
-  yield* Saga.chainAction2(ConfigGen.copyToClipboard, copyToClipboard)
-  yield* Saga.chainGenerator<ConfigGen.DaemonHandshakePayload>(
-    ConfigGen.daemonHandshake,
-    waitForStartupDetails
+const locationTaskName = 'background-location-task'
+let locationRefs = 0
+ExpoTaskManager.defineTask(locationTaskName, ({data, error}) => {
+  if (error) {
+    // check `error.message` for more details.
+    return
+  }
+
+  if (!data) {
+    return
+  }
+  const locations = (data as any).locations as Array<ExpoLocation.LocationObject>
+  if (!locations.length) {
+    return
+  }
+  const pos = locations[locations.length - 1]
+
+  // a hack to get a naked dispatch instead of storing it multiple times, just reach in here
+  // @ts-ignore
+  getEngine()._dispatch(
+    Chat2Gen.createUpdateLastCoord({
+      coord: {
+        accuracy: Math.floor(pos.coords.accuracy ?? 0),
+        lat: pos.coords.latitude,
+        lon: pos.coords.longitude,
+      },
+    })
   )
-  yield* Saga.chainAction2(ConfigGen.openAppStore, openAppStore)
-  yield* Saga.chainAction2(ConfigGen.filePickerError, handleFilePickerError)
-  yield* Saga.chainAction2(ProfileGen.editAvatar, editAvatar)
-  yield* Saga.chainAction2(ConfigGen.loggedIn, initOsNetworkStatus)
-  yield* Saga.chainAction2(ConfigGen.osNetworkStatusChanged, updateMobileNetState)
-  yield* Saga.chainAction2(
+})
+
+export const watchPositionForMap = async (
+  dispatch: Container.TypedDispatch,
+  conversationIDKey: Types.ConversationIDKey
+) => {
+  try {
+    logger.info('location perms check')
+    await requestLocationPermission(RPCChatTypes.UIWatchPositionPerm.base)
+  } catch (_error) {
+    const error = _error as any
+    logger.info('failed to get location perms: ' + error.message)
+    dispatch(
+      setPermissionDeniedCommandStatus(conversationIDKey, `Failed to access location. ${error.message}`)
+    )
+    return () => {}
+  }
+
+  try {
+    const sub = await ExpoLocation.watchPositionAsync(
+      {accuracy: ExpoLocation.LocationAccuracy.Highest},
+      location => {
+        const coord = {
+          accuracy: Math.floor(location.coords.accuracy ?? 0),
+          lat: location.coords.latitude,
+          lon: location.coords.longitude,
+        }
+        dispatch(Chat2Gen.createUpdateLastCoord({coord}))
+      }
+    )
+    return () => sub.remove()
+  } catch (_error) {
+    const error = _error as any
+    logger.info('failed to get location: ' + error.message)
+    dispatch(
+      setPermissionDeniedCommandStatus(conversationIDKey, `Failed to access location. ${error.message}`)
+    )
+    return () => {}
+  }
+}
+
+const configureFileAttachmentDownloadForAndroid = async () =>
+  RPCChatTypes.localConfigureFileAttachmentDownloadLocalRpcPromise({
+    // Android's cache dir is (when I tried) [app]/cache but Go side uses
+    // [app]/.cache by default, which can't be used for sharing to other apps.
+    cacheDirOverride: fsCacheDir,
+    downloadDirOverride: fsDownloadDir,
+  })
+
+const onTabLongPress = (state: Container.TypedState, action: RouteTreeGen.TabLongPressPayload) => {
+  if (action.payload.tab !== Tabs.peopleTab) return
+  const accountRows = state.config.configuredAccounts
+  const current = state.config.username
+  const row = accountRows.find(a => a.username !== current && a.hasStoredSecret)
+  if (row) {
+    return [
+      ConfigGen.createSetUserSwitching({userSwitching: true}),
+      LoginGen.createLogin({password: new Container.HiddenString(''), username: row.username}),
+    ]
+  }
+  return undefined
+}
+
+const onPersistRoute = async () => {
+  await Container.timeoutPromise(1000)
+  const path = RouterConstants.getVisiblePath()
+  return ConfigGen.createPersistRoute({path})
+}
+
+const checkNav = async (
+  _state: Container.TypedState,
+  action: ConfigGen.DaemonHandshakePayload,
+  listenerApi: Container.ListenerApi
+) => {
+  // have one
+  if (_getNavigator()) {
+    return
+  }
+
+  const name = 'mobileNav'
+  const {version} = action.payload
+
+  listenerApi.dispatch(ConfigGen.createDaemonHandshakeWait({increment: true, name, version}))
+  try {
+    // eslint-disable-next-line
+    while (true) {
+      logger.info('Waiting on nav')
+      await listenerApi.take(action => action.type === ConfigGen.setNavigator)
+      if (_getNavigator()) {
+        break
+      }
+      logger.info('Waiting on nav, got setNavigator but nothing in constants?')
+    }
+  } finally {
+    listenerApi.dispatch(ConfigGen.createDaemonHandshakeWait({increment: false, name, version}))
+  }
+}
+
+const notifyNativeOfDarkModeChange = (state: Container.TypedState) => {
+  if (isAndroid) {
+    androidAppColorSchemeChanged?.(state.config.darkModePreference ?? '')
+  }
+}
+
+export const initPlatformListener = () => {
+  Container.listenAction(ConfigGen.persistRoute, persistRoute)
+  Container.listenAction(ConfigGen.mobileAppState, updateChangedFocus)
+  Container.listenAction(ConfigGen.openAppSettings, openAppSettings)
+  Container.listenAction(ConfigGen.copyToClipboard, copyToClipboard)
+  Container.listenAction(ConfigGen.daemonHandshake, waitForStartupDetails)
+  Container.listenAction(ConfigGen.openAppStore, openAppStore)
+  Container.listenAction(ConfigGen.filePickerError, handleFilePickerError)
+  Container.listenAction(ProfileGen.editAvatar, editAvatar)
+  Container.listenAction(ConfigGen.loggedIn, initOsNetworkStatus)
+  Container.listenAction(ConfigGen.osNetworkStatusChanged, updateMobileNetState)
+
+  Container.listenAction(ConfigGen.showShareActionSheet, onShareAction)
+
+  Container.listenAction(RouteTreeGen.tabLongPress, onTabLongPress)
+
+  // Contacts
+  Container.listenAction(
     [SettingsGen.loadedContactImportEnabled, ConfigGen.mobileAppState],
-    loadContactPermissions,
-    'loadContactPermissions'
+    loadContactPermissions
   )
-  yield* Saga.chainGenerator<SettingsGen.RequestContactPermissionsPayload>(
-    SettingsGen.requestContactPermissions,
-    requestContactPermissions,
-    'requestContactPermissions'
-  )
-  yield* Saga.chainAction2(
+
+  Container.listenAction(SettingsGen.requestContactPermissions, requestContactPermissions)
+  Container.listenAction(
     [SettingsGen.loadedContactImportEnabled, EngineGen.chat1ChatUiTriggerContactSync],
-    manageContactsCache,
-    'manageContactsCache'
+    manageContactsCache
   )
+  Container.listenAction(SettingsGen.showContactsJoinedModal, showContactsJoinedModal)
+
+  // Location
+  getEngine().registerCustomResponse('chat.1.chatUi.chatWatchPosition')
+  Container.listenAction(EngineGen.chat1ChatUiChatWatchPosition, onChatWatchPosition)
+  Container.listenAction(EngineGen.chat1ChatUiChatClearWatch, onChatClearWatch)
+  if (isAndroid) {
+    Container.listenAction(ConfigGen.daemonHandshake, configureFileAttachmentDownloadForAndroid)
+  }
+
+  Container.listenAction(ConfigGen.daemonHandshake, checkNav)
+  Container.listenAction(ConfigGen.setDarkModePreference, notifyNativeOfDarkModeChange)
+
+  Container.listenAction(RouteTreeGen.onNavChanged, onPersistRoute)
+
   // Start this immediately instead of waiting so we can do more things in parallel
-  yield Saga.spawn(loadStartupDetails)
-  yield Saga.spawn(pushSaga)
-  yield Saga.spawn(setupNetInfoWatcher)
-  yield Saga.spawn(setupDarkMode)
+  Container.spawn(loadStartupDetails, 'loadStartupDetails')
+  initPushListener()
+  Container.spawn(setupNetInfoWatcher, 'setupNetInfoWatcher')
 }

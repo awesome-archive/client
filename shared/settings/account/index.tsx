@@ -3,15 +3,16 @@ import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import * as Constants from '../../constants/settings'
 import EmailPhoneRow from './email-phone-row'
-import * as I from 'immutable'
-import {Props as HeaderHocProps} from '../../common-adapters/header-hoc/types'
+import * as SettingsGen from '../../actions/settings-gen'
+import * as Container from '../../util/container'
 
 export type Props = {
-  addedEmail: string | null
+  addedEmail?: string
   addedPhone: boolean
-  contactKeys: I.List<string>
+  contactKeys: Array<string>
   hasPassword: boolean
   onClearSupersededPhoneNumber: () => void
+  onBack?: () => void
   onAddEmail: () => void
   onAddPhone: () => void
   onClearAddedEmail: () => void
@@ -25,14 +26,20 @@ export type Props = {
   tooManyPhones: boolean
   moreThanOneEmail: boolean
   waiting: boolean
-} & HeaderHocProps
+}
 
 export const SettingsSection = ({children}: {children: React.ReactNode}) => (
   <Kb.Box2 direction="vertical" gap="tiny" fullWidth={true} style={styles.section}>
     {children}
   </Kb.Box2>
 )
-const AddButton = (props: {disabled: boolean; kind: 'phone number' | 'email'; onClick: () => void}) => {
+
+type AddButtonProps = {
+  disabled: boolean
+  kind: 'phone number' | 'email'
+  onClick: () => void
+}
+const AddButton = (props: AddButtonProps) => {
   const btn = (
     <Kb.Button
       mode="Secondary"
@@ -62,12 +69,18 @@ const EmailPhone = (props: Props) => (
       <Kb.Text type="BodySmall">
         Secures your account by letting us send important notifications, and allows friends and teammates to
         find you by phone number or email.{' '}
-        <Kb.Text type="BodySmallSecondaryLink" onClickURL="https://keybase.io/docs/chat/phones_and_emails">
-          Read more <Kb.Icon type="iconfont-open-browser" sizeType="Tiny" boxStyle={styles.displayInline} />
+        <Kb.Text type="BodySmallPrimaryLink" onClickURL="https://keybase.io/docs/chat/phones-and-emails">
+          Read more{' '}
+          <Kb.Icon
+            type="iconfont-open-browser"
+            sizeType="Tiny"
+            boxStyle={styles.displayInline}
+            color={Styles.globalColors.blueDark}
+          />
         </Kb.Text>
       </Kb.Text>
     </Kb.Box2>
-    {!!props.contactKeys.size && (
+    {!!props.contactKeys.length && (
       <Kb.Box2 direction="vertical" style={styles.contactRows} fullWidth={true}>
         {props.contactKeys.map(ck => (
           <EmailPhoneRow contactKey={ck} key={ck} />
@@ -92,9 +105,7 @@ const Password = (props: Props) => {
     <SettingsSection>
       <Kb.Box2 direction="vertical" gap="xtiny" fullWidth={true}>
         <Kb.Text type="Header">Password</Kb.Text>
-        <Kb.Text type="BodySmall">
-          Allows you to log out and log back in, and use the keybase.io website.
-        </Kb.Text>
+        <Kb.Text type="BodySmall">Allows you to sign out and sign back in.</Kb.Text>
       </Kb.Box2>
       <Kb.Box2 direction="vertical" alignItems="flex-start" fullWidth={true}>
         {props.hasPassword && (
@@ -106,6 +117,27 @@ const Password = (props: Props) => {
           <Kb.Button mode="Secondary" onClick={props.onSetPassword} label={passwordLabel} small={true} />
         </Kb.ButtonBar>
       </Kb.Box2>
+    </SettingsSection>
+  )
+}
+
+const WebAuthTokenLogin = (_: Props) => {
+  const dispatch = Container.useDispatch()
+
+  return (
+    <SettingsSection>
+      <Kb.Box2 direction="vertical" gap="xtiny" fullWidth={true}>
+        <Kb.Text type="Header">Website login</Kb.Text>
+        <Kb.Text type="BodySmall">You can use your app to log your web browser into keybase.io.</Kb.Text>
+      </Kb.Box2>
+      <Kb.ButtonBar align="flex-start" style={styles.buttonBar}>
+        <Kb.Button
+          label={`Open keybase.io in web browser`}
+          onClick={() => dispatch(SettingsGen.createLoginBrowserViaWebAuthToken())}
+          mode="Secondary"
+          small={true}
+        />
+      </Kb.ButtonBar>
     </SettingsSection>
   )
 }
@@ -138,7 +170,7 @@ const AccountSettings = (props: Props) => (
   >
     <Kb.ScrollView style={Styles.globalStyles.fullWidth}>
       {props.addedEmail && (
-        <Kb.Banner color="yellow" onClose={props.onClearAddedEmail}>
+        <Kb.Banner key="clearAdded" color="yellow" onClose={props.onClearAddedEmail}>
           <Kb.BannerParagraph
             bannerColor="yellow"
             content={`Check your inbox! A verification link was sent to ${props.addedEmail}.`}
@@ -146,12 +178,10 @@ const AccountSettings = (props: Props) => (
         </Kb.Banner>
       )}
       {props.supersededPhoneNumber && (
-        <Kb.Banner color="yellow" onClose={props.onClearSupersededPhoneNumber}>
+        <Kb.Banner key="supersededPhone" color="yellow" onClose={props.onClearSupersededPhoneNumber}>
           <Kb.BannerParagraph
             bannerColor="yellow"
-            content={`Your phone number ${
-              props.supersededPhoneNumber
-            } is now associated with another Keybase user.`}
+            content={`Your phone number ${props.supersededPhoneNumber} is now associated with another Keybase user.`}
           />
           <Kb.Button
             onClick={props.onAddPhone}
@@ -163,7 +193,7 @@ const AccountSettings = (props: Props) => (
         </Kb.Banner>
       )}
       {props.addedPhone && (
-        <Kb.Banner color="green" onClose={props.onClearAddedPhone}>
+        <Kb.Banner key="addedPhone" color="green" onClose={props.onClearAddedPhone}>
           <Kb.BannerParagraph
             bannerColor="green"
             content={[
@@ -177,16 +207,19 @@ const AccountSettings = (props: Props) => (
         <EmailPhone {...props} />
         <Kb.Divider />
         <Password {...props} />
-        {!Styles.isMobile && (
-          <>
-            <Kb.Divider />
-            <DeleteAccount {...props} />
-          </>
-        )}
+        <Kb.Divider />
+        <WebAuthTokenLogin {...props} />
+        <Kb.Divider />
+        <DeleteAccount {...props} />
       </Kb.Box2>
     </Kb.ScrollView>
   </Kb.Reloadable>
 )
+
+AccountSettings.navigationOptions = {
+  header: undefined,
+  title: 'Your account',
+}
 
 const styles = Styles.styleSheetCreate(() => ({
   buttonBar: {
@@ -208,17 +241,22 @@ const styles = Styles.styleSheetCreate(() => ({
     width: 16,
   },
   section: Styles.platformStyles({
-    isElectron: {
+    common: {
       ...Styles.padding(
         Styles.globalMargins.small,
         Styles.globalMargins.mediumLarge,
         Styles.globalMargins.medium,
         Styles.globalMargins.small
       ),
+    },
+    isElectron: {
       maxWidth: 600,
     },
-    isMobile: {
+    isPhone: {
       ...Styles.padding(Styles.globalMargins.small, Styles.globalMargins.small, Styles.globalMargins.medium),
+    },
+    isTablet: {
+      maxWidth: Styles.globalStyles.largeWidthPercent,
     },
   }),
   topButton: {
@@ -226,4 +264,4 @@ const styles = Styles.styleSheetCreate(() => ({
   },
 }))
 
-export default Kb.HeaderHoc(AccountSettings)
+export default AccountSettings

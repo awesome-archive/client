@@ -51,6 +51,15 @@
       "name": "DbValue",
       "fields": [],
       "typedef": "bytes"
+    },
+    {
+      "type": "enum",
+      "name": "OnLoginStartupStatus",
+      "symbols": [
+        "UNKNOWN_0",
+        "DISABLED_1",
+        "ENABLED_2"
+      ]
     }
   ],
   "messages": {
@@ -178,6 +187,35 @@
         null,
         "DbValue"
       ]
+    },
+    "dbKeysWithPrefixes": {
+      "request": [
+        {
+          "name": "sessionID",
+          "type": "int"
+        },
+        {
+          "name": "prefix",
+          "type": "DbKey"
+        }
+      ],
+      "response": {
+        "type": "array",
+        "items": "DbKey"
+      }
+    },
+    "setOnLoginStartup": {
+      "request": [
+        {
+          "name": "enabled",
+          "type": "boolean"
+        }
+      ],
+      "response": null
+    },
+    "getOnLoginStartup": {
+      "request": [],
+      "response": "OnLoginStartupStatus"
     }
   },
   "namespace": "keybase.1"

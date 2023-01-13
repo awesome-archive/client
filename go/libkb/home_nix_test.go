@@ -1,11 +1,14 @@
 // Copyright 2015 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
+//go:build !windows
 // +build !windows
 
 package libkb
 
 import (
+	"os"
+	"path"
 	"strings"
 	"testing"
 
@@ -30,28 +33,29 @@ func TestPosix(t *testing.T) {
 }
 
 func TestDarwinHomeFinder(t *testing.T) {
-	hf := NewHomeFinder("keybase", nil, nil, nil, "darwin", func() RunMode { return ProductionRunMode }, makeLogGetter(t), nil)
-	d := hf.ConfigDir()
-	if !strings.HasSuffix(d, "Library/Application Support/Keybase") {
-		t.Errorf("Bad config dir: %s", d)
+	for _, osname := range []string{"darwin", "ios"} {
+		hf := NewHomeFinder("keybase", nil, nil, nil, osname, func() RunMode { return ProductionRunMode }, makeLogGetter(t), nil)
+		d := hf.ConfigDir()
+		if !strings.HasSuffix(d, "Library/Application Support/Keybase") {
+			t.Errorf("Bad config dir: %s", d)
+		}
+		d = hf.CacheDir()
+		if !strings.HasSuffix(d, "Library/Caches/Keybase") {
+			t.Errorf("Bad cache dir: %s", d)
+		}
+		hfInt := NewHomeFinder("keybase", func() string { return "home" }, nil, func() string { return "mobilehome" },
+			osname, func() RunMode { return ProductionRunMode }, makeLogGetter(t), nil)
+		hfDarwin := hfInt.(Darwin)
+		hfDarwin.forceIOS = true
+		hf = hfDarwin
+		d = hf.ConfigDir()
+		require.True(t, strings.HasSuffix(d, "Library/Application Support/Keybase"))
+		require.True(t, strings.HasPrefix(d, "mobilehome"))
+		d = hf.DataDir()
+		require.True(t, strings.HasSuffix(d, "Library/Application Support/Keybase"))
+		require.False(t, strings.HasPrefix(d, "mobilehome"))
+		require.True(t, strings.HasPrefix(d, "home"))
 	}
-	d = hf.CacheDir()
-	if !strings.HasSuffix(d, "Library/Caches/Keybase") {
-		t.Errorf("Bad cache dir: %s", d)
-	}
-	hfInt := NewHomeFinder("keybase", func() string { return "home" }, nil, func() string { return "mobilehome" },
-		"darwin", func() RunMode { return ProductionRunMode }, makeLogGetter(t), nil)
-	hfDarwin := hfInt.(Darwin)
-	hfDarwin.forceIOS = true
-	hf = hfDarwin
-	d = hf.ConfigDir()
-	require.True(t, strings.HasSuffix(d, "Library/Application Support/Keybase"))
-	require.True(t, strings.HasPrefix(d, "mobilehome"))
-	d = hf.DataDir()
-	require.True(t, strings.HasSuffix(d, "Library/Application Support/Keybase"))
-	require.False(t, strings.HasPrefix(d, "mobilehome"))
-	require.True(t, strings.HasPrefix(d, "home"))
-
 }
 
 func TestDarwinHomeFinderInDev(t *testing.T) {
@@ -67,18 +71,34 @@ func TestDarwinHomeFinderInDev(t *testing.T) {
 }
 
 func TestPosixRuntimeDir(t *testing.T) {
-	var home string
+	var cmdHome string
 	env := make(map[string]string)
 	ge := func(s string) string { return env[s] }
-	hf := NewHomeFinder("tester", func() string { return home }, nil, nil, "posix", func() RunMode { return ProductionRunMode }, makeLogGetter(t), ge)
+	hf := NewHomeFinder("tester", func() string { return cmdHome }, nil, nil, "posix", func() RunMode { return ProductionRunMode }, makeLogGetter(t), ge)
 
-	// Test the case that the --home flag overrides XDG_RUNTIME_DIR
-	home = "/footown"
+	origHomeEnv := os.Getenv("HOME")
+
+	// Custom env, custom cmd, XDG set
+	cmdHome = "/footown"
 	env["HOME"] = "/yoyo"
 	env["XDG_RUNTIME_DIR"] = "/barland"
-	require.Equal(t, "/footown/.config/tester", hf.RuntimeDir())
-	home = ""
-	require.Equal(t, "/barland/tester", hf.RuntimeDir())
+	require.Equal(t, "/footown/.config/tester", hf.RuntimeDir(), "expect custom cmd to win")
+
+	// Custom env, no cmd, XDG set
+	cmdHome = ""
+	env["HOME"] = "/yoyo"
+	env["XDG_RUNTIME_DIR"] = "/barland"
+	require.Equal(t, "/yoyo/.config/tester", hf.RuntimeDir(), "expect custom env to win")
+
+	// Standard env, no cmd, XDG set
+	cmdHome = ""
+	env["HOME"] = origHomeEnv
+	env["XDG_RUNTIME_DIR"] = "/barland"
+	require.Equal(t, "/barland/tester", hf.RuntimeDir(), "expect xdg to win")
+
+	// Standard env, no cmd, XDG unset
+	cmdHome = ""
+	env["HOME"] = origHomeEnv
 	delete(env, "XDG_RUNTIME_DIR")
-	require.Equal(t, "/yoyo/.config/tester", hf.RuntimeDir())
+	require.Equal(t, path.Join(origHomeEnv, ".config", "tester"), hf.RuntimeDir(), "expect home to win")
 }

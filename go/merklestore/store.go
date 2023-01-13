@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"sync"
 	"time"
 
@@ -160,19 +160,11 @@ func (s *MerkleStoreImpl) getKitString(m libkb.MetaContext, knownHash *keybase1.
 	tracer.Stage("LastRoot")
 	root := mc.LastRoot(m)
 
-	// The time that the root was fetched is used rather than when the
-	// root was published so that we can continue to operate even if
-	// the root has not been published in a long time.
-	if (root == nil) || s.pastDue(m, root.Fetched(), libkb.MerkleStoreShouldRefresh) {
-		m.Debug("MerkleStore: merkle root should refresh")
-
-		// Attempt a refresh if the root is old or nil.
-		err := s.refreshRoot(m)
-		if err != nil {
-			m.Debug("MerkleStore: could not refresh merkle root: %s", err)
-		} else {
-			root = mc.LastRoot(m)
-		}
+	// Try to refresh the root if it is too old, but keep going in case of error
+	if recentRoot, err := mc.FetchRootFromServer(m, libkb.MerkleStoreShouldRefresh); err == nil {
+		root = recentRoot
+	} else {
+		m.Debug("MerkleStore: could not refresh merkle root: %s", err)
 	}
 
 	if root == nil {
@@ -268,23 +260,6 @@ func (s *MerkleStoreImpl) fetch(m libkb.MetaContext, hash keybase1.MerkleStoreKi
 	return res.KitJSON, nil
 }
 
-// updateRoot kicks MerkleClient to update its merkle root
-// by doing a LookupUser on some arbitrary user.
-func (s *MerkleStoreImpl) refreshRoot(m libkb.MetaContext) error {
-	q := libkb.NewHTTPArgs()
-	// The user lookup here is unnecessary. It is done because that is what is
-	// easy with MerkleClient.  The user looked up is you if known, otherwise
-	// arbitrarily t_alice.  If t_alice is removed, this path will break.
-	uid := s.G().GetMyUID()
-	if len(uid) == 0 {
-		// Use t_alice's uid.
-		uid = libkb.TAliceUID
-	}
-	q.Add("uid", libkb.UIDArg(uid))
-	_, err := s.G().MerkleClient.LookupUser(m, q, nil, libkb.MerkleOpts{})
-	return err
-}
-
 func (s *MerkleStoreImpl) memGet(hash keybase1.MerkleStoreKitHash) *keybase1.MerkleStoreKit {
 	if s.mem != nil {
 		if s.mem.Hash == hash {
@@ -359,7 +334,7 @@ func (s *MerkleStoreImpl) pastDue(m libkb.MetaContext, event time.Time, limit ti
 }
 
 func (s *MerkleStoreImpl) readFile(path string) (keybase1.MerkleStoreKit, keybase1.MerkleStoreKitHash, error) {
-	buf, err := ioutil.ReadFile(path)
+	buf, err := os.ReadFile(path)
 	kitJSON := keybase1.MerkleStoreKit(string(buf))
 	return kitJSON, s.hash(kitJSON), err
 }

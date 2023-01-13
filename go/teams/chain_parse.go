@@ -1,6 +1,7 @@
 package teams
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 type SCTeamName string
 type SCTeamID string
 type SCTeamInviteID string
+type SCTeamInviteIDShort string
 type SCTeamBoxSummaryHash string
 
 // SCTeamEntropy is used to render stubbed out links unguessable.
@@ -23,12 +25,16 @@ type SCTeamEntropy string
 
 func (s SCTeamID) ToTeamID() (keybase1.TeamID, error) { return keybase1.TeamIDFromString(string(s)) }
 
-// A (username, seqno) pair.
-// The username is adorned with "%n" at the end
-// where n is the seqno IF the seqno is not 1.
+// An (uid%eldest_seqno) pair.
+// The uid is adorned with "%n" at the end where n is the eldest seqno.
+// Just UID is fine as well (implicit %1), but marshaling will always add %1.
 type SCTeamMember keybase1.UserVersion
 
 type SCMapInviteIDToUV map[keybase1.TeamInviteID]keybase1.UserVersionPercentForm
+type SCMapInviteIDUVPair struct {
+	InviteID SCTeamInviteID                  `json:"id"`
+	UV       keybase1.UserVersionPercentForm `json:"uv"`
+}
 
 type SCTeamSection struct {
 	ID               SCTeamID               `json:"id"`
@@ -40,6 +46,7 @@ type SCTeamSection struct {
 	Admin            *SCTeamAdmin           `json:"admin,omitempty"`
 	Invites          *SCTeamInvites         `json:"invites,omitempty"`
 	CompletedInvites SCMapInviteIDToUV      `json:"completed_invites,omitempty"`
+	UsedInvites      []SCMapInviteIDUVPair  `json:"used_invites,omitempty"`
 	Implicit         bool                   `json:"is_implicit,omitempty"`
 	Public           bool                   `json:"is_public,omitempty"`
 	Entropy          SCTeamEntropy          `json:"entropy,omitempty"`
@@ -69,9 +76,11 @@ type SCTeamInvites struct {
 }
 
 type SCTeamInvite struct {
-	Type string                  `json:"type"`
-	Name keybase1.TeamInviteName `json:"name"`
-	ID   SCTeamInviteID          `json:"id"`
+	Type    string                      `json:"type"`
+	Name    keybase1.TeamInviteName     `json:"name"`
+	ID      SCTeamInviteID              `json:"id"`
+	Etime   *keybase1.UnixTime          `json:"etime,omitempty"` // UnixTime
+	MaxUses *keybase1.TeamInviteMaxUses `json:"max_uses,omitempty"`
 }
 
 type SCTeamParent struct {
@@ -160,24 +169,48 @@ func (u SCTeamBotUV) ToUserVersion() keybase1.UserVersion {
 	}
 }
 
+// Len returns total count of all created invites and all canceled invites.
 func (i SCTeamInvites) Len() int {
 	size := 0
-	if i.Owners != nil {
-		size += len(*i.Owners)
-	}
-	if i.Admins != nil {
-		size += len(*i.Admins)
-	}
-	if i.Writers != nil {
-		size += len(*i.Writers)
-	}
-	if i.Readers != nil {
-		size += len(*i.Readers)
+	// ヾ( []*[])ノ
+	for _, ptr := range []*[]SCTeamInvite{i.Owners, i.Admins, i.Writers, i.Readers} {
+		if ptr != nil {
+			size += len(*ptr)
+		}
 	}
 	if i.Cancel != nil {
 		size += len(*i.Cancel)
 	}
 	return size
+}
+
+// NewInviteCount returns count of all created invites.
+func (i SCTeamInvites) NewInviteCount() int {
+	size := 0
+	for _, ptr := range []*[]SCTeamInvite{i.Owners, i.Admins, i.Writers, i.Readers} {
+		if ptr != nil {
+			size += len(*ptr)
+		}
+	}
+	return size
+}
+
+// CanceledInviteCount returns count of canceled invites.
+func (i SCTeamInvites) CanceledInviteCount() int {
+	if i.Cancel != nil {
+		return len(*i.Cancel)
+	}
+	return 0
+}
+
+// HasNewInvites returns true if SCTeamInvites creates any invites.
+func (i SCTeamInvites) HasNewInvites() bool {
+	for _, ptr := range []*[]SCTeamInvite{i.Owners, i.Admins, i.Writers, i.Readers} {
+		if ptr != nil && len(*ptr) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (a SCTeamAdmin) SigChainLocation() keybase1.SigChainLocation {
@@ -198,6 +231,20 @@ func (s *SCTeamMember) UnmarshalJSON(b []byte) (err error) {
 
 func (s *SCTeamMember) MarshalJSON() (b []byte, err error) {
 	return keybase1.Quote(keybase1.UserVersion(*s).PercentForm().String()), nil
+}
+
+func makeSCMapInviteIDUVMap(pairs []keybase1.TeamUsedInvite) (ret []SCMapInviteIDUVPair) {
+	if len(pairs) > 0 {
+		ret = make([]SCMapInviteIDUVPair, len(pairs))
+		for i, v := range pairs {
+			ret[i] = SCMapInviteIDUVPair{
+				InviteID: SCTeamInviteID(v.InviteID),
+				UV:       v.Uv,
+			}
+		}
+	}
+
+	return ret
 }
 
 // Non-team-specific stuff below the line
@@ -223,7 +270,7 @@ func (link *SCChainLink) UnmarshalPayload() (res SCChainLinkPayload, err error) 
 
 type SCChainLinkPayload struct {
 	Body                SCPayloadBody                `json:"body,omitempty"`
-	Ctime               int                          `json:"ctime,omitempty"`
+	Ctime               int                          `json:"ctime,omitempty"` // UnixTime
 	ExpireIn            int                          `json:"expire_in,omitempty"`
 	Prev                *string                      `json:"prev,omitempty"`
 	SeqType             keybase1.SeqType             `json:"seq_type,omitempty"`
@@ -240,7 +287,7 @@ func (s SCChainLinkPayload) SigChainLocation() keybase1.SigChainLocation {
 }
 
 type SCMerkleRootSection struct {
-	Ctime    int               `json:"ctime"`
+	Ctime    int               `json:"ctime"` // UnixTime
 	Seqno    keybase1.Seqno    `json:"seqno"`
 	HashMeta keybase1.HashMeta `json:"hash_meta"`
 }
@@ -311,6 +358,22 @@ func (i SCTeamInviteID) Eq(i2 keybase1.TeamInviteID) bool {
 	return tmp.Eq(i2)
 }
 
+func (i SCTeamInviteID) ToShortInviteID() (SCTeamInviteIDShort, error) {
+	decoded, err := hex.DecodeString(string(i))
+	if err != nil {
+		return "", err
+	}
+	return SCTeamInviteIDShort(libkb.Base30.EncodeToString(decoded)), nil
+}
+
+func (i SCTeamInviteIDShort) ToInviteID() (SCTeamInviteID, error) {
+	decoded, err := libkb.Base30.DecodeString(string(i))
+	if err != nil {
+		return "", err
+	}
+	return SCTeamInviteID(hex.EncodeToString(decoded)), nil
+}
+
 func (i SCTeamInvite) TeamInvite(mctx libkb.MetaContext, r keybase1.TeamRole, inviter keybase1.UserVersion) (keybase1.TeamInvite, error) {
 	id, err := i.ID.TeamInviteID()
 	if err != nil {
@@ -326,6 +389,8 @@ func (i SCTeamInvite) TeamInvite(mctx libkb.MetaContext, r keybase1.TeamRole, in
 		Type:    typ,
 		Name:    i.Name,
 		Inviter: inviter,
+		MaxUses: i.MaxUses,
+		Etime:   i.Etime,
 	}, nil
 }
 

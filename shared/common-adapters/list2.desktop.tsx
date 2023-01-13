@@ -1,15 +1,18 @@
-import React, {PureComponent} from 'react'
-import * as Flow from '../util/flow'
+import * as React from 'react'
 import AutoSizer from 'react-virtualized-auto-sizer'
 import {FixedSizeList, VariableSizeList} from 'react-window'
-import {Props} from './list2'
+import type {Props} from './list2'
 import {smallHeight, largeHeight} from './list-item2'
 
-class List2<T> extends PureComponent<Props<T>> {
+class List2<T> extends React.PureComponent<Props<T>> {
   _keyExtractor = index => {
     const item = this.props.items[index]
     if (this.props.indexAsKey || !item) {
       return String(index)
+    }
+
+    if (this.props.itemAsKey) {
+      return item
     }
 
     const keyProp = this.props.keyProperty || 'key'
@@ -36,8 +39,11 @@ class List2<T> extends PureComponent<Props<T>> {
     </FixedSizeList>
   )
 
+  private variableSizeListRef = React.createRef<VariableSizeList>()
+
   _variable = ({height, width, getItemLayout}) => (
     <VariableSizeList
+      ref={this.variableSizeListRef}
       style={this.props.style as React.CSSProperties}
       height={height}
       width={width}
@@ -50,6 +56,12 @@ class List2<T> extends PureComponent<Props<T>> {
       {this._row}
     </VariableSizeList>
   )
+
+  componentDidUpdate(prevProps: Props<T>) {
+    if (prevProps.forceLayout !== this.props.forceLayout) {
+      this.variableSizeListRef.current?.resetAfterIndex(0, true)
+    }
+  }
 
   render() {
     return (
@@ -65,7 +77,6 @@ class List2<T> extends PureComponent<Props<T>> {
             case 'variable':
               return this._variable({getItemLayout: this.props.itemHeight.getItemLayout, height, width})
             default:
-              Flow.ifFlowComplainsAboutThisFunctionYouHaventHandledAllCasesInASwitch(this.props.itemHeight)
               return null
           }
         }}

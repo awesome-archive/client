@@ -1,55 +1,36 @@
 import * as React from 'react'
 import * as Container from '../../../../util/container'
 import * as Constants from '../../../../constants/chat2'
-import * as Types from '../../../../constants/types/chat2'
+import type * as Types from '../../../../constants/types/chat2'
 import {YouAdded, OthersAdded} from '.'
 
-type OwnProps = {
-  message: Types.MessageSystemUsersAddedToConversation
-}
+type OwnProps = {message: Types.MessageSystemUsersAddedToConversation}
 
-const mapStateToProps = (state, {message}) => ({
-  channelname: Constants.getMeta(state, message.conversationIDKey).channelname,
-  you: state.config.username,
-})
+const UsersAddedToConversationContainer = React.memo(function UsersAddedToConversationContainer(p: OwnProps) {
+  const {message} = p
+  const {usernames, author, timestamp} = message
+  const channelname = Container.useSelector(
+    state => Constants.getMeta(state, message.conversationIDKey).channelname
+  )
+  const you = Container.useSelector(state => state.config.username)
 
-const mergeProps = (stateProps, _, ownProps: OwnProps) => ({
-  added: ownProps.message.usernames,
-  author: ownProps.message.author,
-  channelname: stateProps.channelname,
-  timestamp: ownProps.message.timestamp,
-  you: stateProps.you,
-})
-
-type SwitcherProps = {
-  added: Array<string>
-  author: string
-  channelname: string
-  timestamp: number
-  you: string
-}
-
-const UsersAddedToConversation = (props: SwitcherProps) => {
-  const common = {
-    author: props.author,
-    channelname: props.channelname,
-    timestamp: props.timestamp,
+  const props = {
+    author,
+    channelname,
+    timestamp,
   }
-  let otherUsers
-  if (props.added.includes(props.you)) {
-    otherUsers = props.added.slice()
-    otherUsers.splice(otherUsers.findIndex(u => u === props.you), 1)
+  let otherUsers: Array<string> | undefined
+  if (usernames.includes(you)) {
+    otherUsers = usernames.slice()
+    otherUsers.splice(
+      otherUsers.findIndex(u => u === you),
+      1
+    )
   }
   return otherUsers ? (
-    <YouAdded {...common} otherUsers={otherUsers} />
+    <YouAdded {...props} otherUsers={otherUsers} />
   ) : (
-    <OthersAdded {...common} added={props.added} />
+    <OthersAdded {...props} added={usernames} />
   )
-}
-
-export default Container.namedConnect(
-  mapStateToProps,
-  () => ({}),
-  mergeProps,
-  'ConnectedUsersAddedToConversation'
-)(UsersAddedToConversation)
+})
+export default UsersAddedToConversationContainer

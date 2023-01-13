@@ -1,7 +1,6 @@
-import * as React from 'react'
 import Toast from './toast'
 import {Box2} from './box'
-import Icon, {IconType} from './icon'
+import Icon, {type IconType} from './icon'
 import Text from './text'
 import * as Styles from '../styles'
 
@@ -21,7 +20,7 @@ type Props = {
 const SimpleToast = (props: Props) => (
   <Kb.Toast visible={props.visible}>
     <Kb.Box2 direction="horizontal" gap="tiny" centerChildren={true}>
-      <Kb.Icon type={props.iconType} color={Styles.globalColors.white} fontSize={22} />
+      <Kb.Icon type={props.iconType} color={Styles.globalColors.white} />
       <Kb.Text type="BodySemibold" style={styles.toastText}>
         {props.text}
       </Kb.Text>

@@ -1,5 +1,5 @@
 import {log, dump, flush} from '../native/logger'
-import {Logger, LogLine, LogLevel, Timestamp} from './types'
+import type {Logger, LogLine, LogLevel, Timestamp} from './types'
 import {toStringForLog} from '../util/string'
 
 const dumpLine = (timestamp: Timestamp, toLog: string) => {
@@ -38,18 +38,16 @@ class NativeLogger implements Logger {
     log(this._tagPrefix, dumpLine(Date.now(), toLog))
   }
 
-  dump(levelPrefix: LogLevel) {
+  async dump(levelPrefix: LogLevel) {
     return dump(this._tagPrefix).then((lines: any) =>
-      lines.map(
-        (l: string): any => {
-          const [ts, logLine] = parseLine(l)
-          return [levelPrefix, ts, logLine]
-        }
-      )
+      lines.map((l: string): any => {
+        const [ts, logLine] = parseLine(l)
+        return [levelPrefix, ts, logLine]
+      })
     )
   }
 
-  flush() {
+  async flush() {
     flush()
     return Promise.resolve()
   }

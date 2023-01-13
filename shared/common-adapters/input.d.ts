@@ -65,8 +65,8 @@ export type Props = {
   // If true it won't use its internal value to drive its rendering
   uncontrolled?: boolean
   // Desktop only.
-  onKeyDown?: (event: React.KeyboardEvent, isComposingIME: boolean) => void
-  onKeyUp?: (event: React.KeyboardEvent, isComposingIME: boolean) => void
+  onKeyDown?: (event: React.KeyboardEvent) => void
+  onKeyUp?: (event: React.KeyboardEvent) => void
   // Mobile only
   onEndEditing?: () => void
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'
@@ -98,6 +98,6 @@ declare class Input extends React.Component<Props> {
   // components. The transformation may be done asynchronously.
   // @param reflectChange: desktop only. If true, `onChangeText`
   // will be called after the transform
-  transformText: (fn: (TextInfo) => TextInfo, reflectChange?: boolean) => void
+  transformText: (fn: (t: TextInfo) => TextInfo, reflectChange?: boolean) => void
 }
 export default Input

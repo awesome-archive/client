@@ -1,15 +1,20 @@
-import * as EngineGen from './engine-gen-gen'
-import * as PeopleGen from './people-gen'
-import * as Saga from '../util/saga'
-import * as I from 'immutable'
 import * as Constants from '../constants/people'
-import * as Types from '../constants/types/people'
-import * as RPCTypes from '../constants/types/rpc-gen'
+import * as Router2Constants from '../constants/router2'
 import * as Container from '../util/container'
-import {RPCError} from '../util/errors'
+import * as EngineGen from './engine-gen-gen'
+import * as NotificationsGen from './notifications-gen'
+import * as PeopleGen from './people-gen'
+import * as ProfileGen from './profile-gen'
+import * as RouteTreeGen from './route-tree-gen'
+import * as RPCTypes from '../constants/types/rpc-gen'
+import * as Tabs from '../constants/tabs'
+import * as TeamBuildingGen from './team-building-gen'
+import {commonListenActions, filterForNs} from './team-building'
 import logger from '../logger'
+import type * as Types from '../constants/types/people'
+import {RPCError} from '../util/errors'
 
-// set this to true to have all todo items show up all the time
+// set this to true to have all todo items + a contact joined notification show up all the time
 const debugTodo = false
 
 const getPeopleData = async (state: Container.TypedState, action: PeopleGen.GetPeopleDataPayload) => {
@@ -36,12 +41,12 @@ const getPeopleData = async (state: Container.TypedState, action: PeopleGen.GetP
     )
     const following = state.config.following
     const followers = state.config.followers
-    const oldItems: I.List<Types.PeopleScreenItem> = (data.items || [])
+    const oldItems: Array<Types.PeopleScreenItem> = (data.items ?? [])
       .filter(item => !item.badged && item.data.t !== RPCTypes.HomeScreenItemType.todo)
-      .reduce(Constants.reduceRPCItemToPeopleItem, I.List())
-    let newItems: I.List<Types.PeopleScreenItem> = (data.items || [])
+      .reduce(Constants.reduceRPCItemToPeopleItem, [])
+    const newItems: Array<Types.PeopleScreenItem> = (data.items ?? [])
       .filter(item => item.badged || item.data.t === RPCTypes.HomeScreenItemType.todo)
-      .reduce(Constants.reduceRPCItemToPeopleItem, I.List())
+      .reduce(Constants.reduceRPCItemToPeopleItem, [])
 
     if (debugTodo) {
       const allTodos = Object.values(RPCTypes.HomeScreenTodoType).reduce<Array<RPCTypes.HomeScreenTodoType>>(
@@ -75,7 +80,7 @@ const getPeopleData = async (state: Container.TypedState, action: PeopleGen.GetP
             phone: '+1555000111',
           })
         }
-        newItems = newItems.push(
+        newItems.push(
           Constants.makeTodo({
             badged: true,
             confirmLabel: Constants.todoTypeToConfirmLabel[todoType],
@@ -87,13 +92,26 @@ const getPeopleData = async (state: Container.TypedState, action: PeopleGen.GetP
           })
         )
       })
+      newItems.unshift(
+        Constants.makeFollowedNotificationItem({
+          badged: true,
+          newFollows: [
+            Constants.makeFollowedNotification({
+              contactDescription: 'Danny Test -- dannytest39@keyba.se',
+              username: 'dannytest39',
+            }),
+          ],
+          notificationTime: new Date(),
+          type: 'contact',
+        })
+      )
     }
 
-    const followSuggestions: I.List<Types.FollowSuggestion> = (data.followSuggestions || []).reduce(
+    const followSuggestions = (data.followSuggestions ?? []).reduce<Array<Types.FollowSuggestion>>(
       (list, suggestion) => {
         const followsMe = followers.has(suggestion.username)
         const iFollow = following.has(suggestion.username)
-        return list.push(
+        list.push(
           Constants.makeFollowSuggestion({
             followsMe,
             fullName: suggestion.fullName,
@@ -101,8 +119,9 @@ const getPeopleData = async (state: Container.TypedState, action: PeopleGen.GetP
             username: suggestion.username,
           })
         )
+        return list
       },
-      I.List()
+      []
     )
 
     return PeopleGen.createPeopleDataProcessed({
@@ -118,7 +137,23 @@ const getPeopleData = async (state: Container.TypedState, action: PeopleGen.GetP
   }
 }
 
-const dismissAnnouncement = async (_: Container.TypedState, action: PeopleGen.DismissAnnouncementPayload) => {
+const dismissWotNotifications = async (_: unknown, action: PeopleGen.DismissWotNotificationsPayload) => {
+  try {
+    await RPCTypes.wotDismissWotNotificationsRpcPromise({
+      vouchee: action.payload.vouchee,
+      voucher: action.payload.voucher,
+    })
+  } catch (e) {
+    logger.warn('dismissWotUpdate error', e)
+  }
+}
+
+const receivedBadgeState = (_: unknown, action: NotificationsGen.ReceivedBadgeStatePayload) =>
+  PeopleGen.createBadgeAppForWotNotifications({
+    updates: new Map<string, Types.WotUpdate>(Object.entries(action.payload.badgeState.wotUpdates || {})),
+  })
+
+const dismissAnnouncement = async (_: unknown, action: PeopleGen.DismissAnnouncementPayload) => {
   await RPCTypes.homeHomeDismissAnnouncementRpcPromise({
     i: action.payload.id,
   })
@@ -127,25 +162,30 @@ const dismissAnnouncement = async (_: Container.TypedState, action: PeopleGen.Di
 const markViewed = async () => {
   try {
     await RPCTypes.homeHomeMarkViewedRpcPromise()
-  } catch (e) {
-    const err: RPCError = e
-    if (Container.isNetworkErr(err.code)) {
+  } catch (error) {
+    if (!(error instanceof RPCError)) {
+      throw error
+    }
+    if (Container.isNetworkErr(error.code)) {
       logger.warn('Network error calling homeMarkViewed')
     } else {
-      throw err
+      throw error
     }
   }
 }
 
-const skipTodo = async (_: Container.TypedState, action: PeopleGen.SkipTodoPayload) => {
-  await RPCTypes.homeHomeSkipTodoTypeRpcPromise({
-    t: RPCTypes.HomeScreenTodoType[action.payload.type],
-  })
-  // TODO get rid of this load and have core send us a homeUIRefresh
-  return PeopleGen.createGetPeopleData({
-    markViewed: false,
-    numFollowSuggestionsWanted: Constants.defaultNumFollowSuggestions,
-  })
+const skipTodo = async (_: unknown, action: PeopleGen.SkipTodoPayload) => {
+  try {
+    await RPCTypes.homeHomeSkipTodoTypeRpcPromise({
+      t: RPCTypes.HomeScreenTodoType[action.payload.type],
+    })
+    // TODO get rid of this load and have core send us a homeUIRefresh
+    return PeopleGen.createGetPeopleData({
+      markViewed: false,
+      numFollowSuggestionsWanted: Constants.defaultNumFollowSuggestions,
+    })
+  } catch (_) {}
+  return false
 }
 
 const homeUIRefresh = () =>
@@ -163,13 +203,44 @@ const connected = async () => {
   }
 }
 
-const peopleSaga = function*() {
-  yield* Saga.chainAction2(PeopleGen.getPeopleData, getPeopleData)
-  yield* Saga.chainAction2(PeopleGen.markViewed, markViewed)
-  yield* Saga.chainAction2(PeopleGen.skipTodo, skipTodo)
-  yield* Saga.chainAction2(PeopleGen.dismissAnnouncement, dismissAnnouncement)
-  yield* Saga.chainAction2(EngineGen.keybase1HomeUIHomeUIRefresh, homeUIRefresh)
-  yield* Saga.chainAction2(EngineGen.connected, connected)
+const onTeamBuildingAdded = (_: Container.TypedState, action: TeamBuildingGen.AddUsersToTeamSoFarPayload) => {
+  const {users} = action.payload
+  const user = users[0]
+  if (!user) return false
+
+  // keybase username is in serviceMap.keybase, otherwise assertion is id
+  const username = user.serviceMap.keybase || user.id
+  return [
+    TeamBuildingGen.createCancelTeamBuilding({namespace: 'people'}),
+    ProfileGen.createShowUserProfile({username}),
+  ]
 }
 
-export default peopleSaga
+const maybeMarkViewed = (_: unknown, action: RouteTreeGen.OnNavChangedPayload) => {
+  const {prev, next} = action.payload
+  if (
+    prev &&
+    Router2Constants.getTab(prev) === Tabs.peopleTab &&
+    next &&
+    Router2Constants.getTab(next) !== Tabs.peopleTab
+  ) {
+    return PeopleGen.createMarkViewed()
+  }
+  return false
+}
+
+const initPeople = () => {
+  Container.listenAction(PeopleGen.getPeopleData, getPeopleData)
+  Container.listenAction(PeopleGen.markViewed, markViewed)
+  Container.listenAction(PeopleGen.skipTodo, skipTodo)
+  Container.listenAction(PeopleGen.dismissAnnouncement, dismissAnnouncement)
+  Container.listenAction(NotificationsGen.receivedBadgeState, receivedBadgeState)
+  Container.listenAction(PeopleGen.dismissWotNotifications, dismissWotNotifications)
+  Container.listenAction(EngineGen.keybase1HomeUIHomeUIRefresh, homeUIRefresh)
+  Container.listenAction(EngineGen.connected, connected)
+  Container.listenAction(RouteTreeGen.onNavChanged, maybeMarkViewed)
+  commonListenActions('people')
+  Container.listenAction(TeamBuildingGen.addUsersToTeamSoFar, filterForNs('people', onTeamBuildingAdded))
+}
+
+export default initPeople

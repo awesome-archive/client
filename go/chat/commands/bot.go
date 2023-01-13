@@ -6,7 +6,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/keybase/client/go/chat/bots"
 	"github.com/keybase/client/go/chat/globals"
+	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 )
@@ -40,7 +42,7 @@ func (b *Bot) clearExtendedDisplayLocked(ctx context.Context, convID chat1.Conve
 
 func (b *Bot) Preview(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
 	tlfName, text string) {
-	defer b.Trace(ctx, func() error { return nil }, "Preview")()
+	defer b.Trace(ctx, nil, "Preview")()
 	b.Lock()
 	defer b.Unlock()
 	if !strings.HasPrefix(text, "!") {
@@ -61,21 +63,19 @@ func (b *Bot) Preview(ctx context.Context, uid gregor1.UID, convID chat1.Convers
 		}(globals.BackgroundChatCtx(ctx, b.G()))
 	}
 
-	cmds, err := b.G().BotCommandManager.ListCommands(ctx, convID)
+	cmds, _, err := b.G().BotCommandManager.ListCommands(ctx, convID)
 	if err != nil {
 		b.Debug(ctx, "Preview: failed to list commands: %s", err)
 		return
 	}
 
-	cmdText, _, err := b.commandAndMessage(text)
-	if err != nil {
-		b.Debug(ctx, "Preview: no command text found: %s", err)
-		b.clearExtendedDisplayLocked(ctx, convID)
-		return
-	}
-	cmdText = cmdText[1:]
+	bots.SortCommandsForMatching(cmds)
+
+	// Since we have a list of all valid commands for this conversation, don't do any tokenizing
+	// Instead, just check if any valid bot command (followed by a space) is a prefix of this message
 	for _, cmd := range cmds {
-		if cmdText == cmd.Name && cmd.ExtendedDescription != nil {
+		// If we decide to support the !<command>@<username> syntax, we can just add another check here
+		if cmd.Matches(text) && cmd.ExtendedDescription != nil {
 			var body string
 			if b.G().IsMobileAppType() {
 				body = cmd.ExtendedDescription.MobileBody
@@ -85,10 +85,10 @@ func (b *Bot) Preview(ctx context.Context, uid gregor1.UID, convID chat1.Convers
 			var title *string
 			if cmd.ExtendedDescription.Title != "" {
 				title = new(string)
-				*title = cmd.ExtendedDescription.Title
+				*title = utils.EscapeForDecorate(ctx, cmd.ExtendedDescription.Title)
 			}
 			err := b.getChatUI().ChatCommandMarkdown(ctx, convID, &chat1.UICommandMarkdown{
-				Body:  body,
+				Body:  utils.EscapeForDecorate(ctx, body),
 				Title: title,
 			})
 			if err != nil {

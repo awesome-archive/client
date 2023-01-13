@@ -1,7 +1,7 @@
 import * as React from 'react'
 import * as Kb from '../../../../common-adapters/mobile.native'
 import * as Styles from '../../../../styles'
-import {Props} from '.'
+import type {Props} from '.'
 import {isIOS} from '../../../../constants/platform'
 
 const Prompt = () => (
@@ -24,24 +24,44 @@ const styles = Styles.styleSheetCreate(
 
 class FilePickerPopup extends React.Component<Props> {
   render() {
-    const iosItems = [
-      {onClick: () => this.props.onSelect('mixed', 'camera'), title: 'Take Photo or Video'},
-      {onClick: () => this.props.onSelect('mixed', 'library'), title: 'Choose from Library'},
-    ]
+    const items = isIOS
+      ? ([
+          {
+            icon: 'iconfont-camera',
+            onClick: () => this.props.onSelect('mixed', 'camera'),
+            title: 'Take photo or video',
+          },
+          {
+            icon: 'iconfont-video-library',
+            onClick: () => this.props.onSelect('video', 'library'),
+            title: 'Choose video from library',
+          },
+          {
+            icon: 'iconfont-photo-library',
+            onClick: () => this.props.onSelect('photo', 'library'),
+            title: 'Choose photos from library',
+          },
+        ] as const)
+      : ([
+          {
+            icon: 'iconfont-camera',
+            onClick: () => this.props.onSelect('photo', 'camera'),
+            title: 'Take photo',
+          },
+          {icon: 'iconfont-film', onClick: () => this.props.onSelect('video', 'camera'), title: 'Take video'},
+          {
+            icon: 'iconfont-photo-library',
+            onClick: () => this.props.onSelect('photo', 'library'),
+            title: 'Photo from library',
+          },
+          {
+            icon: 'iconfont-video-library',
+            onClick: () => this.props.onSelect('video', 'library'),
+            title: 'Video from library',
+          },
+        ] as const)
 
-    const androidItems = [
-      {onClick: () => this.props.onSelect('photo', 'camera'), title: 'Take Photo'},
-      {onClick: () => this.props.onSelect('video', 'camera'), title: 'Take video'},
-      {onClick: () => this.props.onSelect('photo', 'library'), title: 'Photo from Library'},
-      {onClick: () => this.props.onSelect('video', 'library'), title: 'Video from Library'},
-    ]
-    const items = isIOS ? iosItems : androidItems
-
-    const header = {
-      title: 'header',
-      view: <Prompt />,
-    }
-
+    const header = <Prompt />
     return (
       <Kb.FloatingMenu
         header={header}

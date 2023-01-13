@@ -42,6 +42,13 @@ func newProofServices(g *libkb.GlobalContext) *proofServices {
 	return p
 }
 
+func (p *proofServices) Shutdown() {
+	p.Lock()
+	defer p.Unlock()
+	p.clearServiceTypes()
+	p.loadedHash = nil
+}
+
 func (p *proofServices) clearServiceTypes() {
 	p.externalServices = make(map[string]libkb.ServiceType)
 	p.displayConfigs = make(map[string]keybase1.ServiceDisplayConfig)
@@ -131,7 +138,7 @@ func (p *proofServices) loadServiceConfigs(mctx libkb.MetaContext) {
 		// Latest config already loaded.
 		return
 	}
-	defer mctx.TraceTimed("proofServices.loadServiceConfigsBulk", func() error { return err })()
+	defer mctx.Trace("proofServices.loadServiceConfigsBulk", &err)()
 	tracer.Stage("parse")
 	config, err := p.parseServerConfig(mctx, *entry)
 	if err != nil {

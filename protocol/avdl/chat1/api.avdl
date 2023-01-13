@@ -8,6 +8,10 @@ protocol api {
   import idl "unfurl.avdl";
   import idl "commands.avdl";
 
+  @typedef("string") record ConvIDStr {}
+  @typedef("string") record TLFIDStr {}
+  @typedef("string") record FlipGameIDStr {}
+
   record RateLimitRes {
     string tank;
     int capacity;
@@ -49,28 +53,54 @@ protocol api {
   // MsgSender is used for JSON output of the sender of a message.
   record MsgSender {
     @jsonkey("uid")
-    string uid;
+    keybase1.UID uid;
     @jsonkey("username")
     @optional(true)
     string username;
     @jsonkey("device_id")
-    string deviceID;
+    keybase1.DeviceID deviceID;
     @jsonkey("device_name")
     @optional(true)
     string deviceName;
+  }
+
+  record MsgBotInfo {
+    @jsonkey("bot_uid")
+    keybase1.UID botUID;
+    @jsonkey("bot_username")
+    @optional(true)
+    string botUsername;
   }
 
   record MsgFlipContent {
     @jsonkey("text")
     string text;
     @jsonkey("game_id")
-    string gameID;
+    FlipGameIDStr gameID;
     @jsonkey("flip_conv_id")
-    string flipConvID;
+    ConvIDStr flipConvID;
     @jsonkey("user_mentions")
     array<KnownUserMention> userMentions;
     @jsonkey("team_mentions")
     array<KnownTeamMention> teamMentions;
+  }
+
+  record EmojiContent {
+    string alias;
+    boolean isCrossTeam;
+    union { null, ConvIDStr } convID;
+    union { null, MessageID } messageID;
+  }
+
+  record MsgTextContent {
+    string body;
+    array<TextPayment> payments;
+    union { null, MessageID } replyTo;
+    union { null, string } replyToUID;
+    array<KnownUserMention> userMentions;
+    array<KnownTeamMention> teamMentions;
+    union { null, LiveLocation } liveLocation;
+    array<EmojiContent> emojis;
   }
 
   // MsgContent is used to retrieve the type name in addition to one of Text,
@@ -81,7 +111,7 @@ protocol api {
     @jsonkey("type")
     string typeName;
     @jsonkey("text")
-    union { null, MessageText } text;
+    union { null, MsgTextContent } text;
     @jsonkey("attachment")
     union { null, MessageAttachment } attachment;
     @jsonkey("edit")
@@ -113,7 +143,7 @@ protocol api {
     @jsonkey("id")
     MessageID id;
     @jsonkey("conversation_id")
-    string convID;
+    ConvIDStr convID;
     @jsonkey("channel")
     ChatChannel channel;
     @jsonkey("sender")
@@ -147,7 +177,7 @@ protocol api {
     @optional(true)
     gregor1.Time eTime;
     @jsonkey("reactions")
-    union { null, ReactionMap } reactions;
+    union { null, UIReactionMap } reactions;
     @jsonkey("has_pairwise_macs")
     @optional(true)
     boolean hasPairwiseMacs;
@@ -160,8 +190,8 @@ protocol api {
     @jsonkey("channel_name_mentions")
     @optional(true)
     array<UIChannelNameMention> channelNameMentions;
-    @jsonkey("bot_uid")
-    union { null, string } botUID;
+    @jsonkey("bot_info")
+    union { null, MsgBotInfo } botInfo;
   }
 
 
@@ -195,9 +225,11 @@ protocol api {
    */
   record ConvSummary {
     @jsonkey("id")
-    string id;
+    ConvIDStr id;
     @jsonkey("channel")
     ChatChannel channel;
+    @jsonkey("is_default_conv")
+    boolean isDefaultConv;
     @jsonkey("unread")
     boolean unread;
     @jsonkey("active_at")
@@ -220,6 +252,9 @@ protocol api {
     @jsonkey("error")
     @optional(true)
     string error;
+    @jsonkey("creator_info")
+    @optional(true)
+    union { null, ConversationCreatorInfoLocal } creatorInfo;
   }
 
   // ChatList is a list of conversations in the inbox.
@@ -231,8 +266,6 @@ protocol api {
     @jsonkey("identify_failures")
     @optional(true)
     array<keybase1.TLFIdentifyFailure> identifyFailures;
-    @jsonkey("pagination")
-    union { null, Pagination } pagination;
     @jsonkey("ratelimits")
     @optional(true)
     array<RateLimitRes> rateLimits;
@@ -278,7 +311,7 @@ protocol api {
 
   record NewConvRes {
     @jsonkey("id")
-    string id;
+    ConvIDStr id;
     @jsonkey("identify_failures")
     @optional(true)
     array<keybase1.TLFIdentifyFailure> identifyFailures;
@@ -312,6 +345,13 @@ protocol api {
     union { null, UIPagination } pagination;
   }
 
+  record ConvNotification {
+    // should always be `chat_conv`
+    string type;
+    union { null, ConvSummary } conv;
+    union { null, string } error;
+  }
+
   // Similar to AdvertiseCommandParam but intended for the json API
   record AdvertiseCommandAPIParam {
     @jsonkey("type")
@@ -320,15 +360,45 @@ protocol api {
     @optional(true)
     @jsonkey("team_name")
     string teamName;
+    @jsonkey("conv_id")
+    @optional(true)
+    ConvIDStr convID;
+  }
+
+  // Similar to AdvertiseCommandParam but intended for the json API
+  record ClearCommandAPIParam {
+    @jsonkey("type")
+    string typ;
+    @optional(true)
+    @jsonkey("team_name")
+    string teamName;
+    @jsonkey("conv_id")
+    @optional(true)
+    ConvIDStr convID;
   }
 
   record ResetConvMemberAPI {
-    string conversationID;
+    ConvIDStr conversationID;
     string username;
   }
 
   record GetResetConvMembersRes {
     array<ResetConvMemberAPI> members;
     array<RateLimitRes> rateLimits;
+  }
+
+  record DeviceInfo {
+    @jsonkey("id")
+    keybase1.DeviceID deviceID;
+    @jsonkey("description")
+    string deviceDescription;
+    @jsonkey("type")
+    keybase1.DeviceTypeV2 deviceType;
+    @jsonkey("ctime")
+    int64 deviceCtime;
+  }
+
+  record GetDeviceInfoRes {
+    array<DeviceInfo> devices;
   }
 }

@@ -13,6 +13,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/keybase/client/go/kbfs/data"
@@ -22,38 +23,61 @@ import (
 	"github.com/keybase/client/go/kbfs/libmime"
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/kbhttp"
+	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 )
 
-const tokenCacheSize = 64
 const fsCacheSize = 64
 
 // Server is a local HTTP server for serving KBFS content over HTTP.
 type Server struct {
 	config          libkbfs.Config
 	logger          logger.Logger
+	vlog            *libkb.VDebugLog
 	appStateUpdater env.AppStateUpdater
 	cancel          func()
 
-	tokens *lru.Cache
-	fs     *lru.Cache
+	tokenLock       sync.RWMutex
+	token           string
+	tokenExpireTime time.Time
+
+	fs *lru.Cache
 
 	serverLock sync.RWMutex
 	server     *kbhttp.Srv
 }
 
 const tokenByteSize = 32
+const tokenValidTime = 10 * time.Minute
 
-// NewToken returns a new random token that a HTTP client can use to load
-// content from the server.
-func (s *Server) NewToken() (token string, err error) {
+// CurrentToken returns the currently valid token that a HTTP client can use to
+// load content from the server.
+func (s *Server) CurrentToken() (token string, err error) {
+	s.tokenLock.RLock()
+	if s.config.Clock().Now().Before(s.tokenExpireTime) {
+		defer s.tokenLock.RUnlock()
+		return s.token, nil
+	}
+
+	s.tokenLock.RUnlock()
+
 	buf := make([]byte, tokenByteSize)
 	if _, err = rand.Read(buf); err != nil {
 		return "", err
 	}
 	token = base64.URLEncoding.EncodeToString(buf)
-	s.tokens.Add(token, nil)
+
+	s.tokenLock.Lock()
+	defer s.tokenLock.Unlock()
+
+	if s.config.Clock().Now().Before(s.tokenExpireTime) {
+		return s.token, nil
+	}
+
+	s.token = token
+	s.tokenExpireTime = s.config.Clock().Now().Add(tokenValidTime)
+
 	return token, nil
 }
 
@@ -140,23 +164,30 @@ func (s *Server) getHTTPFileSystem(ctx context.Context, requestPath string) (
 
 // serve accepts "/<fs path>?token=<token>"
 // For example:
-//     /team/keybase/file.txt?token=1234567890abcdef1234567890abcdef
+//
+//	/team/keybase/file.txt?token=1234567890abcdef1234567890abcdef
 func (s *Server) serve(w http.ResponseWriter, req *http.Request) {
-	s.logger.Debug("Incoming request from %q: %s", req.UserAgent(), req.URL)
+	s.vlog.Log(libkb.VLog1, "Incoming request from %q: %s", req.UserAgent(), req.URL)
 	addr, err := s.server.Addr()
 	if err != nil {
-		s.logger.Debug("serve: failed to get HTTP server address: %s", err)
+		s.logger.Error("serve: failed to get HTTP server address: %s", err)
 		s.handleInternalServerError(w)
 		return
 	}
 	if req.Host != addr {
-		s.logger.Debug("Host %s didn't match addr %s, failing request to protect against DNS rebinding", req.Host, addr)
+		s.logger.Warning("Host %s didn't match addr %s, failing request to protect against DNS rebinding", req.Host, addr)
 		s.handleBadRequest(w)
 		return
 	}
 	token := req.URL.Query().Get("token")
-	if len(token) == 0 || !s.tokens.Contains(token) {
-		s.logger.Info("Invalid token %q", token)
+	currentToken, err := s.CurrentToken()
+	if err != nil {
+		s.logger.Error("serve: failed to get current token: %s", err)
+		s.handleInternalServerError(w)
+		return
+	}
+	if len(token) == 0 || token != currentToken {
+		s.vlog.Log(libkb.VLog1, "Invalid token %q", token)
 		s.handleInvalidToken(w)
 		return
 	}
@@ -166,8 +197,15 @@ func (s *Server) serve(w http.ResponseWriter, req *http.Request) {
 		s.handleBadRequest(w)
 		return
 	}
-	http.StripPrefix(toStrip, http.FileServer(fs)).ServeHTTP(
-		newContentTypeOverridingResponseWriter(w), req)
+	viewTypeInvariance := req.URL.Query().Get("viewTypeInvariance")
+	if len(viewTypeInvariance) == 0 {
+		s.logger.Warning("Bad request; missing viewTypeInvariance")
+		s.handleBadRequest(w)
+		return
+	}
+	wrappedW := newContentTypeOverridingResponseWriter(w,
+		viewTypeInvariance)
+	http.StripPrefix(toStrip, http.FileServer(fs)).ServeHTTP(wrappedW, req)
 }
 
 const portStart = 16723
@@ -218,7 +256,7 @@ func (s *Server) monitorAppState(ctx context.Context) {
 				continue
 			}
 			if err := s.restart(); err != nil {
-				s.logger.Warning("(Re)starting server failed: %v", err)
+				s.logger.Error("(Re)starting server failed: %v", err)
 			}
 		}
 	}
@@ -232,9 +270,7 @@ func New(appStateUpdater env.AppStateUpdater, config libkbfs.Config) (
 		appStateUpdater: appStateUpdater,
 		config:          config,
 		logger:          logger,
-	}
-	if s.tokens, err = lru.New(tokenCacheSize); err != nil {
-		return nil, err
+		vlog:            config.MakeVLogger(logger),
 	}
 	if s.fs, err = lru.New(fsCacheSize); err != nil {
 		return nil, err

@@ -1,7 +1,7 @@
-import * as Types from './types/git'
+import type * as Types from './types/git'
 import * as RPCTypes from './types/rpc-gen'
-import moment from 'moment'
-import {TypedState} from './reducer'
+import type {TypedState} from './reducer'
+import * as dateFns from 'date-fns'
 
 const emptyInfo = {
   canDelete: false,
@@ -31,7 +31,7 @@ const parseRepoResult = (result: RPCTypes.GitRepoResult): Types.GitInfo | undefi
       chatDisabled: !!r.teamRepoSettings && r.teamRepoSettings.chatDisabled,
       devicename: r.serverMetadata.lastModifyingDeviceName,
       id: r.globalUniqueID,
-      lastEditTime: moment(r.serverMetadata.mtime).fromNow(),
+      lastEditTime: dateFns.formatDistanceToNow(new Date(r.serverMetadata.mtime), {addSuffix: true}),
       lastEditUser: r.serverMetadata.lastModifyingUsername,
       name: r.localMetadata.repoName,
       repoID: r.repoID,
@@ -51,8 +51,8 @@ const parseRepoError = (result: RPCTypes.GitRepoResult): Error => {
 }
 
 export const parseRepos = (results: Array<RPCTypes.GitRepoResult>) => {
-  let errors: Array<Error> = []
-  let repos = new Map<string, Types.GitInfo>()
+  const errors: Array<Error> = []
+  const repos = new Map<string, Types.GitInfo>()
   results.forEach(result => {
     if (result.state === RPCTypes.GitRepoResultState.ok && result.ok) {
       const parsedRepo = parseRepoResult(result)
@@ -68,7 +68,7 @@ export const parseRepos = (results: Array<RPCTypes.GitRepoResult>) => {
 
 export const repoIDTeamnameToId = (state: TypedState, repoID: string, teamname: string) => {
   let repo: undefined | Types.GitInfo
-  for (let [, info] of state.git.idToInfo) {
+  for (const [, info] of state.git.idToInfo) {
     if (info.repoID === repoID && info.teamname === teamname) {
       repo = info
       break

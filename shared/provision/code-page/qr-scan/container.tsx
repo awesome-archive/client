@@ -1,43 +1,22 @@
-import * as ConfigGen from '../../../actions/config-gen'
+import * as React from 'react'
 import * as ProvisionGen from '../../../actions/provision-gen'
 import * as Constants from '../../../constants/provision'
 import * as WaitingConstants from '../../../constants/waiting'
-import CodePage2 from '.'
-import {withProps, compose, withStateHandlers, namedConnect, safeSubmit} from '../../../util/container'
+import * as Container from '../../../util/container'
+import QRScan from '.'
 import HiddenString from '../../../util/hidden-string'
 
-type OwnProps = {}
-
-const mapStateToProps = state => ({
-  error: state.provision.error.stringValue(),
-  waiting: WaitingConstants.anyWaiting(state, Constants.waitingKey),
-})
-
-const mapDispatchToProps = dispatch => ({
-  onOpenSettings: () => dispatch(ConfigGen.createOpenAppSettings()),
-  onSubmitTextCode: (code: string) =>
-    dispatch(ProvisionGen.createSubmitTextCode({phrase: new HiddenString(code)})),
-})
-
-const mergeProps = (stateProps, dispatchProps, _: OwnProps) => ({
-  error: stateProps.error,
-  onOpenSettings: dispatchProps.onOpenSettings,
-  onSubmitTextCode: dispatchProps.onSubmitTextCode,
-  waiting: stateProps.waiting,
-})
-
-export default compose(
-  namedConnect(mapStateToProps, mapDispatchToProps, mergeProps, 'QRScan'),
-  safeSubmit(['onSubmitTextCode'], ['error']),
-  withStateHandlers(
-    {mountKey: '0'},
-    {incrementMountKey: ({mountKey}) => () => ({mountKey: String(Number(mountKey) + 1)})}
-  ),
-  withProps((p: any) => ({
-    onOpenSettings: () => {
-      // When they click open settings we force a remount
-      p.onOpenSettings()
-      setTimeout(() => p.incrementMountKey(), 1000)
+const QRScanContainer = () => {
+  const error = Container.useSelector(state => state.provision.error.stringValue())
+  const waiting = Container.useSelector(state => WaitingConstants.anyWaiting(state, Constants.waitingKey))
+  const dispatch = Container.useDispatch()
+  const _onSubmitTextCode = React.useCallback(
+    (code: string) => {
+      dispatch(ProvisionGen.createSubmitTextCode({phrase: new HiddenString(code)}))
     },
-  }))
-)(CodePage2)
+    [dispatch]
+  )
+  const onSubmitTextCode = Container.useSafeSubmit(_onSubmitTextCode, !!error)
+  return <QRScan onSubmitTextCode={onSubmitTextCode} waiting={waiting} />
+}
+export default QRScanContainer

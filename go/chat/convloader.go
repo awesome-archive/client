@@ -143,10 +143,9 @@ var _ types.ConvLoader = (*BackgroundConvLoader)(nil)
 func NewBackgroundConvLoader(g *globals.Context) *BackgroundConvLoader {
 	b := &BackgroundConvLoader{
 		Contextified:  globals.NewContextified(g),
-		DebugLabeler:  utils.NewDebugLabeler(g.GetLog(), "BackgroundConvLoader", false),
+		DebugLabeler:  utils.NewDebugLabeler(g.ExternalG(), "BackgroundConvLoader", false),
 		stopCh:        make(chan struct{}),
 		suspendCh:     make(chan chan struct{}, 10),
-		loadCh:        make(chan *clTask, 100),
 		identNotifier: NewCachingIdentifyNotifier(g),
 		clock:         clockwork.NewRealClock(),
 		resumeWait:    time.Second,
@@ -227,9 +226,9 @@ func (b *BackgroundConvLoader) Stop(ctx context.Context) chan struct{} {
 	b.cancelActiveLoadsLocked()
 	ch := make(chan struct{})
 	if b.started {
+		b.started = false
 		close(b.stopCh)
 		b.stopCh = make(chan struct{})
-		b.started = false
 		go func() {
 			_ = b.eg.Wait()
 			close(ch)
@@ -262,7 +261,9 @@ func (b *BackgroundConvLoader) setTestingNameInfoSource(ni types.NameInfoSource)
 }
 
 func (b *BackgroundConvLoader) Queue(ctx context.Context, job types.ConvLoaderJob) error {
-	if b.isConvLoaderContext(ctx) {
+	// allow high priority to be queued even in the bkg loader context. Often times, this is something like
+	// an ephemeral purge which we don't want to block.
+	if job.Priority != types.ConvLoaderPriorityHighest && b.isConvLoaderContext(ctx) {
 		b.Debug(ctx, "Queue: refusing to queue in background loader context: convID: %s", job)
 		return nil
 	}
@@ -284,7 +285,7 @@ func (b *BackgroundConvLoader) cancelActiveLoadsLocked() (canceled bool) {
 }
 
 func (b *BackgroundConvLoader) Suspend(ctx context.Context) (canceled bool) {
-	defer b.Trace(ctx, func() error { return nil }, "Suspend")()
+	defer b.Trace(ctx, nil, "Suspend")()
 	b.Lock()
 	defer b.Unlock()
 	if !b.started {
@@ -304,7 +305,7 @@ func (b *BackgroundConvLoader) Suspend(ctx context.Context) (canceled bool) {
 }
 
 func (b *BackgroundConvLoader) Resume(ctx context.Context) bool {
-	defer b.Trace(ctx, func() error { return nil }, "Resume")()
+	defer b.Trace(ctx, nil, "Resume")()
 	b.Lock()
 	defer b.Unlock()
 	if b.suspendCount > 0 {
@@ -322,6 +323,12 @@ func (b *BackgroundConvLoader) isSuspended() bool {
 	b.Lock()
 	defer b.Unlock()
 	return b.suspendCount > 0
+}
+
+func (b *BackgroundConvLoader) isRunning() bool {
+	b.Lock()
+	defer b.Unlock()
+	return b.started
 }
 
 func (b *BackgroundConvLoader) enqueue(ctx context.Context, task clTask) error {
@@ -351,14 +358,14 @@ func (b *BackgroundConvLoader) loop(uid gregor1.UID, stopCh chan struct{}) error
 		case <-stopCh:
 			return false
 		}
-		b.clock.Sleep(b.resumeWait)
+		b.clock.Sleep(libkb.RandomJitter(b.resumeWait))
 		b.Debug(bgctx, "waitForResume: resuming loop")
 		return true
 	}
 	// On mobile fresh start, apply the foreground wait
-	if b.G().GetAppType() == libkb.MobileAppType {
+	if b.G().IsMobileAppType() {
 		b.Debug(bgctx, "loop: delaying startup since on mobile")
-		b.clock.Sleep(b.resumeWait)
+		b.clock.Sleep(libkb.RandomJitter(b.resumeWait))
 	}
 
 	// Main loop
@@ -417,12 +424,16 @@ func (b *BackgroundConvLoader) loadLoop(uid gregor1.UID, stopCh chan struct{}) e
 	for {
 		select {
 		case task := <-b.loadCh:
-			if b.isSuspended() {
+			switch {
+			case !b.isRunning():
+				b.Debug(bgctx, "loadLoop: shutting down for %s", uid)
+				return nil
+			case b.isSuspended():
 				b.Debug(bgctx, "loadLoop: suspended, re-enqueueing task: %s", task.job)
 				if err := b.enqueue(bgctx, *task); err != nil {
 					b.Debug(bgctx, "enqueue error %s", err)
 				}
-			} else {
+			default:
 				b.Debug(bgctx, "loadLoop: running task: %s", task.job)
 				nextTask := b.load(bgctx, *task, uid)
 				if nextTask != nil {
@@ -433,6 +444,7 @@ func (b *BackgroundConvLoader) loadLoop(uid gregor1.UID, stopCh chan struct{}) e
 			}
 			b.clock.Sleep(b.loadWait)
 		case <-stopCh:
+			b.Debug(bgctx, "loadLoop: shutting down for %s", uid)
 			return nil
 		}
 	}
@@ -440,6 +452,7 @@ func (b *BackgroundConvLoader) loadLoop(uid gregor1.UID, stopCh chan struct{}) e
 
 func (b *BackgroundConvLoader) newQueue() {
 	b.queue = newJobQueue(1000)
+	b.loadCh = make(chan *clTask, 100)
 }
 
 func (b *BackgroundConvLoader) retriableError(err error) bool {
@@ -464,7 +477,8 @@ func (b *BackgroundConvLoader) IsBackgroundActive() bool {
 }
 
 func (b *BackgroundConvLoader) load(ictx context.Context, task clTask, uid gregor1.UID) *clTask {
-	b.Debug(ictx, "load: loading conversation %s", task.job)
+	defer b.Trace(ictx, nil, "load: %s", task.job)()
+	defer b.PerfTrace(ictx, nil, "load: %s", task.job)()
 	b.Lock()
 	var al activeLoad
 	al.Ctx, al.CancelFn = context.WithCancel(
@@ -494,7 +508,7 @@ func (b *BackgroundConvLoader) load(ictx context.Context, task clTask, uid grego
 	if pagination.Num > 0 {
 		var err error
 		tv, err = b.G().ConvSource.Pull(ctx, job.ConvID, uid,
-			chat1.GetThreadReason_BACKGROUNDCONVLOAD, query, pagination)
+			chat1.GetThreadReason_BACKGROUNDCONVLOAD, nil, query, pagination)
 		if err != nil {
 			b.Debug(ctx, "load: ConvSource.Pull error: %s (%T)", err, err)
 			if b.retriableError(err) && task.attempt+1 < bgLoaderMaxAttempts {

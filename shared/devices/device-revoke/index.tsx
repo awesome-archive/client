@@ -1,13 +1,14 @@
 import * as React from 'react'
 import * as Constants from '../../constants/devices'
-import * as Types from '../../constants/types/devices'
+import type * as Types from '../../constants/types/devices'
 import * as Kb from '../../common-adapters'
+import {HeaderLeftCancel} from '../../common-adapters/header-hoc'
 import * as Styles from '../../styles'
 
 export type Props = {
   device: Types.Device
   endangeredTLFs: Array<string>
-  iconNumber: number
+  iconNumber: Types.IconNumber
   onCancel: () => void
   onSubmit: () => void
   waiting: boolean
@@ -54,8 +55,8 @@ const ActionButtons = ({onCancel, onSubmit}) => (
   </Kb.Box2>
 )
 
-const getIcon = (deviceType: Types.DeviceType, iconNumber: number) => {
-  let iconType
+const getIcon = (deviceType: Types.DeviceType, iconNumber: Types.IconNumber) => {
+  let iconType: Kb.IconType
   const size = Styles.isMobile ? 64 : 48
   switch (deviceType) {
     case 'backup':
@@ -111,6 +112,11 @@ const DeviceRevoke = (props: Props) => (
   </Kb.Box2>
 )
 
+DeviceRevoke.navigationOptions = {
+  headerLeft: p => <HeaderLeftCancel {...p} />,
+  title: '',
+}
+
 const styles = Styles.styleSheetCreate(
   () =>
     ({
@@ -150,4 +156,4 @@ const styles = Styles.styleSheetCreate(
     } as const)
 )
 
-export default Kb.HeaderHoc(DeviceRevoke)
+export default DeviceRevoke

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import * as DevicesGen from '../../actions/devices-gen'
-import * as Types from '../../constants/types/devices'
+import type * as Types from '../../constants/types/devices'
 import * as Constants from '../../constants/devices'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
@@ -10,6 +10,7 @@ import {formatTimeForDeviceTimeline, formatTimeRelativeToNow} from '../../util/t
 type Props = {
   iconNumber: number
   id: Types.DeviceID
+  onBack: () => void
 }
 
 const TimelineMarker = ({first, last, closedCircle}) => (
@@ -86,11 +87,7 @@ const Timeline = ({device}) => {
 
 const DevicePage = (props: Props) => {
   const device = Container.useSelector(state => Constants.getDevice(state, props.id))
-  const canRevoke = Container.useSelector(state => {
-    const {numActive} = Constants.getDeviceCounts(state)
-    const hasRandomPW = state.settings.password.randomPW
-    return numActive > 1 || !hasRandomPW
-  })
+  const canRevoke = Container.useSelector(state => Constants.getDeviceCounts(state).numActive > 1)
   const dispatch = Container.useDispatch()
   const showRevokeDevicePage = React.useCallback(
     () => dispatch(DevicesGen.createShowRevokePage({deviceID: props.id})),
@@ -103,23 +100,25 @@ const DevicePage = (props: Props) => {
     <Kb.Meta title="revoked" style={styles.meta} backgroundColor={Styles.globalColors.red} />
   ) : null
 
-  let maybeIcon = ({
-    backup: 'icon-paper-key-96',
-    desktop: `icon-computer-background-${props.iconNumber}-96`,
-    mobile: `icon-phone-background-${props.iconNumber}-96`,
-  } as const)[device.type]
+  const maybeIcon = (
+    {
+      backup: 'icon-paper-key-96',
+      desktop: `icon-computer-background-${props.iconNumber}-96`,
+      mobile: `icon-phone-background-${props.iconNumber}-96`,
+    } as const
+  )[device.type]
   const icon = Kb.isValidIconType(maybeIcon) ? maybeIcon : 'icon-computer-96'
 
   const revokeName = {
     backup: 'paper key',
     desktop: 'computer',
-    mobile: 'phone',
+    mobile: 'device',
   }[device.type]
 
   const metaTwo = {
     backup: 'Paper key',
     desktop: 'Computer',
-    mobile: 'Phone',
+    mobile: 'Device',
   }[device.type]
 
   return (
@@ -145,6 +144,9 @@ const DevicePage = (props: Props) => {
       {!canRevoke && <Kb.Text type="BodySmall">You can't revoke your last device.</Kb.Text>}
     </Kb.Box2>
   )
+}
+DevicePage.navigationOptions = {
+  title: '',
 }
 
 const styles = Styles.styleSheetCreate(
@@ -191,4 +193,4 @@ const styles = Styles.styleSheetCreate(
     } as const)
 )
 
-export default Kb.HeaderHoc(DevicePage)
+export default DevicePage

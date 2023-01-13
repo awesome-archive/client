@@ -1,9 +1,11 @@
+/*
 import * as React from 'react'
 import Pinentry from './index.desktop'
 import {action, storiesOf} from '../stories/storybook'
 import {PassphraseType} from '../constants/types/rpc-gen'
 
 const props = {
+  darkMode: false,
   onCancel: action('onCancel'),
   onSubmit: action('onSubmit'),
   prompt: 'Enter your password to unlock the secret key for home computer.',
@@ -28,3 +30,6 @@ const load = () => {
 }
 
 export default load
+*/
+
+export default {}

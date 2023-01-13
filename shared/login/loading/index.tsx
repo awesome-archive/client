@@ -3,6 +3,7 @@ import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 
 type Props = {
+  allowFeedback?: boolean
   failed: string
   status: string
   onRetry: (() => void) | null
@@ -25,13 +26,14 @@ const Feedback = ({onFeedback}) =>
   )
 
 const Splash = (props: Props) => {
+  const {allowFeedback = true} = props
   const [showFeedback, setShowFeedback] = React.useState(false)
   const setShowFeedbackTrueLater = Kb.useTimeout(() => setShowFeedback(true), 7000)
   React.useEffect(() => {
     if (!__STORYBOOK__) {
       setShowFeedbackTrueLater()
     }
-  }, [])
+  }, [setShowFeedbackTrueLater])
   return (
     <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.container} gap="small">
       <Kb.Icon type={props.onRetry ? 'icon-keybase-logo-logged-out-80' : 'icon-keybase-logo-80'} />
@@ -48,7 +50,7 @@ const Splash = (props: Props) => {
           <Kb.Button label="Reload" onClick={props.onRetry} />
         </Kb.ButtonBar>
       )}
-      {(props.onRetry || showFeedback) && <Feedback onFeedback={props.onFeedback} />}
+      {(props.onRetry || showFeedback) && allowFeedback && <Feedback onFeedback={props.onFeedback} />}
     </Kb.Box2>
   )
 }
@@ -60,4 +62,4 @@ const styles = Styles.styleSheetCreate(
     } as const)
 )
 
-export default Splash
+export default React.memo(Splash)

@@ -19,10 +19,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 )
 
-// ErrorFile is the name of the virtual file in KBFS that should
-// contain the last reported error(s).
-var ErrorFile = ".kbfs_error"
-
 // WrapError simply wraps an error in a fmt.Stringer interface, so
 // that it can be reported.
 type WrapError struct {
@@ -97,17 +93,7 @@ type RenameAcrossDirsError struct {
 
 // Error implements the error interface for RenameAcrossDirsError
 func (e RenameAcrossDirsError) Error() string {
-	return fmt.Sprintf("Cannot rename across directories")
-}
-
-// ErrorFileAccessError indicates that the user tried to perform an
-// operation on the ErrorFile that is not allowed.
-type ErrorFileAccessError struct {
-}
-
-// Error implements the error interface for ErrorFileAccessError
-func (e ErrorFileAccessError) Error() string {
-	return fmt.Sprintf("Operation not allowed on file %s", ErrorFile)
+	return "Cannot rename across directories"
 }
 
 // WriteUnsupportedError indicates an error when trying to write a file
@@ -588,10 +574,23 @@ type DisallowedPrefixError struct {
 	prefix string
 }
 
-// Error implements the error interface for NoChainFoundError.
+// Error implements the error interface for DisallowedPrefixError.
 func (e DisallowedPrefixError) Error() string {
 	return fmt.Sprintf("Cannot create %s because it has the prefix %s",
 		e.name, e.prefix)
+}
+
+// DisallowedNameError indicates that the user attempted to create an
+// entry using a disallowed name.  It includes the plaintext name on
+// purpose, for clarity in the error message.
+type DisallowedNameError struct {
+	name string
+}
+
+// Error implements the error interface for DisallowedNameError.
+func (e DisallowedNameError) Error() string {
+	return fmt.Sprintf("Cannot create \"%s\" because it is a disallowed name",
+		e.name)
 }
 
 // NameTooLongError indicates that the user tried to write a directory
@@ -637,7 +636,7 @@ func NewRekeyPermissionError(
 type RekeyIncompleteError struct{}
 
 func (e RekeyIncompleteError) Error() string {
-	return fmt.Sprintf("Rekey did not complete due to insufficient user permissions")
+	return "Rekey did not complete due to insufficient user permissions"
 }
 
 // TimeoutError is just a replacement for context.DeadlineExceeded

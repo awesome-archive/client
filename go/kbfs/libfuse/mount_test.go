@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 //
+//go:build !windows
 // +build !windows
 
 package libfuse
@@ -47,7 +48,6 @@ func makeFS(ctx context.Context, t testing.TB, config *libkbfs.ConfigLocal) (
 	fuse.Debug = MakeFuseDebugFn(debugLog, false /* superVerbose */)
 
 	// TODO duplicates main() in kbfsfuse/main.go too much
-	quLog := config.MakeLogger(libkbfs.QuotaUsageLogModule("FSTest"))
 	filesys := &FS{
 		config:        config,
 		log:           log,
@@ -56,8 +56,6 @@ func makeFS(ctx context.Context, t testing.TB, config *libkbfs.ConfigLocal) (
 		errVlog:       config.MakeVLogger(log),
 		notifications: libfs.NewFSNotifications(log),
 		root:          NewRoot(),
-		quotaUsage: libkbfs.NewEventuallyConsistentQuotaUsage(
-			config, quLog, config.MakeVLogger(quLog)),
 	}
 	filesys.root.private = &FolderList{
 		fs:      filesys,
@@ -2824,6 +2822,8 @@ func TestErrorFile(t *testing.T) {
 	defer mnt.Close()
 	defer cancelFn()
 
+	libfs.AddRootWrapper(config)
+
 	// cause an error by stating a non-existent user
 	_, err := ioutil.Lstat(path.Join(mnt.Dir, PrivateName, "janedoe"))
 	if err == nil {
@@ -2834,15 +2834,31 @@ func TestErrorFile(t *testing.T) {
 	expectedErr := fuse.ENOENT
 
 	// test both the root error file and one in a directory
-	testForErrorText(t, path.Join(mnt.Dir, libkbfs.ErrorFile),
+	testForErrorText(t, path.Join(mnt.Dir, libfs.ErrorFileName),
 		expectedErr, "root")
-	testForErrorText(t, path.Join(mnt.Dir, PublicName, libkbfs.ErrorFile),
+	testForErrorText(t, path.Join(mnt.Dir, PublicName, libfs.ErrorFileName),
 		expectedErr, "root")
-	testForErrorText(t, path.Join(mnt.Dir, PrivateName, libkbfs.ErrorFile),
+	testForErrorText(t, path.Join(mnt.Dir, PrivateName, libfs.ErrorFileName),
 		expectedErr, "root")
-	testForErrorText(t, path.Join(mnt.Dir, PublicName, "jdoe", libkbfs.ErrorFile),
+
+	// Create public and private jdoe TLFs.
+	const b = "hello world"
+	p := path.Join(mnt.Dir, PublicName, "jdoe", "myfile")
+	if err := ioutil.WriteFile(p, []byte(b), 0644); err != nil {
+		t.Fatal(err)
+	}
+	syncFilename(t, p)
+	p = path.Join(mnt.Dir, PrivateName, "jdoe", "myfile")
+	if err := ioutil.WriteFile(p, []byte(b), 0644); err != nil {
+		t.Fatal(err)
+	}
+	syncFilename(t, p)
+
+	testForErrorText(
+		t, path.Join(mnt.Dir, PublicName, "jdoe", libfs.ErrorFileName),
 		expectedErr, "dir")
-	testForErrorText(t, path.Join(mnt.Dir, PrivateName, "jdoe", libkbfs.ErrorFile),
+	testForErrorText(
+		t, path.Join(mnt.Dir, PrivateName, "jdoe", libfs.ErrorFileName),
 		expectedErr, "dir")
 }
 
@@ -4081,4 +4097,59 @@ func TestOpenFileCount(t *testing.T) {
 		path.Join(mnt.Dir, PrivateName, "jdoe", "d"), os.ModeDir)
 	require.NoError(t, err)
 	checkCount(4)
+}
+
+func TestUpdateHistoryFile(t *testing.T) {
+	ctx := libcontext.BackgroundContextWithCancellationDelayer()
+	defer testCleanupDelayer(ctx, t)
+	config := libkbfs.MakeTestConfigOrBust(t, "jdoe")
+	mnt, _, cancelFn := makeFS(ctx, t, config)
+	defer mnt.Close()
+	defer cancelFn()
+	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
+
+	libfs.AddRootWrapper(config)
+
+	t.Log("Make several revisions")
+	p := path.Join(mnt.Dir, PrivateName, "jdoe")
+	for i := 0; i < 10; i++ {
+		file := path.Join(p, fmt.Sprintf("foo-%d", i))
+		f, err := os.Create(file)
+		require.NoError(t, err)
+		syncAndClose(t, f)
+	}
+
+	t.Log("Read a revision range")
+	histPrefix := path.Join(p, libfs.UpdateHistoryFileName)
+	fRange, err := os.Open(histPrefix + ".3-5")
+	require.NoError(t, err)
+	defer fRange.Close()
+	b, err := ioutil.ReadAll(fRange)
+	require.NoError(t, err)
+	var histRange libkbfs.TLFUpdateHistory
+	err = json.Unmarshal(b, &histRange)
+	require.NoError(t, err)
+	require.Len(t, histRange.Updates, 3)
+
+	t.Log("Read a single revision")
+	fSingle, err := os.Open(histPrefix + ".7")
+	require.NoError(t, err)
+	defer fSingle.Close()
+	b, err = ioutil.ReadAll(fSingle)
+	require.NoError(t, err)
+	var histSingle libkbfs.TLFUpdateHistory
+	err = json.Unmarshal(b, &histSingle)
+	require.NoError(t, err)
+	require.Len(t, histSingle.Updates, 1)
+
+	t.Log("Read the entire history")
+	fAll, err := os.Open(histPrefix)
+	require.NoError(t, err)
+	defer fAll.Close()
+	b, err = ioutil.ReadAll(fAll)
+	require.NoError(t, err)
+	var histAll libkbfs.TLFUpdateHistory
+	err = json.Unmarshal(b, &histAll)
+	require.NoError(t, err)
+	require.Len(t, histAll.Updates, 11)
 }

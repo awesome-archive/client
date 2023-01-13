@@ -63,6 +63,9 @@ type ReporterKBPKI struct {
 
 	lastNotifyPathLock sync.Mutex
 	lastNotifyPath     string
+
+	shutdownLock sync.RWMutex
+	isShutdown   bool
 }
 
 // NewReporterKBPKI creates a new ReporterKBPKI.
@@ -171,15 +174,23 @@ func (r *ReporterKBPKI) ReportErr(ctx context.Context,
 	if code >= 0 {
 		n := errorNotification(err, code, tlfName, t, mode, filename, params)
 		r.Notify(ctx, n)
+		r.config.GetPerfLog().CDebugf(ctx, "KBFS error: %v", err)
 	}
 }
 
 // Notify implements the Reporter interface for ReporterKBPKI.
 //
 // TODO: might be useful to get the debug tags out of ctx and store
-//       them in the notifyBuffer as well so that send() can put
-//       them back in its context.
+//
+//	them in the notifyBuffer as well so that send() can put
+//	them back in its context.
 func (r *ReporterKBPKI) Notify(ctx context.Context, notification *keybase1.FSNotification) {
+	r.shutdownLock.RLock()
+	defer r.shutdownLock.RUnlock()
+	if r.isShutdown {
+		return
+	}
+
 	select {
 	case r.notifyBuffer <- notification:
 	default:
@@ -192,6 +203,12 @@ func (r *ReporterKBPKI) Notify(ctx context.Context, notification *keybase1.FSNot
 // OnlineStatusChanged notifies the service (and eventually GUI) when we
 // detected we are connected to or disconnected from mdserver.
 func (r *ReporterKBPKI) OnlineStatusChanged(ctx context.Context, online bool) {
+	r.shutdownLock.RLock()
+	defer r.shutdownLock.RUnlock()
+	if r.isShutdown {
+		return
+	}
+
 	r.onlineStatusBuffer <- online
 }
 
@@ -206,9 +223,16 @@ func (r *ReporterKBPKI) setLastNotifyPath(p string) (same bool) {
 // NotifyPathUpdated implements the Reporter interface for ReporterKBPKI.
 //
 // TODO: might be useful to get the debug tags out of ctx and store
-//       them in the notifyPathBuffer as well so that send() can put
-//       them back in its context.
+//
+//	them in the notifyPathBuffer as well so that send() can put
+//	them back in its context.
 func (r *ReporterKBPKI) NotifyPathUpdated(ctx context.Context, path string) {
+	r.shutdownLock.RLock()
+	defer r.shutdownLock.RUnlock()
+	if r.isShutdown {
+		return
+	}
+
 	sameAsLast := r.setLastNotifyPath(path)
 	select {
 	case r.notifyPathBuffer <- path:
@@ -226,6 +250,12 @@ func (r *ReporterKBPKI) NotifyPathUpdated(ctx context.Context, path string) {
 				"ReporterKBPKI: notify path buffer full, but path is "+
 					"different from last one, so send in a goroutine %s", path)
 			go func() {
+				r.shutdownLock.RLock()
+				defer r.shutdownLock.RUnlock()
+				if r.isShutdown {
+					return
+				}
+
 				select {
 				case r.notifyPathBuffer <- path:
 				case <-r.shutdownCh:
@@ -238,10 +268,17 @@ func (r *ReporterKBPKI) NotifyPathUpdated(ctx context.Context, path string) {
 // NotifySyncStatus implements the Reporter interface for ReporterKBPKI.
 //
 // TODO: might be useful to get the debug tags out of ctx and store
-//       them in the notifyBuffer as well so that send() can put
-//       them back in its context.
+//
+//	them in the notifyBuffer as well so that send() can put
+//	them back in its context.
 func (r *ReporterKBPKI) NotifySyncStatus(ctx context.Context,
 	status *keybase1.FSPathSyncStatus) {
+	r.shutdownLock.RLock()
+	defer r.shutdownLock.RUnlock()
+	if r.isShutdown {
+		return
+	}
+
 	select {
 	case r.notifySyncBuffer <- status:
 	default:
@@ -254,6 +291,12 @@ func (r *ReporterKBPKI) NotifySyncStatus(ctx context.Context,
 // NotifyFavoritesChanged implements the Reporter interface for
 // ReporterSimple.
 func (r *ReporterKBPKI) NotifyFavoritesChanged(ctx context.Context) {
+	r.shutdownLock.RLock()
+	defer r.shutdownLock.RUnlock()
+	if r.isShutdown {
+		return
+	}
+
 	select {
 	case r.notifyFavsBuffer <- struct{}{}:
 	default:
@@ -266,6 +309,12 @@ func (r *ReporterKBPKI) NotifyFavoritesChanged(ctx context.Context) {
 // NotifyOverallSyncStatus implements the Reporter interface for ReporterKBPKI.
 func (r *ReporterKBPKI) NotifyOverallSyncStatus(
 	ctx context.Context, status keybase1.FolderSyncStatus) {
+	r.shutdownLock.RLock()
+	defer r.shutdownLock.RUnlock()
+	if r.isShutdown {
+		return
+	}
+
 	select {
 	case r.notifyOverallSyncBuffer <- status:
 	default:
@@ -274,6 +323,12 @@ func (r *ReporterKBPKI) NotifyOverallSyncStatus(
 		// eventually.
 		if status.PrefetchStatus == keybase1.PrefetchStatus_COMPLETE {
 			go func() {
+				r.shutdownLock.RLock()
+				defer r.shutdownLock.RUnlock()
+				if r.isShutdown {
+					return
+				}
+
 				select {
 				case r.notifyOverallSyncBuffer <- status:
 				case <-r.shutdownCh:
@@ -290,6 +345,13 @@ func (r *ReporterKBPKI) NotifyOverallSyncStatus(
 
 // Shutdown implements the Reporter interface for ReporterKBPKI.
 func (r *ReporterKBPKI) Shutdown() {
+	r.shutdownLock.Lock()
+	defer r.shutdownLock.Unlock()
+	if r.isShutdown {
+		return
+	}
+	r.isShutdown = true
+
 	r.canceler()
 	close(r.shutdownCh)
 	close(r.notifyBuffer)

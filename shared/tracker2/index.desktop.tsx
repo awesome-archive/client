@@ -1,32 +1,32 @@
-import * as React from 'react'
 import * as Kb from '../common-adapters'
 import * as Constants from '../constants/tracker2'
-import * as Types from '../constants/types/tracker2'
+import type * as Types from '../constants/types/tracker2'
 import * as Styles from '../styles'
-import Assertion from './assertion/remote-container'
-import Bio from './bio/remote-container'
+import {_setDarkModePreference} from '../styles/dark-mode'
+import Assertion from './assertion/container'
+import Bio from './bio/container'
 
 type Props = {
-  assertionKeys: ReadonlyArray<string> | null
-  bio: string | null
-  followThem: boolean | null
-  followersCount: number | null
-  followingCount: number | null
-  followsYou: boolean | null
-  guiID: string | null
+  assertionKeys?: ReadonlyArray<string>
+  bio?: string
+  darkMode: boolean
+  followThem?: boolean
+  followersCount?: number
+  followingCount?: number
+  followsYou?: boolean
+  guiID?: string
   isYou: boolean
-  location: string | null
+  location?: string
   onFollow: () => void
   onChat: () => void
   onClose: () => void
   onIgnoreFor24Hours: () => void
   onAccept: () => void
   onReload: () => void
-  // eslint-disable-next-line no-use-before-define
   reason: string
   state: Types.DetailsState
-  teamShowcase: ReadonlyArray<Types._TeamShowcase> | null
-  username: string
+  teamShowcase?: ReadonlyArray<Types.TeamShowcase>
+  trackerUsername: string
 }
 
 const getButtons = (props: Props) => {
@@ -50,7 +50,7 @@ const getButtons = (props: Props) => {
   )
   const buttonChat = (
     <Kb.WaitingButton key="Chat" label="Chat" waitingKey={Constants.waitingKey} onClick={props.onChat}>
-      <Kb.Icon type="iconfont-chat" color={Styles.globalColors.white} style={styles.chatIcon} />
+      <Kb.Icon type="iconfont-chat" color={Styles.globalColors.whiteOrWhite} style={styles.chatIcon} />
     </Kb.WaitingButton>
   )
 
@@ -110,11 +110,12 @@ const TeamShowcase = ({name}) => (
 )
 
 const Tracker = (props: Props) => {
+  _setDarkModePreference(props.darkMode ? 'alwaysDark' : 'alwaysLight')
   let assertions
   if (props.assertionKeys) {
     const unsorted = [...props.assertionKeys]
     const sorted = unsorted.sort(Constants.sortAssertionKeys)
-    assertions = sorted.map(a => <Assertion key={a} assertionKey={a} />)
+    assertions = sorted.map(a => <Assertion username={props.trackerUsername} key={a} assertionKey={a} />)
   } else {
     // TODO could do a loading thing before we know about the list at all?
     assertions = null
@@ -132,7 +133,14 @@ const Tracker = (props: Props) => {
   // In order to keep the 'effect' of the card sliding up on top of the text the text is below the scroll area. We still need the spacing so we draw the text inside the scroll but invisible
 
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.container}>
+    <Kb.Box2
+      direction="vertical"
+      fullWidth={true}
+      fullHeight={true}
+      style={styles.container}
+      className={props.darkMode ? 'darkMode' : 'lightMode'}
+      key={props.darkMode ? 'darkMode' : 'light'}
+    >
       <Kb.Text type="BodySmallSemibold" style={Styles.collapseStyles([styles.reason, {backgroundColor}])}>
         {props.reason}
       </Kb.Text>
@@ -157,7 +165,7 @@ const Tracker = (props: Props) => {
               <Kb.ConnectedNameWithIcon
                 size="big"
                 onClick="profile"
-                username={props.username}
+                username={props.trackerUsername}
                 underline={false}
                 selectable={true}
                 colorFollowing={true}
@@ -165,7 +173,7 @@ const Tracker = (props: Props) => {
               />
             </Kb.Box2>
           </Kb.Box2>
-          <Bio username={props.username} />
+          <Bio inTracker={true} username={props.trackerUsername} />
           {props.teamShowcase && (
             <Kb.Box2 direction="vertical" fullWidth={true} style={styles.teamShowcases} gap="xtiny">
               {props.teamShowcase.map(t => (

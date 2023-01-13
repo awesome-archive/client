@@ -1,31 +1,37 @@
-import * as React from 'react'
-import {namedConnect} from '../../util/container'
+import * as Container from '../../util/container'
 import * as Types from '../../constants/types/fs'
 import * as Constants from '../../constants/fs'
 import * as Kb from '../../common-adapters'
-import * as Flow from '../../util/flow'
+import * as Styles from '../../styles'
 
 // The behavior is to only show spinner when user first time lands on a screen
 // and when don't have the data that drives it yet. Since RPCs happen
 // automatically, we are just relying on whether data is available from the
 // redux store.
 
-type OwnProps = {
-  path: Types.Path
-}
+type OwnProps = {path: Types.Path}
 
-const mapStateToProps = (state, {path}: OwnProps) => ({
-  _pathItem: state.fs.pathItems.get(path, Constants.unknownPathItem),
-  _tlfsLoaded: !!state.fs.tlfs.private.size,
-})
+const styles = Styles.styleSheetCreate(
+  () =>
+    ({
+      progressIndicator: {
+        height: 18,
+        width: 18,
+      },
+    } as const)
+)
 
-const mergeProps = (stateProps, _, {path}: OwnProps) => {
+const Loading = (op: OwnProps) => {
+  const {path} = op
+  const _pathItem = Container.useSelector(state => Constants.getPathItem(state.fs.pathItems, path))
+  const _tlfsLoaded = Container.useSelector(state => !!state.fs.tlfs.private.size)
   const parsedPath = Constants.parsePath(path)
+  let show = false
+
   switch (parsedPath.kind) {
-    case Types.PathKind.Root:
-      return {show: false}
     case Types.PathKind.TlfList:
-      return {show: !stateProps._tlfsLoaded}
+      show = !_tlfsLoaded
+      break
     case Types.PathKind.TeamTlf:
     case Types.PathKind.GroupTlf:
     case Types.PathKind.InTeamTlf:
@@ -33,22 +39,19 @@ const mergeProps = (stateProps, _, {path}: OwnProps) => {
       // Only show the loading spinner when we are first-time loading a pathItem.
       // If we already have content to show, just don't show spinner anymore even
       // if we are loading.
-      if (stateProps._pathItem.type === Types.PathType.Unknown) {
-        return {show: true}
+      if (_pathItem.type === Types.PathType.Unknown) {
+        show = true
+        break
       }
-      if (
-        stateProps._pathItem.type === Types.PathType.Folder &&
-        stateProps._pathItem.progress === Types.ProgressType.Pending
-      ) {
-        return {show: true}
+      if (_pathItem.type === Types.PathType.Folder && _pathItem.progress === Types.ProgressType.Pending) {
+        show = true
+        break
       }
-      return {show: false}
+      break
+    case Types.PathKind.Root:
     default:
-      Flow.ifFlowComplainsAboutThisFunctionYouHaventHandledAllCasesInASwitch(parsedPath)
-      return {show: false}
   }
+
+  return show ? <Kb.ProgressIndicator style={styles.progressIndicator} /> : null
 }
-
-const Loading = props => props.show && <Kb.ProgressIndicator type="Small" />
-
-export default namedConnect(mapStateToProps, () => ({}), mergeProps, 'TopBarLoading')(Loading)
+export default Loading

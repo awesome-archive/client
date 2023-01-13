@@ -1,4 +1,3 @@
-import * as React from 'react'
 import {Text} from '../../../../common-adapters'
 import UserNotice from '../user-notice'
 import {globalColors} from '../../../../styles'
@@ -9,7 +8,7 @@ type Props = {
 }
 
 const ProfileResetNotice = ({username, onOpenOlderConversation}: Props) => (
-  <UserNotice username={username} bgColor={globalColors.blueLighter2}>
+  <UserNotice>
     <Text type="BodySmallSemibold" negative={true} style={{color: globalColors.black_50}}>
       {username} reset their profile
     </Text>

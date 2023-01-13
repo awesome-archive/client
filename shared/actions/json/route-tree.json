@@ -1,18 +1,27 @@
 {
-  "prelude": ["import * as Tabs from '../constants/tabs'"],
+  "prelude": [
+    "import type * as Tabs from '../constants/tabs'",
+    "import type * as Types from '../constants/types/route-tree'"
+  ],
   "actions": {
     "navigateAppend": {
       "fromKey?": "string",
       "path": "any",
       "replace?": "boolean"
     },
-    "navigateUp": {"fromKey?": "string"},
+    "navigateUp": {
+      "fromKey?": "string"
+    },
+    "navigateUpNoop": {
+      "_description": "Nav up but no longer focused, for logging only"
+    },
     "clearModals": {
       "_description": "ONLY used by the new nav. use this to clear any modal routes"
     },
     "navUpToScreen": {
       "_description": "ONLY used by the new nav. Navigates up to this route if it already exists, noops otherwise.",
-      "routeName": "string"
+      "name": "string",
+      "params?": "Object"
     },
     "switchLoggedIn": {
       "_description": "ONLY used by the new nav. Switch login stacks",
@@ -20,13 +29,25 @@
     },
     "switchTab": {
       "_description": "ONLY used by the new nav. Switch to a different tab.",
-      "tab": "Tabs.AppTab"
-    },
-    "resetStack": {
-      "_description": "Reset a specific stack. actions is route tree actions TODO better typing",
       "tab": "Tabs.AppTab",
-      "actions": "Array<any>",
-      "index": "number"
+      "params?": "Object"
+    },
+    "popStack": {
+      "_description": "Reset a stack"
+    },
+    "onNavChanged": {
+      "prev": "Types.NavState | undefined",
+      "next": "Types.NavState | undefined",
+      "navAction": "any"
+    },
+    "setParams": {
+      "_description": "deprecated soon",
+      "params": "Object",
+      "key": "string"
+    },
+    "tabLongPress": {
+      "_description": "a tab was pressed",
+      "tab": "string"
     }
   }
 }

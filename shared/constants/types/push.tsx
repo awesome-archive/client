@@ -1,5 +1,5 @@
-import * as ChatTypes from './chat2'
-import * as RPCChatTypes from './rpc-chat-gen'
+import type * as ChatTypes from './chat2'
+import type * as RPCChatTypes from './rpc-chat-gen'
 
 export type TokenType = 'apple' | 'appledev' | 'androidplay'
 
@@ -36,6 +36,7 @@ export type PushNotification =
 
 export type State = {
   hasPermissions: boolean
+  justSignedUp: boolean
   showPushPrompt: boolean
   token: string
 }

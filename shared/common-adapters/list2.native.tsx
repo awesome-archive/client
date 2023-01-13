@@ -1,12 +1,14 @@
-import React, {PureComponent} from 'react'
-import * as Flow from '../util/flow'
+import * as React from 'react'
 import {FlatList, View} from 'react-native'
 import * as Styles from '../styles'
 import {smallHeight, largeHeight} from './list-item2'
+import {createAnimatedComponent} from './reanimated'
+import type {Props} from './list2'
+import noop from 'lodash/noop'
 
-import {Props} from './list2'
+const AnimatedFlatList = createAnimatedComponent(FlatList)
 
-class List2<T> extends PureComponent<Props<T>> {
+class List2<T> extends React.PureComponent<Props<T>> {
   static defaultProps = {
     keyboardShouldPersistTaps: 'handled',
   }
@@ -15,7 +17,7 @@ class List2<T> extends PureComponent<Props<T>> {
     return this.props.renderItem(index, item)
   }
 
-  _getItemLayout = (data: Array<T> | null, index: number) => {
+  _getItemLayout = (data: Array<T> | null | undefined, index: number) => {
     switch (this.props.itemHeight.type) {
       case 'fixed':
         return {index, length: this.props.itemHeight.height, offset: this.props.itemHeight.height * index}
@@ -24,9 +26,8 @@ class List2<T> extends PureComponent<Props<T>> {
         return {index, length: itemHeight, offset: itemHeight * index}
       }
       case 'variable':
-        return {index, ...this.props.itemHeight.getItemLayout(index, data ? data[index] : undefined)}
+        return {...this.props.itemHeight.getItemLayout(index, data ? data[index] : undefined)}
       default:
-        Flow.ifFlowComplainsAboutThisFunctionYouHaventHandledAllCasesInASwitch(this.props.itemHeight)
         return {index, length: 0, offset: 0}
     }
   }
@@ -36,15 +37,21 @@ class List2<T> extends PureComponent<Props<T>> {
       return String(index)
     }
 
+    if (this.props.itemAsKey) {
+      return item
+    }
+
     const keyProp = this.props.keyProperty || 'key'
     return item[keyProp]
   }
 
   render() {
+    const List = this.props.reAnimated ? AnimatedFlatList : FlatList
     return (
       <View style={styles.outerView}>
         {/* need windowSize so iphone 6 doesn't have OOM issues */}
-        <FlatList
+        <List
+          overScrollMode="never"
           bounces={this.props.bounces}
           renderItem={this._itemRender}
           data={this.props.items}
@@ -54,8 +61,8 @@ class List2<T> extends PureComponent<Props<T>> {
           onEndReached={this.props.onEndReached}
           windowSize={this.props.windowSize || 10}
           debug={false /* set to true to debug the list */}
-          // @ts-ignore TODO fix styles
           contentContainerStyle={this.props.style}
+          onScrollToIndexFailed={noop}
         />
       </View>
     )

@@ -1,56 +1,73 @@
+import * as ConfigGen from '../../actions/config-gen'
 import * as Electron from 'electron'
-import {isDarwin} from '../../constants/platform'
+import * as RPCTypes from '../../constants/types/rpc-gen'
+import * as SettingsGen from '../../actions/settings-gen'
+import flags from '../../util/feature-flags'
+import {closeWindows} from './main-window.desktop'
+import {isDarwin, isLinux} from '../../constants/platform'
+import {ctlQuit} from './ctl.desktop'
+import KB2 from '../../util/electron.desktop'
 
-let devToolsState = false
+const {mainWindowDispatch} = KB2.functions
 
-const windowQuit = () => {
-  Electron.app.emit('KBkeybase', '', {type: 'closeWindows'})
+const reallyQuit = () => {
+  closeWindows()
+  if (isLinux) {
+    mainWindowDispatch(SettingsGen.createStop({exitCode: RPCTypes.ExitCode.ok}))
+  } else {
+    mainWindowDispatch(ConfigGen.createDumpLogs({reason: 'quitting through menu'}))
+  }
+  setTimeout(() => {
+    ctlQuit()
+  }, 2000)
 }
 
 export default function makeMenu(window: Electron.BrowserWindow) {
   const editMenu = new Electron.MenuItem({
     label: 'Edit',
-    submenu: [
-      {accelerator: 'CmdOrCtrl+Z', label: 'Undo', role: 'undo'},
-      {accelerator: 'Shift+CmdOrCtrl+Z', label: 'Redo', role: 'redo'},
-      {type: 'separator'},
-      {accelerator: 'CmdOrCtrl+X', label: 'Cut', role: 'cut'},
-      {accelerator: 'CmdOrCtrl+C', label: 'Copy', role: 'copy'},
-      {accelerator: 'CmdOrCtrl+V', label: 'Paste', role: 'paste'},
-      {accelerator: 'CmdOrCtrl+A', label: 'Select All', role: 'selectall'},
-    ],
+    submenu: Electron.Menu.buildFromTemplate([
+      new Electron.MenuItem({accelerator: 'CmdOrCtrl+Z', label: 'Undo', role: 'undo'}),
+      new Electron.MenuItem({accelerator: 'Shift+CmdOrCtrl+Z', label: 'Redo', role: 'redo'}),
+      new Electron.MenuItem({type: 'separator'}),
+      new Electron.MenuItem({accelerator: 'CmdOrCtrl+X', label: 'Cut', role: 'cut'}),
+      new Electron.MenuItem({accelerator: 'CmdOrCtrl+C', label: 'Copy', role: 'copy'}),
+      new Electron.MenuItem({accelerator: 'CmdOrCtrl+V', label: 'Paste', role: 'paste'}),
+      new Electron.MenuItem({accelerator: 'CmdOrCtrl+A', label: 'Select All', role: 'selectAll'}),
+    ]),
   })
 
   const windowMenu = new Electron.MenuItem({
     label: 'Window',
     submenu: Electron.Menu.buildFromTemplate([
-      new Electron.MenuItem({accelerator: 'CmdOrCtrl+=', label: 'Zoom In', role: 'zoomin'}),
-      new Electron.MenuItem({label: 'Zoom Out', role: 'zoomout'}),
-      new Electron.MenuItem({label: 'Reset zoom ', role: 'resetzoom'}),
+      new Electron.MenuItem({accelerator: 'CmdOrCtrl+=', label: 'Zoom In', role: 'zoomIn'}),
+      new Electron.MenuItem({label: 'Zoom Out', role: 'zoomOut'}),
+      new Electron.MenuItem({label: 'Reset zoom ', role: 'resetZoom'}),
       new Electron.MenuItem({label: 'Minimize', role: 'minimize'}),
       new Electron.MenuItem({accelerator: 'CmdOrCtrl+W', label: 'Close', role: 'close'}),
       new Electron.MenuItem({type: 'separator'}),
       new Electron.MenuItem({label: 'Bring All to Front', role: 'front'}),
-      ...(__DEV__
+      ...(__DEV__ || flags.admin
         ? [
+            new Electron.MenuItem({type: 'separator'}),
+            new Electron.MenuItem({
+              click: () => {},
+              label: '🛑 Admin Only 🛑',
+            }),
             new Electron.MenuItem({
               accelerator: 'CmdOrCtrl+R',
-              click: (_, focusedWindow) => {
-                focusedWindow && focusedWindow.reload()
+              click: () => {
+                Electron.BrowserWindow.getAllWindows().map(bw => bw.reload())
               },
               label: 'Reload',
             }),
             new Electron.MenuItem({
               accelerator: (() => (isDarwin ? 'Alt+Command+I' : 'Ctrl+Shift+I'))(),
               click: () => {
-                devToolsState = !devToolsState
                 Electron.BrowserWindow.getAllWindows().map(bw =>
-                  devToolsState
-                    ? bw.webContents.openDevTools({mode: 'detach'})
-                    : bw.webContents.closeDevTools()
+                  bw.webContents.openDevTools({mode: 'detach'})
                 )
               },
-              label: 'Toggle Developer Tools',
+              label: 'Developer Tools',
             }),
           ]
         : []),
@@ -61,7 +78,10 @@ export default function makeMenu(window: Electron.BrowserWindow) {
     submenu: Electron.Menu.buildFromTemplate([
       new Electron.MenuItem({
         click: () => {
-          Electron.shell.openExternal('https://keybase.io')
+          Electron.shell
+            .openExternal('https://keybase.io')
+            .then(() => {})
+            .catch(() => {})
         },
         label: 'Learn More',
       }),
@@ -72,21 +92,28 @@ export default function makeMenu(window: Electron.BrowserWindow) {
     const template = [
       new Electron.MenuItem({
         label: 'Keybase',
-        submenu: [
-          {label: 'About Keybase', role: 'about'},
-          {type: 'separator'},
-          {accelerator: 'CmdOrCtrl+H', label: 'Hide Keybase', role: 'hide'},
-          {accelerator: 'CmdOrCtrl+Shift+H', label: 'Hide Others', role: 'hideothers'},
-          {label: 'Show All', role: 'unhide'},
-          {type: 'separator'},
-          {
+        submenu: Electron.Menu.buildFromTemplate([
+          new Electron.MenuItem({label: 'About Keybase', role: 'about'}),
+          new Electron.MenuItem({type: 'separator'}),
+          new Electron.MenuItem({accelerator: 'CmdOrCtrl+H', label: 'Hide Keybase', role: 'hide'}),
+          new Electron.MenuItem({accelerator: 'CmdOrCtrl+Shift+H', label: 'Hide Others', role: 'hideOthers'}),
+          new Electron.MenuItem({label: 'Show All', role: 'unhide'}),
+          new Electron.MenuItem({type: 'separator'}),
+          new Electron.MenuItem({
             accelerator: 'CmdOrCtrl+Q',
             click() {
-              windowQuit()
+              closeWindows()
             },
             label: 'Minimize to Tray',
-          },
-        ],
+          }),
+          new Electron.MenuItem({
+            accelerator: 'CmdOrCtrl+Option+Q',
+            click() {
+              reallyQuit()
+            },
+            label: 'Quit Keybase Completely',
+          }),
+        ]),
       }),
       {...editMenu},
       {...windowMenu},
@@ -103,9 +130,16 @@ export default function makeMenu(window: Electron.BrowserWindow) {
           {
             accelerator: 'CmdOrCtrl+Q',
             click() {
-              windowQuit()
+              closeWindows()
             },
             label: '&Minimize to Tray',
+          },
+          {
+            accelerator: 'CmdOrCtrl+Option+Q',
+            click() {
+              reallyQuit()
+            },
+            label: 'Quit Keybase Completely',
           },
         ],
       }),
@@ -121,24 +155,45 @@ export default function makeMenu(window: Electron.BrowserWindow) {
 }
 
 function setupContextMenu(window: Electron.BrowserWindow) {
-  const selectionMenu = Electron.Menu.buildFromTemplate([{role: 'copy'}])
-
-  const inputMenu = Electron.Menu.buildFromTemplate([
-    {role: 'undo'},
-    {role: 'redo'},
-    {type: 'separator'},
-    {role: 'cut'},
-    {role: 'copy'},
-    {role: 'paste'},
-    {type: 'separator'},
-    {role: 'selectall'},
-  ])
-
   window.webContents.on('context-menu', (_: Electron.Event, props: Electron.ContextMenuParams) => {
     const {selectionText, isEditable} = props
     if (isEditable) {
+      const {dictionarySuggestions} = props
+      const inputMenu = Electron.Menu.buildFromTemplate([
+        ...(props.misspelledWord
+          ? [
+              ...dictionarySuggestions.map(
+                s =>
+                  new Electron.MenuItem({
+                    click(_, w) {
+                      w?.webContents?.replaceMisspelling(s)
+                    },
+                    label: s,
+                  })
+              ),
+              ...(dictionarySuggestions.length ? [new Electron.MenuItem({type: 'separator'})] : []),
+              new Electron.MenuItem({
+                click(_, w) {
+                  w?.webContents.session.addWordToSpellCheckerDictionary(props.misspelledWord)
+                },
+                label: 'Add to dictionary',
+              }),
+              new Electron.MenuItem({type: 'separator'}),
+            ]
+          : []),
+        new Electron.MenuItem({role: 'undo'}),
+        new Electron.MenuItem({role: 'redo'}),
+        new Electron.MenuItem({type: 'separator'}),
+        new Electron.MenuItem({role: 'cut'}),
+        new Electron.MenuItem({role: 'copy'}),
+        new Electron.MenuItem({role: 'paste'}),
+        new Electron.MenuItem({type: 'separator'}),
+        new Electron.MenuItem({role: 'selectAll'}),
+      ])
+
       inputMenu.popup({window})
     } else if (selectionText && selectionText.trim() !== '') {
+      const selectionMenu = Electron.Menu.buildFromTemplate([{role: 'copy'}])
       selectionMenu.popup({window})
     }
   })

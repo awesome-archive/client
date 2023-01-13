@@ -20,7 +20,7 @@ func NewInvalidConfigError(reason string) InvalidConfigError {
 type InvalidKeyError struct{}
 
 func (e InvalidKeyError) Error() string {
-	return fmt.Sprintf("Invalid Key (has the wrong length).")
+	return "Invalid Key (has the wrong length)."
 }
 
 // NewInvalidKeyError returns a new error
@@ -42,12 +42,25 @@ func NewProofVerificationFailedError(reason error) ProofVerificationFailedError 
 	return ProofVerificationFailedError{reason: reason}
 }
 
+// NodeNotFoundError is returned by a StorageEngine when trying to fetch an internal node
+// which is not part of the tree at a specific Seqno.
+type NodeNotFoundError struct{}
+
+func (e NodeNotFoundError) Error() string {
+	return "Node not found."
+}
+
+// NewNodeNotFoundError returns a new error
+func NewNodeNotFoundError() NodeNotFoundError {
+	return NodeNotFoundError{}
+}
+
 // KeyNotFoundError is returned when trying to fetch a key which is not part of
 // the tree at a specific Seqno.
 type KeyNotFoundError struct{}
 
 func (e KeyNotFoundError) Error() string {
-	return fmt.Sprintf("Key not found.")
+	return "Key not found."
 }
 
 // NewKeyNotFoundError returns a new error
@@ -60,7 +73,7 @@ func NewKeyNotFoundError() KeyNotFoundError {
 type NoLatestRootFoundError struct{}
 
 func (e NoLatestRootFoundError) Error() string {
-	return fmt.Sprintf("No latest root was found.")
+	return "No latest root was found."
 }
 
 // NewNoLatestRootFoundError returns a new error

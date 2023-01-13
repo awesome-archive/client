@@ -1,4 +1,4 @@
-import {toISOTimestamp, Logger, LogLevel, LogLineWithLevelISOTimestamp} from './types'
+import {toISOTimestamp, type Logger, type LogLevel, type LogLineWithLevelISOTimestamp} from './types'
 import {requestIdleCallback} from '../util/idle-callback'
 
 type FileWriterFn = (lines: Array<LogLineWithLevelISOTimestamp>) => Promise<void>
@@ -10,7 +10,7 @@ class DumpPeriodicallyLogger implements Logger {
   _innerLogger: Logger
   _periodInMs: number
   _fileWriterFn: FileWriterFn
-  _lastTimeoutId: NodeJS.Timer | null = null
+  _lastTimeoutId: ReturnType<typeof setTimeout> | null = null
   _levelPrefix: LogLevel
   _ok: boolean = true
 
@@ -20,12 +20,14 @@ class DumpPeriodicallyLogger implements Logger {
     this._fileWriterFn = fileWriterFn
     this._levelPrefix = levelPrefix
     this._periodicallyDump()
+      .then(() => {})
+      .catch(() => {})
   }
 
   log = (...s: Array<any>) => this._innerLogger.log(...s)
-  dump = (levelPrefix: LogLevel) => this._innerLogger.dump(levelPrefix)
+  dump = async (levelPrefix: LogLevel) => this._innerLogger.dump(levelPrefix)
 
-  _periodicallyDump = () => {
+  _periodicallyDump = async () => {
     if (this._ok) {
       return this._innerLogger
         .dump(this._levelPrefix)
@@ -37,6 +39,8 @@ class DumpPeriodicallyLogger implements Logger {
               requestIdleCallback(
                 () => {
                   this._periodicallyDump()
+                    .then(() => {})
+                    .catch(() => {})
                 },
                 {timeout: this._periodInMs}
               ),
@@ -52,7 +56,7 @@ class DumpPeriodicallyLogger implements Logger {
     return Promise.reject(new Error('Not ok'))
   }
 
-  flush() {
+  async flush() {
     this._ok = true
     this._lastTimeoutId && clearTimeout(this._lastTimeoutId)
     return this._innerLogger.flush().then(this._periodicallyDump)

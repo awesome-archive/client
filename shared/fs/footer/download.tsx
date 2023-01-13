@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Styles from '../../styles'
 import * as Kb from '../../common-adapters'
 import * as Kbfs from '../common'
@@ -35,10 +34,10 @@ const getProgress = (dlState: Types.DownloadState) => (
 
 const Download = (props: Props) => {
   const dlInfo = Kbfs.useFsDownloadInfo(props.downloadID)
-  const dlState = Container.useSelector(state =>
-    state.fs.downloads.state.get(props.downloadID, Constants.emptyDownloadState)
+  const dlState = Container.useSelector(
+    state => state.fs.downloads.state.get(props.downloadID) || Constants.emptyDownloadState
   )
-  const dispatch = Kbfs.useDispatchWhenKbfsIsConnected()
+  const dispatch = Container.useDispatch()
   const open = dlState.localPath
     ? () => dispatch(FsGen.createOpenLocalPathInSystemFileManager({localPath: dlState.localPath}))
     : () => {}

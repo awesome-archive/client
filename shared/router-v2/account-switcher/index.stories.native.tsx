@@ -1,3 +1,4 @@
+/*
 import * as React from 'react'
 import * as Sb from '../../stories/storybook'
 import AccountSwitcher, {Props} from '.'
@@ -18,22 +19,22 @@ const props: Props = {
       },
       fullName: 'Livingston Reallyveryquitelongnameheimer',
     },
+    {
+      account: {
+        hasStoredSecret: true,
+        username: 'jakob226',
+      },
+      fullName: '',
+    },
   ],
   fullname: 'Alice Keybaseuser',
   onAddAccount: Sb.action('onAddAccount'),
   onCancel: Sb.action('onCancel'),
-  onCreateAccount: Sb.action('onCreateAccount'),
   onProfileClick: Sb.action('onProfileClick'),
   onSelectAccount: Sb.action('onSelectAccount'),
-  rightActions: [
-    {
-      color: 'red',
-      label: 'Sign out',
-      onPress: Sb.action('onSignOut'),
-    },
-  ],
-  title: ' ',
+  onSignOut: Sb.action('onSignOut'),
   username: 'alice',
+  waiting: false,
 }
 
 const load = () => {
@@ -41,3 +42,6 @@ const load = () => {
 }
 
 export default load
+*/
+
+export default {}

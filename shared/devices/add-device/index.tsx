@@ -1,7 +1,7 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import {isLargeScreen} from '../../constants/platform'
+import {useSafeCallback} from '../../util/container'
 
 type Props = {
   highlight?: Array<'computer' | 'phone' | 'paper key'>
@@ -12,49 +12,57 @@ type Props = {
   onCancel: () => void
 }
 
-const AddDevice = (props: Props) => (
-  <Kb.ScrollView alwaysBounceVertical={false}>
-    <Kb.Box2
-      direction="vertical"
-      gap="medium"
-      alignItems="center"
-      style={styles.container}
-      gapStart={true}
-      gapEnd={true}
-    >
-      <Kb.Box2 direction="vertical" gap="tiny" alignItems="center">
-        {!Styles.isMobile && <Kb.Text type="Header">Add a device</Kb.Text>}
-        <Kb.Text type="Body" center={true}>
-          Protect your account by having more devices and paper keys.
-        </Kb.Text>
-      </Kb.Box2>
-      <Kb.Box2
-        direction={Styles.isMobile ? 'vertical' : 'horizontal'}
-        gap="large"
-        style={styles.deviceOptions}
-        gapEnd={true}
-      >
-        <DeviceOption
-          iconNumber={props.iconNumbers.desktop}
-          onClick={props.onAddComputer}
-          type="computer"
-          highlight={props.highlight && props.highlight.includes('computer')}
-        />
-        <DeviceOption
-          iconNumber={props.iconNumbers.mobile}
-          onClick={props.onAddPhone}
-          type="phone"
-          highlight={props.highlight && props.highlight.includes('phone')}
-        />
-        <DeviceOption
-          onClick={props.onAddPaperKey}
-          type="paper key"
-          highlight={props.highlight && props.highlight.includes('paper key')}
-        />
-      </Kb.Box2>
-    </Kb.Box2>
-  </Kb.ScrollView>
-)
+const AddDevice = (props: Props) => {
+  const onlyOnce = true
+  const onAddComputer = useSafeCallback(props.onAddComputer, {onlyOnce})
+  const onAddPhone = useSafeCallback(props.onAddPhone, {onlyOnce})
+  const onAddPaperKey = useSafeCallback(props.onAddPaperKey, {onlyOnce})
+  return (
+    <Kb.PopupWrapper onCancel={props.onCancel}>
+      <Kb.ScrollView alwaysBounceVertical={false}>
+        <Kb.Box2
+          direction="vertical"
+          gap="medium"
+          alignItems="center"
+          style={styles.container}
+          gapStart={true}
+          gapEnd={true}
+        >
+          <Kb.Box2 direction="vertical" gap="tiny" alignItems="center">
+            {!Styles.isMobile && <Kb.Text type="Header">Add a device</Kb.Text>}
+            <Kb.Text type="Body" center={true}>
+              Protect your account by having more devices and paper keys.
+            </Kb.Text>
+          </Kb.Box2>
+          <Kb.Box2
+            direction={Styles.isMobile ? 'vertical' : 'horizontal'}
+            gap="mediumLarge"
+            style={styles.deviceOptions}
+            gapEnd={true}
+          >
+            <DeviceOption
+              iconNumber={props.iconNumbers.desktop}
+              onClick={onAddComputer}
+              type="computer"
+              highlight={props.highlight && props.highlight.includes('computer')}
+            />
+            <DeviceOption
+              iconNumber={props.iconNumbers.mobile}
+              onClick={onAddPhone}
+              type="phone"
+              highlight={props.highlight && props.highlight.includes('phone')}
+            />
+            <DeviceOption
+              onClick={onAddPaperKey}
+              type="paper key"
+              highlight={props.highlight && props.highlight.includes('paper key')}
+            />
+          </Kb.Box2>
+        </Kb.Box2>
+      </Kb.ScrollView>
+    </Kb.PopupWrapper>
+  )
+}
 
 type DeviceOptionProps = {
   highlight?: boolean
@@ -97,7 +105,7 @@ const DeviceOption = ({highlight, iconNumber, onClick, type}: DeviceOptionProps)
     >
       <Kb.Icon type={getIconType(type, iconNumber)} />
       <Kb.Text type="BodySemibold">
-        {type === 'paper key' ? 'Create' : 'Add'} a {type}
+        {type === 'paper key' ? 'Create' : 'Add'} a {type === 'phone' ? 'phone or tablet' : type}
       </Kb.Text>
     </Kb.Box2>
   </Kb.ClickableBox>
@@ -112,7 +120,7 @@ const styles = Styles.styleSheetCreate(() => ({
     borderStyle: 'solid',
     borderWidth: 1,
     padding: Styles.globalMargins.tiny,
-    width: Styles.isMobile ? 160 : 140,
+    width: Styles.isMobile ? 192 : 168,
   },
   deviceOptionHighlighted: {backgroundColor: Styles.globalColors.blueLighter2},
   deviceOptions: Styles.platformStyles({
@@ -121,4 +129,4 @@ const styles = Styles.styleSheetCreate(() => ({
   }),
 }))
 
-export default Kb.HeaderOrPopup(AddDevice)
+export default AddDevice

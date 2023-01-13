@@ -50,6 +50,9 @@ func (e *CryptocurrencyEngine) SubConsumers() []libkb.UIConsumer {
 }
 
 func normalizeAddress(address string) string {
+	if len(address) <= 3 {
+		return address
+	}
 	switch strings.ToLower(address)[0:3] {
 	case "bc1", "zs1":
 		// bech32 addresses require that cases not be mixed
@@ -69,7 +72,7 @@ func (e *CryptocurrencyEngine) Run(m libkb.MetaContext) (err error) {
 	m.G().LocalSigchainGuard().Set(m.Ctx(), "CryptocurrencyEngine")
 	defer m.G().LocalSigchainGuard().Clear(m.Ctx(), "CryptocurrencyEngine")
 
-	defer m.Trace("CryptocurrencyEngine", func() error { return err })()
+	defer m.Trace("CryptocurrencyEngine", &err)()
 
 	var typ libkb.CryptocurrencyType
 	e.arg.Address = normalizeAddress(e.arg.Address)

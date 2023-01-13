@@ -1,7 +1,7 @@
 import {spawn} from 'child_process'
 import {keybaseBinPath} from './paths.desktop'
 
-export default function() {
+export default function () {
   console.log('Not connected - starting keybase')
   const binPath = keybaseBinPath()
   if (!binPath) {
@@ -9,10 +9,10 @@ export default function() {
   }
   const rqPath = binPath.replace('keybase.exe', 'keybaserq.exe')
   const wdLogPath = binPath.replace('keybase.exe', 'watchdog.')
-  const args = [binPath, '--log-format=file', '--log-prefix=' + wdLogPath, 'ctl', 'watchdog2']
+  const args = [binPath, '--log-format=file', '--log-prefix=' + wdLogPath, 'ctl', 'watchdog']
 
   spawn(rqPath, args, {
     detached: true,
-    stdio: 'ignore',
+    stdio: 'inherit',
   })
 }

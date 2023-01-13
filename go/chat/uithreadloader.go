@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"sort"
@@ -9,13 +10,15 @@ import (
 	"time"
 
 	"github.com/keybase/client/go/chat/globals"
+	"github.com/keybase/client/go/chat/storage"
 	"github.com/keybase/client/go/chat/types"
 	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/libkb"
+	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
-	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/clockwork"
+	"github.com/keybase/go-codec/codec"
 )
 
 type UIThreadLoader struct {
@@ -24,8 +27,15 @@ type UIThreadLoader struct {
 	sync.Mutex
 
 	clock          clockwork.Clock
-	convPageStatus map[string]chat1.Pagination
+	convPageStatus map[chat1.ConvIDStr]chat1.Pagination
 	validatedDelay time.Duration
+	offlineMu      sync.Mutex
+	offline        bool
+	connectedCh    chan struct{}
+	ri             func() chat1.RemoteInterface
+
+	activeConvLoadsMu sync.Mutex
+	activeConvLoads   map[chat1.ConvIDStr]context.CancelFunc
 
 	// testing
 	cachedThreadDelay  *time.Duration
@@ -33,148 +43,64 @@ type UIThreadLoader struct {
 	resolveThreadDelay *time.Duration
 }
 
-func NewUIThreadLoader(g *globals.Context) *UIThreadLoader {
-	cacheDelay := 30 * time.Millisecond
+func NewUIThreadLoader(g *globals.Context, ri func() chat1.RemoteInterface) *UIThreadLoader {
+	cacheDelay := 10 * time.Millisecond
 	return &UIThreadLoader{
+		offline:           false,
 		Contextified:      globals.NewContextified(g),
-		DebugLabeler:      utils.NewDebugLabeler(g.GetLog(), "UIThreadLoader", false),
-		convPageStatus:    make(map[string]chat1.Pagination),
+		DebugLabeler:      utils.NewDebugLabeler(g.ExternalG(), "UIThreadLoader", false),
+		convPageStatus:    make(map[chat1.ConvIDStr]chat1.Pagination),
 		clock:             clockwork.NewRealClock(),
 		validatedDelay:    100 * time.Millisecond,
 		cachedThreadDelay: &cacheDelay,
+		activeConvLoads:   make(map[chat1.ConvIDStr]context.CancelFunc),
+		connectedCh:       make(chan struct{}),
+		ri:                ri,
 	}
 }
 
-func (t *UIThreadLoader) groupGeneric(ctx context.Context, uid gregor1.UID, msgs []chat1.MessageUnboxed,
-	matches func(msg chat1.MessageUnboxed, grouped []chat1.MessageUnboxed) bool, makeCombined func([]chat1.MessageUnboxed) *chat1.MessageUnboxed) (res []chat1.MessageUnboxed) {
-	var grouped []chat1.MessageUnboxed
-	addGrouped := func() {
-		if len(grouped) == 0 {
-			return
-		}
-		msg := makeCombined(grouped)
-		if msg != nil {
-			res = append(res, *msg)
-		}
-		grouped = nil
+var _ types.UIThreadLoader = (*UIThreadLoader)(nil)
+
+func (t *UIThreadLoader) Connected(ctx context.Context) {
+	t.offlineMu.Lock()
+	defer t.offlineMu.Unlock()
+	t.offline = false
+	select {
+	case t.connectedCh <- struct{}{}:
+	default:
 	}
-	for _, msg := range msgs {
-		if msg.IsValid() && matches(msg, grouped) {
-			grouped = append(grouped, msg)
-			continue
-		}
-		addGrouped()
-		// some match functions may depend on messages in grouped, so after we clear it
-		// this message might be a candidate to get grouped.
-		if msg.IsValid() && matches(msg, grouped) {
-			grouped = append(grouped, msg)
-		} else {
-			res = append(res, msg)
-		}
-	}
-	addGrouped()
-	return res
 }
 
-func (t *UIThreadLoader) groupThreadView(ctx context.Context, uid gregor1.UID, tv chat1.ThreadView, conv types.RemoteConversation) chat1.ThreadView {
+func (t *UIThreadLoader) Disconnected(ctx context.Context) {
+	t.offlineMu.Lock()
+	defer t.offlineMu.Unlock()
+	t.offline = true
+}
 
-	// group JOIN/LEAVE messages
-	newMsgs := t.groupGeneric(ctx, uid, tv.Messages,
-		func(msg chat1.MessageUnboxed, grouped []chat1.MessageUnboxed) bool {
-			body := msg.Valid().MessageBody
-			mtyp, err := body.MessageType()
-			if err != nil {
-				return false
-			}
-			if !(mtyp == chat1.MessageType_JOIN || mtyp == chat1.MessageType_LEAVE) {
-				return false
-			}
-			if msg.Valid().ClientHeader.Sender.Eq(uid) {
-				return false
-			}
-			for _, g := range grouped {
-				if g.Valid().SenderUsername == msg.Valid().SenderUsername {
-					return false
-				}
-			}
-			return true
-		},
-		func(grouped []chat1.MessageUnboxed) *chat1.MessageUnboxed {
-			var joiners, leavers []string
-			for _, j := range grouped {
-				if j.Valid().MessageBody.IsType(chat1.MessageType_JOIN) {
-					joiners = append(joiners, j.Valid().SenderUsername)
-				} else {
-					leavers = append(leavers, j.Valid().SenderUsername)
-				}
-			}
-			mvalid := grouped[0].Valid()
-			mvalid.ClientHeader.MessageType = chat1.MessageType_JOIN
-			mvalid.MessageBody = chat1.NewMessageBodyWithJoin(chat1.MessageJoin{
-				Joiners: joiners,
-				Leavers: leavers,
-			})
-			msg := chat1.NewMessageUnboxedWithValid(mvalid)
-			return &msg
-		})
+func (t *UIThreadLoader) SetRemoteInterface(ri func() chat1.RemoteInterface) {
+	t.ri = ri
+}
 
-	var activeMap map[string]struct{}
-	// group BULKADDTOCONV system messages
-	newMsgs = t.groupGeneric(ctx, uid, newMsgs,
-		func(msg chat1.MessageUnboxed, grouped []chat1.MessageUnboxed) bool {
-			body := msg.Valid().MessageBody
-			mtyp, err := body.MessageType()
-			if err == nil && mtyp == chat1.MessageType_SYSTEM {
-				body := msg.Valid().MessageBody.System()
-				typ, err := body.SystemType()
-				return err == nil && typ == chat1.MessageSystemType_BULKADDTOCONV
-			}
-			return false
-		},
-		func(grouped []chat1.MessageUnboxed) *chat1.MessageUnboxed {
-			var filteredUsernames, usernames []string
-			for _, j := range grouped {
-				if j.Valid().MessageBody.IsType(chat1.MessageType_SYSTEM) {
-					body := j.Valid().MessageBody.System()
-					typ, err := body.SystemType()
-					if err == nil && typ == chat1.MessageSystemType_BULKADDTOCONV {
-						usernames = append(usernames, body.Bulkaddtoconv().Usernames...)
-					}
-				}
-			}
+func (t *UIThreadLoader) IsOffline(ctx context.Context) bool {
+	t.offlineMu.Lock()
+	defer t.offlineMu.Unlock()
+	return t.offline
+}
 
-			if activeMap == nil && len(usernames) > 0 {
-				activeMap = make(map[string]struct{})
-				for _, uid := range conv.Conv.Metadata.AllList {
-					activeMap[uid.String()] = struct{}{}
-				}
-			}
-
-			// filter the usernames for people that are actually part of the team
-			for _, username := range usernames {
-				uid, err := t.G().GetUPAKLoader().LookupUID(ctx, libkb.NewNormalizedUsername(username))
-				if err != nil {
-					continue
-				}
-				if _, ok := activeMap[uid.String()]; ok {
-					filteredUsernames = append(filteredUsernames, username)
-				}
-			}
-			if len(filteredUsernames) == 0 {
-				return nil
-			}
-
-			mvalid := grouped[0].Valid()
-			mvalid.ClientHeader.MessageType = chat1.MessageType_SYSTEM
-			mvalid.MessageBody = chat1.NewMessageBodyWithSystem(chat1.NewMessageSystemWithBulkaddtoconv(chat1.MessageSystemBulkAddToConv{
-				Usernames: filteredUsernames,
-			}))
-			msg := chat1.NewMessageUnboxedWithValid(mvalid)
-			return &msg
-		})
-
-	tv.Messages = newMsgs
-	return tv
+func (t *UIThreadLoader) groupThreadView(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
+	tv chat1.ThreadView, dataSource types.InboxSourceDataSourceTyp) (res chat1.ThreadView, err error) {
+	// The following messages are consolidated for presentation
+	groupers := []msgGrouper{
+		newJoinLeaveGrouper(t.G(), uid, convID, dataSource),
+		newBulkAddGrouper(t.G(), uid, convID, dataSource),
+		newChannelGrouper(t.G(), uid, convID, dataSource),
+		newAddedToTeamGrouper(t.G(), uid, convID, dataSource),
+		newErrGrouper(t.G(), uid, convID, dataSource),
+	}
+	for _, grouper := range groupers {
+		tv.Messages = groupGeneric(ctx, tv.Messages, grouper)
+	}
+	return tv, nil
 }
 
 func (t *UIThreadLoader) applyPagerModeIncoming(ctx context.Context, convID chat1.ConversationID,
@@ -188,7 +114,7 @@ func (t *UIThreadLoader) applyPagerModeIncoming(ctx context.Context, convID chat
 		if pagination == nil {
 			return nil
 		}
-		oldStored := t.convPageStatus[convID.String()]
+		oldStored := t.convPageStatus[convID.ConvIDStr()]
 		if len(pagination.Next) > 0 {
 			return &chat1.Pagination{
 				Num:  pagination.Num,
@@ -216,9 +142,9 @@ func (t *UIThreadLoader) applyPagerModeOutgoing(ctx context.Context, convID chat
 		}
 		if incoming.FirstPage() {
 			t.Debug(ctx, "applyPagerModeOutgoing: resetting pagination: convID: %s p: %s", convID, pagination)
-			t.convPageStatus[convID.String()] = *pagination
+			t.convPageStatus[convID.ConvIDStr()] = *pagination
 		} else {
-			oldStored := t.convPageStatus[convID.String()]
+			oldStored := t.convPageStatus[convID.ConvIDStr()]
 			if len(incoming.Next) > 0 {
 				oldStored.Next = pagination.Next
 				t.Debug(ctx, "applyPagerModeOutgoing: setting next pagination: convID: %s p: %s", convID,
@@ -229,7 +155,7 @@ func (t *UIThreadLoader) applyPagerModeOutgoing(ctx context.Context, convID chat
 				oldStored.Previous = pagination.Previous
 			}
 			oldStored.Last = pagination.Last
-			t.convPageStatus[convID.String()] = oldStored
+			t.convPageStatus[convID.ConvIDStr()] = oldStored
 		}
 	default:
 		// Nothing to do for other modes.
@@ -250,7 +176,7 @@ func (t *UIThreadLoader) messageIDControlToPagination(ctx context.Context, uid g
 
 func (t *UIThreadLoader) isConsolidateMsg(msg chat1.MessageUnboxed) bool {
 	if !msg.IsValid() {
-		return false
+		return msg.IsError()
 	}
 	body := msg.Valid().MessageBody
 	typ, err := body.MessageType()
@@ -312,6 +238,19 @@ func (t *UIThreadLoader) mergeLocalRemoteThread(ctx context.Context, remoteThrea
 				newMsg.GetMessageID())
 			return true
 		}
+		// If the message was exploded by someone, include it
+		if newMsg.Valid().ExplodedBy() != nil &&
+			(oldMsg.Valid().ExplodedBy() == nil || *newMsg.Valid().ExplodedBy() != *oldMsg.Valid().ExplodedBy()) {
+			t.Debug(ctx, "mergeLocalRemoteThread: including explodedBy change: msgID: %d",
+				newMsg.GetMessageID())
+			return true
+		}
+		// Any reactions or unfurl messages go
+		if newMsg.HasUnfurls() || oldMsg.HasUnfurls() || newMsg.HasReactions() || oldMsg.HasReactions() {
+			t.Debug(ctx, "mergeLocalRemoteThread: including reacted/unfurled msg: msgID: %d",
+				newMsg.GetMessageID())
+			return true
+		}
 		// If replyTo is different, then let's also transmit this up
 		if newMsg.Valid().ReplyTo != oldMsg.Valid().ReplyTo {
 			return true
@@ -345,15 +284,21 @@ func (t *UIThreadLoader) mergeLocalRemoteThread(ctx context.Context, remoteThrea
 func (t *UIThreadLoader) dispatchOldPagesJob(ctx context.Context, uid gregor1.UID,
 	convID chat1.ConversationID, pagination *chat1.Pagination, resultPagination *chat1.Pagination) {
 	// Fire off pageback background jobs if we fetched the first page
+	num := 50
+	count := 3
+	if t.G().IsMobileAppType() {
+		num = 20
+		count = 1
+	}
 	if pagination.FirstPage() && resultPagination != nil && !resultPagination.Last {
 		p := &chat1.Pagination{
-			Num:  50,
+			Num:  num,
 			Next: resultPagination.Next,
 		}
 		t.Debug(ctx, "dispatchOldPagesJob: queuing %s because of first page fetch: p: %s", convID, p)
 		if err := t.G().ConvLoader.Queue(ctx, types.NewConvLoaderJob(convID, p,
 			types.ConvLoaderPriorityLow, types.ConvLoaderGeneric,
-			newConvLoaderPagebackHook(t.G(), 0, 3))); err != nil {
+			newConvLoaderPagebackHook(t.G(), 0, count))); err != nil {
 			t.Debug(ctx, "dispatchOldPagesJob: failed to queue conversation load: %s", err)
 		}
 	}
@@ -393,19 +338,170 @@ func (t *UIThreadLoader) setUIStatus(ctx context.Context, chatUI libkb.ChatUI,
 	return cancelStatusFn
 }
 
+func (t *UIThreadLoader) shouldIgnoreError(err error) bool {
+	switch terr := err.(type) {
+	case storage.AbortedError:
+		return true
+	case TransientUnboxingError:
+		return t.shouldIgnoreError(terr.Inner())
+	}
+	switch err {
+	case context.Canceled:
+		return true
+	default:
+	}
+	return false
+}
+
+func (t *UIThreadLoader) noopCancel() {}
+
+func (t *UIThreadLoader) singleFlightConv(ctx context.Context, convID chat1.ConversationID,
+	reason chat1.GetThreadReason) (context.Context, context.CancelFunc) {
+	t.activeConvLoadsMu.Lock()
+	defer t.activeConvLoadsMu.Unlock()
+	convIDStr := convID.ConvIDStr()
+	if cancel, ok := t.activeConvLoads[convIDStr]; ok {
+		cancel()
+	}
+	if reason == chat1.GetThreadReason_PUSH {
+		// we only cancel an outstanding load if it isn't from a push. The reason for this
+		// is that the push calls may come with remote message data from the push notification
+		// itself, and we don't want to replace that call with one that will not have that info.
+		return ctx, t.noopCancel
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	t.activeConvLoads[convIDStr] = cancel
+	return ctx, cancel
+}
+
+func (t *UIThreadLoader) waitForOnline(ctx context.Context) (err error) {
+	defer func() {
+		// check for a canceled context before coming out of here
+		if err == nil {
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+			default:
+			}
+		}
+	}()
+	// wait at most a second, and then charge forward
+	for i := 0; i < 40; i++ {
+		if !t.IsOffline(ctx) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(25 * time.Millisecond):
+		case <-t.connectedCh:
+			return nil
+		}
+	}
+	return nil
+}
+
+type knownRemoteInterface struct {
+	chat1.RemoteInterface
+	log      logger.Logger
+	knownMap map[chat1.MessageID]chat1.MessageBoxed
+	conv     types.RemoteConversation
+}
+
+func newKnownRemoteInterface(log logger.Logger, ri chat1.RemoteInterface,
+	conv types.RemoteConversation, knownMap map[chat1.MessageID]chat1.MessageBoxed) *knownRemoteInterface {
+	return &knownRemoteInterface{
+		knownMap:        knownMap,
+		log:             log,
+		RemoteInterface: ri,
+		conv:            conv,
+	}
+}
+
+func (i *knownRemoteInterface) GetMessagesRemote(ctx context.Context, arg chat1.GetMessagesRemoteArg) (res chat1.GetMessagesRemoteRes, err error) {
+	foundMap := make(map[chat1.MessageID]bool)
+	for _, msgID := range arg.MessageIDs {
+		if msgBoxed, ok := i.knownMap[msgID]; ok {
+			foundMap[msgID] = true
+			i.log.CDebugf(ctx, "knownRemoteInterface.GetMessagesRemote: hit message: %d", msgID)
+			res.Msgs = append(res.Msgs, msgBoxed)
+		}
+	}
+	var remoteFetch []chat1.MessageID
+	for _, msgID := range arg.MessageIDs {
+		if !foundMap[msgID] {
+			remoteFetch = append(remoteFetch, msgID)
+		}
+	}
+	res.MembersType = i.conv.GetMembersType()
+	res.Visibility = i.conv.Conv.Metadata.Visibility
+	if len(remoteFetch) == 0 {
+		return res, nil
+	}
+	remoteRes, err := i.RemoteInterface.GetMessagesRemote(ctx, chat1.GetMessagesRemoteArg{
+		ConversationID: arg.ConversationID,
+		MessageIDs:     remoteFetch,
+		ThreadReason:   arg.ThreadReason,
+	})
+	if err != nil {
+		return res, err
+	}
+	res.Msgs = append(res.Msgs, remoteRes.Msgs...)
+	res.RateLimit = remoteRes.RateLimit
+	return res, nil
+}
+
+func (t *UIThreadLoader) makeRi(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
+	knownRemotes []string) func() chat1.RemoteInterface {
+	if len(knownRemotes) == 0 {
+		t.Debug(ctx, "makeRi: no known remotes")
+		return t.ri
+	}
+	conv, err := utils.GetUnverifiedConv(ctx, t.G(), uid, convID, types.InboxSourceDataSourceLocalOnly)
+	if err != nil {
+		t.Debug(ctx, "makeRi: don't know about the conv")
+		return t.ri
+	}
+	t.Debug(ctx, "makeRi: creating new interface with %d known remotes", len(knownRemotes))
+	knownMap := make(map[chat1.MessageID]chat1.MessageBoxed)
+	for _, knownRemote := range knownRemotes {
+		// Parse the message payload
+		bMsg, err := base64.StdEncoding.DecodeString(knownRemote)
+		if err != nil {
+			t.Debug(ctx, "makeRi: invalid message payload (skipping): %s", err)
+			continue
+		}
+		var msgBoxed chat1.MessageBoxed
+		mh := codec.MsgpackHandle{WriteExt: true}
+		if err = codec.NewDecoderBytes(bMsg, &mh).Decode(&msgBoxed); err != nil {
+			t.Debug(ctx, "makeRi: ifailed to msgpack decode payload (skipping): %s", err)
+			continue
+		}
+		knownMap[msgBoxed.GetMessageID()] = msgBoxed
+	}
+	return func() chat1.RemoteInterface {
+		return newKnownRemoteInterface(t.G().GetLog(), t.ri(), conv, knownMap)
+	}
+}
+
 func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, uid gregor1.UID,
 	convID chat1.ConversationID, reason chat1.GetThreadReason, pgmode chat1.GetThreadNonblockPgMode,
-	cbmode chat1.GetThreadNonblockCbMode, query *chat1.GetThreadQuery, uipagination *chat1.UIPagination) (err error) {
+	cbmode chat1.GetThreadNonblockCbMode, knownRemotes []string, query *chat1.GetThreadQuery,
+	uipagination *chat1.UIPagination) (err error) {
 	var pagination, resultPagination *chat1.Pagination
 	var fullErr error
-	defer t.Trace(ctx, func() error { return err }, "LoadNonblock")()
+	defer t.Trace(ctx, &err, "LoadNonblock")()
 	defer func() {
 		// Detect any problem loading the thread, and queue it up in the retrier if there is a problem.
 		// Otherwise, send notice that we successfully loaded the conversation.
 		if fullErr != nil {
-			t.Debug(ctx, "LoadNonblock: queueing retry because of: %s", fullErr)
-			t.G().FetchRetrier.Failure(ctx, uid,
-				NewConversationRetry(t.G(), convID, nil, ThreadLoad))
+			if t.shouldIgnoreError(fullErr) {
+				t.Debug(ctx, "LoadNonblock: ignoring error: %v", fullErr)
+			} else {
+				t.Debug(ctx, "LoadNonblock: queueing retry because of: %s", fullErr)
+				t.G().FetchRetrier.Failure(ctx, uid,
+					NewConversationRetry(t.G(), convID, nil, ThreadLoad))
+			}
 		} else {
 			t.G().FetchRetrier.Success(ctx, uid,
 				NewConversationRetry(t.G(), convID, nil, ThreadLoad))
@@ -413,33 +509,26 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 			t.dispatchOldPagesJob(ctx, uid, convID, pagination, resultPagination)
 		}
 	}()
+	// Set last select conversation on syncer
+	t.G().Syncer.SelectConversation(ctx, convID)
+	// Decode presentation form pagination
+	if pagination, err = utils.DecodePagination(uipagination); err != nil {
+		return err
+	}
+
+	// single flight per conv since the UI blasts this (only for first page)
+	outerCancel := func() {}
+	if pagination.FirstPage() {
+		ctx, outerCancel = t.singleFlightConv(ctx, convID, reason)
+	}
+	defer outerCancel()
+
 	// Lock conversation while this is running
 	if err := t.G().ConvSource.AcquireConversationLock(ctx, uid, convID); err != nil {
 		return err
 	}
 	defer t.G().ConvSource.ReleaseConversationLock(ctx, uid, convID)
 	t.Debug(ctx, "LoadNonblock: conversation lock obtained")
-
-	// If this is from a push or foreground, set us into the foreground
-	switch reason {
-	case chat1.GetThreadReason_PUSH, chat1.GetThreadReason_FOREGROUND:
-		// Also if we get here and we claim to not be in the foreground yet, then hit disconnect
-		// to reset any delay checks or timers
-		switch t.G().MobileAppState.State() {
-		case keybase1.MobileAppState_FOREGROUND, keybase1.MobileAppState_BACKGROUNDACTIVE:
-		default:
-			t.G().Syncer.Disconnected(ctx)
-		}
-		t.G().MobileAppState.Update(keybase1.MobileAppState_FOREGROUND)
-	}
-
-	// Set last select conversation on syncer
-	t.G().Syncer.SelectConversation(ctx, convID)
-
-	// Decode presentation form pagination
-	if pagination, err = utils.DecodePagination(uipagination); err != nil {
-		return err
-	}
 
 	// Enable delete placeholders for supersede transform
 	if query == nil {
@@ -501,7 +590,7 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 				}
 			}
 			localThread, err = t.G().ConvSource.PullLocalOnly(ctx, convID,
-				uid, query, pagination, 10)
+				uid, reason, query, pagination, 10)
 			ch <- err
 		}()
 		select {
@@ -527,12 +616,12 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		}
 		var pthread *string
 		if resThread != nil {
-			conv, err := utils.GetUnverifiedConv(ctx, t.G(), uid, convID, types.InboxSourceDataSourceLocalOnly)
+			*resThread, err = t.groupThreadView(ctx, uid, convID, *resThread,
+				types.InboxSourceDataSourceLocalOnly)
 			if err != nil {
-				t.Debug(ctx, "LoadNonblock: failed to GetUnverifiedConv localonly: %v", err)
+				t.Debug(ctx, "LoadNonblock: failed to group thread view: %v", err)
 				return
 			}
-			*resThread = t.groupThreadView(ctx, uid, *resThread, conv)
 			t.Debug(ctx, "LoadNonblock: sending cached response: messages: %d pager: %s",
 				len(resThread.Messages), resThread.Pagination)
 			localSentThread = resThread
@@ -560,7 +649,6 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 	getDelay := func() time.Duration {
 		return baseDelay - (t.clock.Now().Sub(startTime))
 	}
-	var rconv types.RemoteConversation
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -571,7 +659,12 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		if t.remoteThreadDelay != nil {
 			t.clock.Sleep(*t.remoteThreadDelay)
 		}
-		remoteThread, fullErr = t.G().ConvSource.Pull(ctx, convID, uid, reason, query, pagination)
+		// wait until we are online before attempting the full pull, otherwise we just waste an attempt
+		if fullErr = t.waitForOnline(ctx); fullErr != nil {
+			return
+		}
+		customRi := t.makeRi(ctx, uid, convID, knownRemotes)
+		remoteThread, fullErr = t.G().ConvSource.Pull(ctx, convID, uid, reason, customRi, query, pagination)
 		setDisplayedStatus(cancelUIStatus)
 		if fullErr != nil {
 			t.Debug(ctx, "LoadNonblock: error running Pull, returning error: %s", fullErr)
@@ -582,18 +675,20 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		uilock.Lock()
 		defer uilock.Unlock()
 		var rthread chat1.ThreadView
-		rconv, fullErr = utils.GetUnverifiedConv(ctx, t.G(), uid, convID, types.InboxSourceDataSourceAll)
+		remoteThread, fullErr = t.groupThreadView(ctx, uid, convID, remoteThread,
+			types.InboxSourceDataSourceAll)
 		if fullErr != nil {
 			return
 		}
-		remoteThread = t.groupThreadView(ctx, uid, remoteThread, rconv)
 		if rthread, fullErr =
 			t.mergeLocalRemoteThread(ctx, &remoteThread, localSentThread, cbmode); fullErr != nil {
 			return
 		}
-		t.Debug(ctx, "LoadNonblock: sending full response: messages: %d pager: %s",
+		t.Debug(ctx, "LoadNonblock: presenting full response: messages: %d pager: %s",
 			len(rthread.Messages), rthread.Pagination)
+		start := time.Now()
 		uires := utils.PresentThreadView(ctx, t.G(), uid, rthread, convID)
+		t.Debug(ctx, "LoadNonblock: present compute time: %v", time.Since(start))
 		var jsonUIRes []byte
 		if jsonUIRes, fullErr = json.Marshal(uires); fullErr != nil {
 			t.Debug(ctx, "LoadNonblock: failed to JSON full result: %s", fullErr)
@@ -601,7 +696,7 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		}
 		resultPagination = rthread.Pagination
 		t.applyPagerModeOutgoing(ctx, convID, rthread.Pagination, pagination, pgmode)
-		start := time.Now()
+		start = time.Now()
 		if fullErr = chatUI.ChatThreadFull(ctx, string(jsonUIRes)); err != nil {
 			t.Debug(ctx, "LoadNonblock: failed to send full result to UI: %s", err)
 			return
@@ -626,6 +721,10 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 			if t.resolveThreadDelay != nil {
 				t.clock.Sleep(*t.resolveThreadDelay)
 			}
+			rconv, err := utils.GetUnverifiedConv(ctx, t.G(), uid, convID, types.InboxSourceDataSourceAll)
+			if err != nil {
+				return err
+			}
 			for _, skip := range skips {
 				messages := skip.Msgs
 				if len(messages) == 0 {
@@ -638,7 +737,17 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 				if err != nil {
 					return err
 				}
-				if err := t.G().ConvSource.PushUnboxed(ctx, skip.ConvID, uid, resolved); err != nil {
+				var pushConv types.RemoteConversation
+				if skip.ConvID.Eq(rconv.GetConvID()) {
+					pushConv = rconv
+				} else {
+					var err error
+					if pushConv, err = utils.GetUnverifiedConv(ctx, t.G(), uid, skip.ConvID,
+						types.InboxSourceDataSourceAll); err != nil {
+						return err
+					}
+				}
+				if err := t.G().ConvSource.PushUnboxed(ctx, pushConv, uid, resolved); err != nil {
 					return err
 				}
 				if !skip.ConvID.Eq(convID) {
@@ -656,8 +765,9 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 					continue
 				}
 				var ierr error
-				if changed, ierr = t.G().ConvSource.TransformSupersedes(ctx, rconv.Conv, uid, changed,
-					query, nil, nil); ierr != nil {
+				maxDeletedUpTo := rconv.GetMaxDeletedUpTo()
+				if changed, ierr = t.G().ConvSource.TransformSupersedes(ctx, convID, uid, changed,
+					query, nil, nil, &maxDeletedUpTo); ierr != nil {
 					return ierr
 				}
 				notif := chat1.MessagesUpdated{
@@ -702,13 +812,14 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 }
 
 func (t *UIThreadLoader) Load(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	reason chat1.GetThreadReason, query *chat1.GetThreadQuery, pagination *chat1.Pagination) (res chat1.ThreadView, err error) {
-	defer t.Trace(ctx, func() error { return err }, "Load")()
+	reason chat1.GetThreadReason, knownRemotes []string, query *chat1.GetThreadQuery, pagination *chat1.Pagination) (res chat1.ThreadView, err error) {
+	defer t.Trace(ctx, &err, "Load")()
 	// Xlate pager control into pagination if given
 	if query != nil && query.MessageIDControl != nil {
 		pagination = t.messageIDControlToPagination(ctx, uid, convID,
 			*query.MessageIDControl)
 	}
 	// Get messages from the source
-	return t.G().ConvSource.Pull(ctx, convID, uid, reason, query, pagination)
+	ri := t.makeRi(ctx, uid, convID, knownRemotes)
+	return t.G().ConvSource.Pull(ctx, convID, uid, reason, ri, query, pagination)
 }

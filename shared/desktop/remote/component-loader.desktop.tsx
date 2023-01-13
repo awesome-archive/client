@@ -1,7 +1,6 @@
 // This loads up a remote component. It makes a pass-through store which accepts its props from the main window through ipc
 // Also protects it with an error boundary
 import * as React from 'react'
-import * as SafeElectron from '../../util/safe-electron.desktop'
 import * as Styles from '../../styles'
 import ReactDOM from 'react-dom'
 import RemoteStore from './store.desktop'
@@ -9,10 +8,15 @@ import Root from '../renderer/container.desktop'
 import {disable as disableDragDrop} from '../../util/drag-drop'
 import ErrorBoundary from '../../common-adapters/error-boundary'
 import {initDesktopStyles} from '../../styles/index.desktop'
+import {enableMapSet} from 'immer'
+import KB2 from '../../util/electron.desktop'
 
+const {closeWindow, showInactive} = KB2.functions
+
+enableMapSet()
 disableDragDrop()
 
-module.hot && module.hot.accept()
+module.hot?.accept()
 
 type RemoteComponents = 'unlock-folders' | 'menubar' | 'pinentry' | 'tracker2'
 
@@ -27,11 +31,9 @@ type Props = {
 
 class RemoteComponentLoader extends React.Component<Props> {
   _store: any
-  _window: SafeElectron.BrowserWindowType | null
 
   constructor(props: Props) {
     super(props)
-    this._window = SafeElectron.getRemote().getCurrentWindow()
     const remoteStore = new RemoteStore({
       deserialize: props.deserialize,
       gotPropsCallback: this._onGotProps,
@@ -43,21 +45,15 @@ class RemoteComponentLoader extends React.Component<Props> {
 
   _onGotProps = () => {
     // Show when we get props, unless its the menubar
-    if (this._window && this.props.showOnProps) {
-      this._window.showInactive()
-    }
-  }
-
-  _onClose = () => {
-    if (this._window) {
-      this._window.close()
+    if (this.props.showOnProps) {
+      showInactive?.()
     }
   }
 
   render() {
     return (
-      <div id="RemoteComponentRoot" style={this.props.style || styles.container}>
-        <ErrorBoundary closeOnClick={this._onClose}>
+      <div id="RemoteComponentRoot" style={this.props.style || (styles.container as any)}>
+        <ErrorBoundary closeOnClick={closeWindow} fallbackStyle={styles.errorFallback}>
           <Root store={this._store}>{this.props.children}</Root>
         </ErrorBoundary>
       </div>
@@ -75,12 +71,15 @@ const styles = Styles.styleSheetCreate(() => ({
       width: '100%',
     },
   }),
+  errorFallback: {
+    backgroundColor: Styles.globalColors.white,
+  },
   loading: {
     backgroundColor: Styles.globalColors.greyDark,
   },
 }))
 
-export default function(options: {
+export default function (options: {
   child: React.ReactNode
   deserialize: (arg0: any, arg1: any) => any
   name: RemoteComponents
@@ -96,10 +95,7 @@ export default function(options: {
         name={options.name}
         params={options.params || ''}
         style={options.style || null}
-        showOnProps={
-          // Auto generated from flowToTs. Please clean me!
-          options.showOnProps !== null && options.showOnProps !== undefined ? options.showOnProps : true
-        }
+        showOnProps={options.showOnProps ?? true}
         deserialize={options.deserialize}
       >
         {options.child}

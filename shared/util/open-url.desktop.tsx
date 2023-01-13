@@ -1,11 +1,3 @@
-import * as SafeElectron from './safe-electron.desktop'
-
-const openURL = (url: string | null) => {
-  if (!url) {
-    console.warn('openURL received empty url')
-    return
-  }
-  SafeElectron.getShell().openExternal(url)
-}
-
+import KB2 from './electron.desktop'
+const {openURL} = KB2.functions
 export default openURL

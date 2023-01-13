@@ -1,14 +1,13 @@
 // Copyright 2015 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
-//
 // Code used in populating JSON objects to generating Keybase-style
 // signatures.
-//
 package libkb
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -180,7 +179,7 @@ func (u *User) ToTrackingStatementSeqTail() *jsonw.Wrapper {
 		return jsonw.NewNil()
 	}
 	ret := jsonw.NewDictionary()
-	_ = ret.SetKey("sig_id", jsonw.NewString(mul.SigID.ToString(true)))
+	_ = ret.SetKey("sig_id", jsonw.NewString(mul.SigID.ToSigIDLegacy().String()))
 	_ = ret.SetKey("seqno", jsonw.NewInt(int(mul.Seqno)))
 	_ = ret.SetKey("payload_hash", jsonw.NewString(mul.LinkID.String()))
 	return ret
@@ -230,6 +229,19 @@ func (u *User) ToTrackingStatement(w *jsonw.Wrapper, outcome *IdentifyOutcome) (
 	return w.SetKey("track", track)
 }
 
+func (u *User) ToWotStatement() *jsonw.Wrapper {
+	user := jsonw.NewDictionary()
+	_ = user.SetKey("username", jsonw.NewString(u.GetNormalizedName().String()))
+	_ = user.SetKey("uid", UIDWrapper(u.GetUID()))
+	_ = user.SetKey("seq_tail", u.ToTrackingStatementSeqTail())
+	eldest := jsonw.NewDictionary()
+	_ = eldest.SetKey("kid", jsonw.NewString(u.GetEldestKID().String()))
+	_ = eldest.SetKey("seqno", jsonw.NewInt64(int64(u.GetCurrentEldestSeqno())))
+	_ = user.SetKey("eldest", eldest)
+
+	return user
+}
+
 func (u *User) ToUntrackingStatementBasics() *jsonw.Wrapper {
 	ret := jsonw.NewDictionary()
 	_ = ret.SetKey("username", jsonw.NewString(u.name))
@@ -262,7 +274,7 @@ func (u *User) ToUntrackingStatement(w *jsonw.Wrapper) (err error) {
 func (g *GenericChainLink) BaseToTrackingStatement(state keybase1.ProofState) *jsonw.Wrapper {
 	ret := jsonw.NewDictionary()
 	_ = ret.SetKey("curr", jsonw.NewString(g.id.String()))
-	_ = ret.SetKey("sig_id", jsonw.NewString(g.GetSigID().ToString(true)))
+	_ = ret.SetKey("sig_id", jsonw.NewString(g.GetSigID().String()))
 
 	rkp := jsonw.NewDictionary()
 	_ = ret.SetKey("remote_key_proof", rkp)
@@ -684,8 +696,63 @@ func (u *User) ServiceProof(m MetaContext, signingKey GenericKey, typ ServiceTyp
 	return ret, nil
 }
 
+func (u *User) WotVouchProof(m MetaContext, signingKey GenericKey, sigVersion SigVersion, mac []byte, merkleRoot *MerkleRoot, sigIDToRevoke *keybase1.SigID) (*ProofMetadataRes, error) {
+	md := ProofMetadata{
+		Me:                  u,
+		LinkType:            LinkTypeWotVouch,
+		MerkleRoot:          merkleRoot,
+		SigningKey:          signingKey,
+		SigVersion:          sigVersion,
+		IgnoreIfUnsupported: true,
+	}
+	ret, err := md.ToJSON2(m)
+	if err != nil {
+		return nil, err
+	}
+
+	body := ret.J.AtKey("body")
+	if err := body.SetKey("wot_vouch", jsonw.NewString(hex.EncodeToString(mac))); err != nil {
+		return nil, err
+	}
+
+	if sigIDToRevoke != nil {
+		revokeSection := jsonw.NewDictionary()
+		err := revokeSection.SetKey("sig_id", jsonw.NewString(sigIDToRevoke.String()))
+		if err != nil {
+			return nil, err
+		}
+		err = body.SetKey("revoke", revokeSection)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return ret, nil
+}
+
+func (u *User) WotReactProof(m MetaContext, signingKey GenericKey, sigVersion SigVersion, mac []byte) (*ProofMetadataRes, error) {
+	md := ProofMetadata{
+		Me:                  u,
+		LinkType:            LinkTypeWotReact,
+		SigningKey:          signingKey,
+		SigVersion:          sigVersion,
+		IgnoreIfUnsupported: true,
+	}
+	ret, err := md.ToJSON2(m)
+	if err != nil {
+		return nil, err
+	}
+
+	body := ret.J.AtKey("body")
+	if err := body.SetKey("wot_react", jsonw.NewString(hex.EncodeToString(mac))); err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
 // SimpleSignJson marshals the given Json structure and then signs it.
-func SignJSON(jw *jsonw.Wrapper, key GenericKey) (out string, id keybase1.SigID, lid LinkID, err error) {
+func SignJSON(jw *jsonw.Wrapper, key GenericKey) (out string, id keybase1.SigIDBase, lid LinkID, err error) {
 	var tmp []byte
 	if tmp, err = jw.Marshal(); err != nil {
 		return
@@ -709,10 +776,14 @@ func MakeSig(
 	ignoreIfUnsupported SigIgnoreIfUnsupported,
 	me *User,
 	sigVersion SigVersion) (sig string, sigID keybase1.SigID, linkID LinkID, err error) {
+
 	switch sigVersion {
 	case KeybaseSignatureV1:
-		sig, sigID, err = signingKey.SignToString(innerLinkJSON)
+		var sigIDBase keybase1.SigIDBase
+		sig, sigIDBase, err = signingKey.SignToString(innerLinkJSON)
 		linkID = ComputeLinkID(innerLinkJSON)
+		params := keybase1.SigIDSuffixParametersFromTypeAndVersion(string(v1LinkType), keybase1.SigVersion(sigVersion))
+		sigID = sigIDBase.ToSigID(params)
 	case KeybaseSignatureV2:
 		prevSeqno := me.GetSigChainLastKnownSeqno()
 		prevLinkID := me.GetSigChainLastKnownID()
@@ -769,7 +840,7 @@ func (u *User) RevokeKeysProof(m MetaContext, key GenericKey, kidsToRevoke []key
 		if err != nil {
 			return nil, err
 		}
-		err = deviceSection.SetKey("type", jsonw.NewString(device.Type))
+		err = deviceSection.SetKey("type", jsonw.NewString(device.Type.String()))
 		if err != nil {
 			return nil, err
 		}
@@ -799,7 +870,7 @@ func (u *User) RevokeSigsProof(m MetaContext, key GenericKey, sigIDsToRevoke []k
 	revokeSection := jsonw.NewDictionary()
 	idsArray := jsonw.NewArray(len(sigIDsToRevoke))
 	for i, id := range sigIDsToRevoke {
-		err := idsArray.SetIndex(i, jsonw.NewString(id.ToString(true)))
+		err := idsArray.SetIndex(i, jsonw.NewString(id.String()))
 		if err != nil {
 			return nil, err
 		}
@@ -850,7 +921,7 @@ func (u *User) CryptocurrencySig(m MetaContext, key GenericKey, address string, 
 	}
 	if len(sigToRevoke) > 0 {
 		revokeSection := jsonw.NewDictionary()
-		err := revokeSection.SetKey("sig_id", jsonw.NewString(sigToRevoke.ToString(true /* suffix */)))
+		err := revokeSection.SetKey("sig_id", jsonw.NewString(sigToRevoke.String()))
 		if err != nil {
 			return nil, err
 		}
@@ -925,9 +996,10 @@ type SigMultiItem struct {
 	Type       string                  `json:"type"`
 	SeqType    keybase1.SeqType        `json:"seq_type"`
 	SigInner   string                  `json:"sig_inner"`
-	TeamID     keybase1.TeamID         `json:"team_id"`
+	TeamID     keybase1.TeamID         `json:"team_id,omitempty"`
 	PublicKeys *SigMultiItemPublicKeys `json:"public_keys,omitempty"`
 	Version    SigVersion              `json:"version"`
+	Expansions *jsonw.Wrapper          `json:"expansions,omitempty"`
 }
 
 type SigMultiItemPublicKeys struct {
@@ -1034,7 +1106,7 @@ func PerUserKeyProofReverseSigned(m MetaContext, me *User, perUserKeySeed PerUse
 	}
 
 	// Update the user locally
-	me.SigChainBump(linkID, sigID, false)
+	me.SigChainBump(linkID, sigID.ToSigIDLegacy(), false)
 	err = me.localDelegatePerUserKey(keybase1.PerUserKey{
 		Gen:         int(generation),
 		Seqno:       me.GetSigChainLastKnownSeqno(),

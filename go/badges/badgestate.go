@@ -6,6 +6,8 @@ package badges
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/keybase/client/go/gregor"
@@ -20,13 +22,13 @@ import (
 )
 
 type LocalChatState interface {
-	ApplyLocalChatState(context.Context, []keybase1.BadgeConversationInfo) []keybase1.BadgeConversationInfo
+	ApplyLocalChatState(context.Context, []keybase1.BadgeConversationInfo) ([]keybase1.BadgeConversationInfo, int, int)
 }
 
 type dummyLocalChatState struct{}
 
-func (d dummyLocalChatState) ApplyLocalChatState(ctx context.Context, i []keybase1.BadgeConversationInfo) []keybase1.BadgeConversationInfo {
-	return i
+func (d dummyLocalChatState) ApplyLocalChatState(ctx context.Context, i []keybase1.BadgeConversationInfo) ([]keybase1.BadgeConversationInfo, int, int) {
+	return i, 0, 0
 }
 
 // BadgeState represents the number of badges on the app. It's threadsafe.
@@ -39,10 +41,10 @@ type BadgeState struct {
 	log            logger.Logger
 	env            *libkb.Env
 	state          keybase1.BadgeState
+	quietLogMode   bool
 
-	inboxVers chat1.InboxVers
-	// Map from ConversationID.String to BadgeConversationInfo.
-	chatUnreadMap map[string]keybase1.BadgeConversationInfo
+	inboxVers     chat1.InboxVers
+	chatUnreadMap map[chat1.ConvIDStr]keybase1.BadgeConversationInfo
 
 	walletUnreadMap map[stellar1.AccountID]int
 }
@@ -55,7 +57,9 @@ func NewBadgeState(log logger.Logger, env *libkb.Env) *BadgeState {
 // NewBadgeState creates a new empty BadgeState in contexts
 // where notifications do not need to be handled.
 func NewBadgeStateForServer(log logger.Logger) *BadgeState {
-	return newBadgeState(log, nil)
+	bs := newBadgeState(log, nil)
+	bs.quietLogMode = true
+	return bs
 }
 
 func newBadgeState(log logger.Logger, env *libkb.Env) *BadgeState {
@@ -63,9 +67,10 @@ func newBadgeState(log logger.Logger, env *libkb.Env) *BadgeState {
 		log:             log,
 		env:             env,
 		inboxVers:       chat1.InboxVers(0),
-		chatUnreadMap:   make(map[string]keybase1.BadgeConversationInfo),
+		chatUnreadMap:   make(map[chat1.ConvIDStr]keybase1.BadgeConversationInfo),
 		walletUnreadMap: make(map[stellar1.AccountID]int),
 		localChatState:  dummyLocalChatState{},
+		quietLogMode:    false,
 	}
 }
 
@@ -82,7 +87,8 @@ func (b *BadgeState) Export(ctx context.Context) (keybase1.BadgeState, error) {
 	for _, info := range b.chatUnreadMap {
 		b.state.Conversations = append(b.state.Conversations, info)
 	}
-	b.state.Conversations = b.localChatState.ApplyLocalChatState(ctx, b.state.Conversations)
+	b.state.Conversations, b.state.SmallTeamBadgeCount, b.state.BigTeamBadgeCount =
+		b.localChatState.ApplyLocalChatState(ctx, b.state.Conversations)
 	b.state.InboxVers = int(b.inboxVers)
 
 	b.state.UnreadWalletAccounts = []keybase1.WalletAccountInfo{}
@@ -99,9 +105,9 @@ type problemSetBody struct {
 }
 
 type newTeamBody struct {
-	TeamID   string `json:"id"`
-	TeamName string `json:"name"`
-	Implicit bool   `json:"implicit_team"`
+	TeamID   keybase1.TeamID `json:"id"`
+	TeamName string          `json:"name"`
+	Implicit bool            `json:"implicit_team"`
 }
 
 type teamDeletedBody struct {
@@ -118,27 +124,16 @@ type unverifiedCountBody struct {
 	UnverifiedCount int `json:"unverified_count"`
 }
 
-type homeTodoMap map[keybase1.HomeScreenTodoType]int
-type homeItemMap map[keybase1.HomeScreenItemType]homeTodoMap
-
-type homeStateBody struct {
-	Version              int           `json:"version"`
-	BadgeCountMap        homeItemMap   `json:"badge_count_map"`
-	LastViewedTime       keybase1.Time `json:"last_viewed_time"`
-	AnnouncementsVersion int           `json:"announcements_version"`
-}
-
 // countKnownBadges looks at the map sent down by gregor and considers only those
 // types that are known to the client. The rest, it assumes it cannot display,
 // and doesn't count those badges toward the badge count. Note that the shape
 // of this map is two-deep.
 //
-//   { 1 : { 2 : 3, 4 : 5 }, 3 : { 10001 : 1 } }
+//	{ 1 : { 2 : 3, 4 : 5 }, 3 : { 10001 : 1 } }
 //
 // Implies that are 3 badges on TODO type PROOF, 5 badges on TODO type FOLLOW,
 // and 1 badges in ANNOUNCEMENTs.
-//
-func countKnownBadges(m homeItemMap) int {
+func countKnownBadges(m libkb.HomeItemMap) int {
 	var ret int
 	for itemType, todoMap := range m {
 		if _, found := keybase1.HomeScreenItemTypeRevMap[itemType]; !found {
@@ -155,28 +150,21 @@ func countKnownBadges(m homeItemMap) int {
 	return ret
 }
 
-func homeStateLessThan(a *homeStateBody, b homeStateBody) bool {
-	if a == nil {
-		return true
-	}
-	if a.Version < b.Version {
-		return true
-	}
-	if a.Version == b.Version && a.LastViewedTime < b.LastViewedTime {
-		return true
-	}
-	if a.AnnouncementsVersion < b.AnnouncementsVersion {
-		return true
-	}
-	return false
-}
-
-func (b *BadgeState) ConversationBadge(ctx context.Context, convID chat1.ConversationID,
-	deviceType keybase1.DeviceType) int {
-	if info, ok := b.chatUnreadMap[convID.String()]; ok {
-		return info.BadgeCounts[deviceType]
+func (b *BadgeState) ConversationBadgeStr(ctx context.Context, convIDStr chat1.ConvIDStr) int {
+	b.Lock()
+	defer b.Unlock()
+	if info, ok := b.chatUnreadMap[convIDStr]; ok {
+		return info.BadgeCount
 	}
 	return 0
+}
+
+func (b *BadgeState) ConversationBadge(ctx context.Context, convID chat1.ConversationID) int {
+	return b.ConversationBadgeStr(ctx, convID.ConvIDStr())
+}
+
+func keyForWotUpdate(w keybase1.WotUpdate) string {
+	return fmt.Sprintf("%s:%s", w.Voucher, w.Vouchee)
 }
 
 // UpdateWithGregor updates the badge state from a gregor state.
@@ -190,16 +178,17 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 	b.state.NewGitRepoGlobalUniqueIDs = []string{}
 	b.state.NewDevices = []keybase1.DeviceID{}
 	b.state.RevokedDevices = []keybase1.DeviceID{}
-	b.state.NewTeamNames = nil
+	b.state.NewTeams = nil
 	b.state.DeletedTeams = nil
-	b.state.NewTeamAccessRequests = nil
+	b.state.NewTeamAccessRequestCount = 0
 	b.state.HomeTodoItems = 0
 	b.state.TeamsWithResetUsers = nil
 	b.state.ResetState = keybase1.ResetState{}
 	b.state.UnverifiedEmails = 0
 	b.state.UnverifiedPhones = 0
+	b.state.WotUpdates = make(map[string]keybase1.WotUpdate)
 
-	var hsb *homeStateBody
+	var hsb *libkb.HomeStateBody
 
 	teamsWithResets := make(map[string]bool)
 
@@ -213,9 +202,13 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 			continue
 		}
 		category := categoryObj.String()
+		if strings.HasPrefix(category, "team.request_access:") {
+			b.state.NewTeamAccessRequestCount++
+			continue
+		}
 		switch category {
 		case "home.state":
-			var tmp homeStateBody
+			var tmp libkb.HomeStateBody
 			byt := item.Body().Bytes()
 			dec := json.NewDecoder(bytes.NewReader(byt))
 			if err := dec.Decode(&tmp); err != nil {
@@ -223,12 +216,12 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 				continue
 			}
 			sentUp := false
-			if homeStateLessThan(hsb, tmp) {
+			if hsb.LessThan(tmp) {
 				hsb = &tmp
 				b.state.HomeTodoItems = countKnownBadges(hsb.BadgeCountMap)
 				sentUp = true
 			}
-			b.log.Debug("incoming home.state (sentUp=%v): %+v", sentUp, tmp)
+			b.log.CDebugf(ctx, "incoming home.state (sentUp=%v): %+v", sentUp, tmp)
 		case "tlf":
 			jsw, err := jsonw.Unmarshal(item.Body().Bytes())
 			if err != nil {
@@ -265,6 +258,46 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 				continue
 			}
 			b.state.NewDevices = append(b.state.NewDevices, keybase1.DeviceID(newDeviceID))
+		case "wot.new_vouch":
+			jsw, err := jsonw.Unmarshal(item.Body().Bytes())
+			if err != nil {
+				b.log.CDebugf(ctx, "BadgeState encountered non-json 'wot.new_vouch' item: %v", err)
+				continue
+			}
+			voucher, err := jsw.AtKey("voucher").GetString()
+			if err != nil {
+				b.log.CDebugf(ctx, "BadgeState encountered gregor 'wot.new_vouch' item without 'voucherUid': %v", err)
+				continue
+			}
+			vouchee := b.env.GetUsername().String()
+			wotUpdate := keybase1.WotUpdate{
+				Voucher: voucher,
+				Vouchee: vouchee,
+				Status:  keybase1.WotStatusType_PROPOSED,
+			}
+			b.state.WotUpdates[keyForWotUpdate(wotUpdate)] = wotUpdate
+		case "wot.accepted", "wot.rejected":
+			jsw, err := jsonw.Unmarshal(item.Body().Bytes())
+			if err != nil {
+				b.log.CDebugf(ctx, "BadgeState encountered non-json '%s' item: %v", category, err)
+				continue
+			}
+			vouchee, err := jsw.AtKey("vouchee").GetString()
+			if err != nil {
+				b.log.CDebugf(ctx, "BadgeState encountered gregor '%s' item without 'voucherUid': %v", category, err)
+				continue
+			}
+			status := keybase1.WotStatusType_ACCEPTED
+			if category == "wot.rejected" {
+				status = keybase1.WotStatusType_REJECTED
+			}
+			voucher := b.env.GetUsername().String()
+			wotUpdate := keybase1.WotUpdate{
+				Voucher: voucher,
+				Vouchee: vouchee,
+				Status:  status,
+			}
+			b.state.WotUpdates[keyForWotUpdate(wotUpdate)] = wotUpdate
 		case "device.revoked":
 			jsw, err := jsonw.Unmarshal(item.Body().Bytes())
 			if err != nil {
@@ -303,7 +336,7 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 				if x.Implicit {
 					continue
 				}
-				b.state.NewTeamNames = append(b.state.NewTeamNames, x.TeamName)
+				b.state.NewTeams = append(b.state.NewTeams, x.TeamID)
 			}
 		case "team.delete":
 			var body []teamDeletedBody
@@ -330,18 +363,6 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 					Id:        msgID,
 				})
 			}
-		case "team.request_access":
-			var body []newTeamBody
-			if err := json.Unmarshal(item.Body().Bytes(), &body); err != nil {
-				b.log.CDebugf(ctx, "BadgeState unmarshal error for team.request_access item: %v", err)
-				continue
-			}
-			for _, x := range body {
-				if x.TeamName == "" {
-					continue
-				}
-				b.state.NewTeamAccessRequests = append(b.state.NewTeamAccessRequests, x.TeamName)
-			}
 		case "team.member_out_from_reset":
 			var body keybase1.TeamMemberOutFromReset
 			if err := json.Unmarshal(item.Body().Bytes(), &body); err != nil {
@@ -356,6 +377,7 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 
 			msgID := item.Metadata().MsgID().(gregor1.MsgID)
 			m := keybase1.TeamMemberOutReset{
+				TeamID:   body.TeamID,
 				Teamname: body.TeamName,
 				Uid:      body.ResetUser.Uid,
 				Username: body.ResetUser.Username,
@@ -395,7 +417,7 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 }
 
 func (b *BadgeState) UpdateWithChat(ctx context.Context, update chat1.UnreadUpdate,
-	inboxVers chat1.InboxVers) {
+	inboxVers chat1.InboxVers, isMobile bool) {
 	b.Lock()
 	defer b.Unlock()
 
@@ -405,10 +427,10 @@ func (b *BadgeState) UpdateWithChat(ctx context.Context, update chat1.UnreadUpda
 	}
 
 	b.inboxVers = inboxVers
-	b.updateWithChat(ctx, update)
+	b.updateWithChat(ctx, update, isMobile)
 }
 
-func (b *BadgeState) UpdateWithChatFull(ctx context.Context, update chat1.UnreadUpdateFull) {
+func (b *BadgeState) UpdateWithChatFull(ctx context.Context, update chat1.UnreadUpdateFull, isMobile bool) {
 	b.Lock()
 	defer b.Unlock()
 
@@ -425,11 +447,11 @@ func (b *BadgeState) UpdateWithChatFull(ctx context.Context, update chat1.Unread
 	case chat1.SyncInboxResType_CURRENT:
 	case chat1.SyncInboxResType_INCREMENTAL:
 	case chat1.SyncInboxResType_CLEAR:
-		b.chatUnreadMap = make(map[string]keybase1.BadgeConversationInfo)
+		b.chatUnreadMap = make(map[chat1.ConvIDStr]keybase1.BadgeConversationInfo)
 	}
 
 	for _, upd := range update.Updates {
-		b.updateWithChat(ctx, upd)
+		b.updateWithChat(ctx, upd, isMobile)
 	}
 
 	b.inboxVers = update.InboxVers
@@ -441,28 +463,29 @@ func (b *BadgeState) Clear() {
 
 	b.state = keybase1.BadgeState{}
 	b.inboxVers = chat1.InboxVers(0)
-	b.chatUnreadMap = make(map[string]keybase1.BadgeConversationInfo)
+	b.chatUnreadMap = make(map[chat1.ConvIDStr]keybase1.BadgeConversationInfo)
 	b.walletUnreadMap = make(map[stellar1.AccountID]int)
 }
 
-func (b *BadgeState) updateWithChat(ctx context.Context, update chat1.UnreadUpdate) {
-	b.log.CDebugf(ctx, "updateWithChat: %s", update)
+func (b *BadgeState) updateWithChat(ctx context.Context, update chat1.UnreadUpdate, isMobile bool) {
+	if !b.quietLogMode {
+		b.log.CDebugf(ctx, "updateWithChat: %s", update)
+	}
+	deviceType := keybase1.DeviceType_DESKTOP
+	if isMobile {
+		deviceType = keybase1.DeviceType_MOBILE
+	}
 	if update.Diff {
-		cur := b.chatUnreadMap[update.ConvID.String()]
+		cur := b.chatUnreadMap[update.ConvID.ConvIDStr()]
 		cur.ConvID = keybase1.ChatConversationID(update.ConvID)
 		cur.UnreadMessages += update.UnreadMessages
-		if cur.BadgeCounts == nil {
-			cur.BadgeCounts = make(map[keybase1.DeviceType]int)
-		}
-		for dt, c := range update.UnreadNotifyingMessages {
-			cur.BadgeCounts[dt] += c
-		}
-		b.chatUnreadMap[update.ConvID.String()] = cur
+		cur.BadgeCount += update.UnreadNotifyingMessages[deviceType]
+		b.chatUnreadMap[update.ConvID.ConvIDStr()] = cur
 	} else {
-		b.chatUnreadMap[update.ConvID.String()] = keybase1.BadgeConversationInfo{
+		b.chatUnreadMap[update.ConvID.ConvIDStr()] = keybase1.BadgeConversationInfo{
 			ConvID:         keybase1.ChatConversationID(update.ConvID),
 			UnreadMessages: update.UnreadMessages,
-			BadgeCounts:    update.UnreadNotifyingMessages,
+			BadgeCount:     update.UnreadNotifyingMessages[deviceType],
 		}
 	}
 }

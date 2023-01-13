@@ -1,28 +1,32 @@
 import * as React from 'react'
-import {Props} from './image-render.types'
+import type {Props} from './image-render.types'
 import {collapseStyles} from '../../../../../styles'
 
 export class ImageRender extends React.Component<Props> {
-  videoRef: any
+  videoRef: React.RefObject<HTMLVideoElement>
 
   constructor(props: Props) {
     super(props)
-    this.videoRef = React.createRef()
+    this.videoRef = React.createRef<HTMLVideoElement>()
   }
 
   pauseVideo = () => {
-    if (!(this.videoRef && this.videoRef.current)) {
+    if (!this.videoRef.current) {
       return
     }
     this.videoRef.current.pause()
   }
 
   onVideoClick = () => {
-    if (!(this.videoRef && this.videoRef.current)) {
+    if (!this.videoRef.current) {
       return
     }
-    this.videoRef.current.play()
+    this.videoRef.current
+      .play()
+      .then(() => {})
+      .catch(() => {})
     this.videoRef.current.setAttribute('controls', 'controls')
+    this.videoRef.current.setAttribute('disablepictureinpicture', 'disablepictureinpicture')
   }
 
   render() {
@@ -34,7 +38,7 @@ export class ImageRender extends React.Component<Props> {
         onLoadStart={this.props.onLoad}
         onLoadedMetadata={this.props.onLoadedVideo}
         controlsList="nodownload nofullscreen noremoteplayback"
-        style={collapseStyles([this.props.style, !this.props.loaded && {display: 'none'}])}
+        style={collapseStyles([this.props.style, !this.props.loaded && {opacity: 0}])}
       >
         <source src={this.props.videoSrc} />
       </video>
@@ -43,7 +47,7 @@ export class ImageRender extends React.Component<Props> {
         onLoad={this.props.onLoad}
         draggable={false}
         src={this.props.src}
-        style={collapseStyles([this.props.style, !this.props.loaded && {display: 'none'}])}
+        style={collapseStyles([this.props.style, !this.props.loaded && {opacity: 0}])}
       />
     )
   }

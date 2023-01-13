@@ -1,16 +1,16 @@
-import * as I from 'immutable'
-import * as Types from './types/wallets'
 import * as RPCTypes from './types/rpc-stellar-gen'
-import * as Styles from '../styles'
-import {AllowedColors} from '../common-adapters/text'
-import {assertionToDisplay} from '../common-adapters/usernames'
-import * as Tabs from './tabs'
-import * as Flow from '../util/flow'
 import * as SettingsConstants from './settings'
-import {invert} from 'lodash-es'
-import {TypedState} from './reducer'
+import * as Styles from '../styles'
+import * as Tabs from './tabs'
+import * as TeamBuildingConstants from './team-building'
+import * as Types from './types/wallets'
 import HiddenString from '../util/hidden-string'
-import flags from '../util/feature-flags'
+import invert from 'lodash/invert'
+import sortBy from 'lodash/sortBy'
+import type {AllowedColors} from '../common-adapters/text'
+import type {TypedState} from './reducer'
+import {assertionToDisplay} from '../common-adapters/usernames'
+import {memoize} from '../util/memoize'
 
 export const balanceDeltaToString = invert(RPCTypes.BalanceDelta) as {
   [K in RPCTypes.BalanceDelta]: keyof typeof RPCTypes.BalanceDelta
@@ -27,99 +27,14 @@ export const chooseAssetFormRouteKey = 'chooseAssetForm'
 export const pickAssetFormRouteKey = 'pickAssetForm'
 export const confirmFormRouteKey = 'confirmForm'
 export const sendRequestFormRoutes = [sendRequestFormRouteKey, confirmFormRouteKey]
-export const airdropBannerKey = 'stellarHideAirdropBanner'
 
-export const makeAirdropQualification = I.Record<Types._AirdropQualification>({
-  subTitle: '',
-  title: '',
-  valid: false,
-})
-
-export const makeStellarDetailsLine = I.Record<Types._StellarDetailsLine>({
-  bullet: false,
-  text: '',
-})
-
-export const makeStellarDetailsHeader = I.Record<Types._StellarDetailsHeader>({
-  body: '',
-  title: '',
-})
-
-export const makeStellarDetailsSection = I.Record<Types._StellarDetailsSection>({
-  icon: '',
-  lines: I.List(),
-  section: '',
-})
-
-export const makeStellarDetailsResponse = I.Record<Types._StellarDetailsResponse>({
-  header: makeStellarDetailsHeader({}),
-  sections: I.List(),
-})
-
-export type StellarDetailsJSONType = {
-  header?: {
-    body?: string | null
-    title?: string | null
-  } | null
-  sections?: Array<{
-    icon?: string | null
-    section?: string | null
-    lines?: Array<{
-      bullet?: boolean | null
-      text?: string | null
-    } | null> | null
-  } | null> | null
-} | null
-
-export const makeStellarDetailsFromJSON = (json: StellarDetailsJSONType) =>
-  makeStellarDetailsResponse({
-    header: makeStellarDetailsHeader({
-      body: (json && json.header && json.header.body) || '',
-      title: (json && json.header && json.header.title) || '',
-    }),
-    sections: I.List(
-      ((json && json.sections) || []).map(section =>
-        makeStellarDetailsSection({
-          icon: (section && section.icon) || '',
-          lines: I.List(
-            ((section && section.lines) || []).map(l =>
-              makeStellarDetailsLine({
-                bullet: (l && l.bullet) || false,
-                text: (l && l.text) || '',
-              })
-            )
-          ),
-          section: (section && section.section) || '',
-        })
-      )
-    ),
-  })
-
-export const makeStellarDetails = I.Record<Types._StellarDetails>({
-  details: makeStellarDetailsResponse(),
-  disclaimer: makeStellarDetailsResponse(),
-  isPromoted: false,
-})
-
-export const makeInflationDestination = I.Record<Types._InflationDestination>({
-  address: '',
-  link: '',
-  name: '',
-  recommended: false,
-})
-
-export const makeAccountInflationDestination = I.Record<Types._AccountInflationDestination>({
-  accountID: Types.noAccountID,
-  name: '',
-})
-export const noAccountInflationDestination = makeAccountInflationDestination()
-
-export const makeReserve = I.Record<Types._Reserve>({
+export const makeReserve = (r?: Partial<Types.Reserve>): Types.Reserve => ({
   amount: '',
   description: '',
+  ...r,
 })
 
-export const makeAssetDescription = I.Record<Types._AssetDescription>({
+export const makeAssetDescription = (a?: Partial<Types.AssetDescription>): Types.AssetDescription => ({
   code: '',
   depositButtonText: '',
   infoUrl: '',
@@ -130,10 +45,11 @@ export const makeAssetDescription = I.Record<Types._AssetDescription>({
   showDepositButton: false,
   showWithdrawButton: false,
   withdrawButtonText: '',
+  ...a,
 })
 export const emptyAssetDescription = makeAssetDescription()
 
-export const makeBuilding = I.Record<Types._Building>({
+export const makeBuilding = (b?: Partial<Types.Building>): Types.Building => ({
   amount: '',
   bid: '',
   currency: 'XLM', // FIXME: Use default currency?
@@ -144,9 +60,10 @@ export const makeBuilding = I.Record<Types._Building>({
   secretNote: new HiddenString(''),
   sendAssetChoices: null,
   to: '',
+  ...b,
 })
 
-export const makeBuildingAdvanced = I.Record<Types._BuildingAdvanced>({
+export const makeBuildingAdvanced = (b?: Partial<Types.BuildingAdvanced>): Types.BuildingAdvanced => ({
   publicMemo: new HiddenString(''),
   recipient: '',
   recipientAmount: '',
@@ -155,21 +72,25 @@ export const makeBuildingAdvanced = I.Record<Types._BuildingAdvanced>({
   secretNote: new HiddenString(''),
   senderAccountID: Types.noAccountID,
   senderAsset: emptyAssetDescription,
+  ...b,
 })
 export const emptyBuildingAdvanced = makeBuildingAdvanced()
 
-export const makePaymentPath = I.Record<Types._PaymentPath>({
+export const makePaymentPath = (b?: Partial<Types.PaymentPath>): Types.PaymentPath => ({
   destinationAmount: '',
   destinationAsset: emptyAssetDescription,
-  path: I.List(),
+  path: [],
   sourceAmount: '',
   sourceAmountMax: '',
   sourceAsset: emptyAssetDescription,
   sourceInsufficientBalance: '',
+  ...b,
 })
 export const emptyPaymentPath = makePaymentPath()
 
-export const makeBuiltPaymentAdvanced = I.Record<Types._BuiltPaymentAdvanced>({
+export const makeBuiltPaymentAdvanced = (
+  b?: Partial<Types.BuiltPaymentAdvanced>
+): Types.BuiltPaymentAdvanced => ({
   amountError: '',
   destinationAccount: Types.noAccountID,
   destinationDisplay: '',
@@ -179,10 +100,11 @@ export const makeBuiltPaymentAdvanced = I.Record<Types._BuiltPaymentAdvanced>({
   readyToSend: false,
   sourceDisplay: '',
   sourceMaxDisplay: '',
+  ...b,
 })
 export const emptyBuiltPaymentAdvanced = makeBuiltPaymentAdvanced()
 
-export const makeBuiltPayment = I.Record<Types._BuiltPayment>({
+export const makeBuiltPayment = (b?: Partial<Types.BuiltPayment>): Types.BuiltPayment => ({
   amountAvailable: '',
   amountErrMsg: '',
   builtBanners: null,
@@ -201,17 +123,19 @@ export const makeBuiltPayment = I.Record<Types._BuiltPayment>({
   worthCurrency: '',
   worthDescription: '',
   worthInfo: '',
+  ...b,
 })
 
-export const makeSEP7Summary = I.Record<Types._SEP7Summary>({
+export const makeSEP7Summary = (s?: Partial<Types.SEP7Summary>): Types.SEP7Summary => ({
   fee: -1,
   memo: '',
   memoType: '',
   operations: null,
   source: '',
+  ...s,
 })
 
-export const makeSEP7ConfirmInfo = I.Record<Types._SEP7ConfirmInfo>({
+export const makeSEP7ConfirmInfo = (s?: Partial<Types.SEP7ConfirmInfo>): Types.SEP7ConfirmInfo => ({
   amount: '',
   assetCode: '',
   assetIssuer: '',
@@ -228,9 +152,10 @@ export const makeSEP7ConfirmInfo = I.Record<Types._SEP7ConfirmInfo>({
   signed: false,
   summary: makeSEP7Summary(),
   xdr: '',
+  ...s,
 })
 
-export const makeBuiltRequest = I.Record<Types._BuiltRequest>({
+export const makeBuiltRequest = (b?: Partial<Types.BuiltRequest>): Types.BuiltRequest => ({
   amountErrMsg: '',
   builtBanners: null,
   displayAmountFiat: '',
@@ -241,34 +166,33 @@ export const makeBuiltRequest = I.Record<Types._BuiltRequest>({
   toErrMsg: '',
   worthDescription: '',
   worthInfo: '',
+  ...b,
 })
 
-export const emptyAccountAcceptedAssets: I.Map<Types.AssetID, number> = I.Map()
+export const emptyAccountAcceptedAssets: Map<Types.AssetID, number> = new Map()
 
-export const makeTrustline = I.Record<Types._Trustline>({
-  acceptedAssets: I.Map(),
-  acceptedAssetsByUsername: I.Map(),
-  assetMap: I.Map(),
-  expandedAssets: I.Set(),
+export const makeTrustline = (t?: Partial<Types.Trustline>): Types.Trustline => ({
+  acceptedAssets: new Map(),
+  acceptedAssetsByUsername: new Map(),
+  assetMap: new Map(),
+  expandedAssets: new Set(),
   loaded: false,
-  popularAssets: I.List(),
+  popularAssets: [],
   searchingAssets: undefined,
   totalAssetsCount: 0,
+  ...t,
 })
+
 export const emptyTrustline = makeTrustline()
 
-export const makeState = I.Record<Types._State>({
+export const makeState = (): Types.State => ({
   acceptedDisclaimer: false,
   acceptingDisclaimerDelay: false,
-  accountMap: I.OrderedMap(),
+  accountMap: new Map(),
   accountName: '',
   accountNameError: '',
   accountNameValidationState: 'none',
-  airdropDetails: makeStellarDetails(),
-  airdropQualifications: I.List(),
-  airdropShowBanner: false,
-  airdropState: 'loading',
-  assetsMap: I.Map(),
+  assetsMap: new Map(),
   buildCounter: 0,
   building: makeBuilding(),
   buildingAdvanced: emptyBuildingAdvanced,
@@ -277,37 +201,34 @@ export const makeState = I.Record<Types._State>({
   builtRequest: makeBuiltRequest(),
   changeTrustlineError: '',
   createNewAccountError: '',
-  currencies: I.List(),
+  currencies: [],
   exportedSecretKey: new HiddenString(''),
   exportedSecretKeyAccountID: Types.noAccountID,
-  externalPartners: I.List(),
-  inflationDestinationError: '',
-  inflationDestinationMap: I.Map(),
-  inflationDestinations: I.List(),
+  externalPartners: [],
   lastSentXLM: false,
   linkExistingAccountError: '',
-  mobileOnlyMap: I.Map(),
-  paymentCursorMap: I.Map(),
-  paymentLoadingMoreMap: I.Map(),
-  paymentOldestUnreadMap: I.Map(),
-  paymentsMap: I.Map(),
+  loadPaymentsError: '',
+  mobileOnlyMap: new Map(),
+  paymentCursorMap: new Map(),
+  paymentLoadingMoreMap: new Map(),
+  paymentOldestUnreadMap: new Map(),
+  paymentsMap: new Map(),
   reviewCounter: 0,
-  reviewLastSeqno: null,
   secretKey: new HiddenString(''),
   secretKeyError: '',
-  secretKeyMap: I.Map(),
   secretKeyValidationState: 'none',
   selectedAccount: Types.noAccountID,
   sentPaymentError: '',
   sep6Error: false,
   sep6Message: '',
   sep7ConfirmError: '',
-  sep7ConfirmInfo: null,
+  sep7ConfirmFromQR: false,
   sep7ConfirmPath: emptyBuiltPaymentAdvanced,
   sep7ConfirmURI: '',
-  staticConfig: null,
+  sep7SendError: '',
+  teamBuilding: TeamBuildingConstants.makeSubState(),
   trustline: emptyTrustline,
-  unreadPaymentsMap: I.Map(),
+  unreadPaymentsMap: new Map(),
 })
 
 export const buildPaymentResultToBuiltPayment = (b: RPCTypes.BuildPaymentResLocal) =>
@@ -357,7 +278,7 @@ export const accountResultToAccount = (w: RPCTypes.WalletAccountLocal) =>
     name: w.name,
   })
 
-export const makeAssets = I.Record<Types._Assets>({
+export const makeAssets = (a?: Partial<Types.Assets>): Types.Assets => ({
   assetCode: '',
   availableToSendWorth: '',
   balanceAvailableToSend: '',
@@ -370,12 +291,14 @@ export const makeAssets = I.Record<Types._Assets>({
   issuerName: '',
   issuerVerifiedDomain: '',
   name: '',
-  reserves: I.List(),
+  reserves: [],
   showDepositButton: false,
   showWithdrawButton: false,
+  useSep24: false,
   withdrawButtonText: '',
   worth: '',
   worthCurrency: '',
+  ...a,
 })
 
 export const assetsResultToAssets = (w: RPCTypes.AccountAssetLocal) =>
@@ -391,7 +314,7 @@ export const assetsResultToAssets = (w: RPCTypes.AccountAssetLocal) =>
     issuerName: w.issuerName,
     issuerVerifiedDomain: w.issuerVerifiedDomain,
     name: w.name,
-    reserves: I.List((w.reserves || []).map(makeReserve)),
+    reserves: (w.reserves ?? []).map(makeReserve),
     showDepositButton: w.showDepositButton,
     showWithdrawButton: w.showWithdrawButton,
     withdrawButtonText: w.withdrawButtonText,
@@ -451,7 +374,7 @@ const _defaultPaymentDetail = {
   ..._defaultPaymentCommon,
   externalTxURL: '',
   feeChargedDescription: '',
-  pathIntermediate: I.List(),
+  pathIntermediate: [],
   publicMemo: new HiddenString(''),
   publicMemoType: '',
   txID: '',
@@ -462,21 +385,28 @@ const _defaultPayment = {
   ..._defaultPaymentDetail,
 }
 
-export const makePaymentResult = I.Record<Types._PaymentResult>(_defaultPaymentResult)
+export const makePaymentResult = (p?: Partial<Types.PaymentResult>): Types.PaymentResult => ({
+  ..._defaultPaymentResult,
+  ...p,
+})
 
-export const makePaymentDetail = I.Record<Types._PaymentDetail>(_defaultPaymentDetail)
+export const makePaymentDetail = (p?: Partial<Types.PaymentDetail>): Types.PaymentDetail => ({
+  ..._defaultPaymentDetail,
+  ...p,
+})
 
-export const makePayment = I.Record<Types._Payment>(_defaultPayment)
+export const makePayment = (p?: Partial<Types.Payment>): Types.Payment => ({..._defaultPayment, ...p})
 
-export const makeCurrency = I.Record<Types._LocalCurrency>({
+export const makeCurrency = (c?: Partial<Types.Currency>): Types.Currency => ({
   code: '',
   description: '',
   name: '',
   symbol: '',
+  ...c,
 })
 export const unknownCurrency = makeCurrency()
 
-export const makeAccount = I.Record<Types._Account>({
+export const makeAccount = (a?: Partial<Types.Account>): Types.Account => ({
   accountID: Types.noAccountID,
   balanceDescription: '',
   canAddTrustline: false,
@@ -486,6 +416,7 @@ export const makeAccount = I.Record<Types._Account>({
   isDefault: false,
   mobileOnlyEditable: false,
   name: '',
+  ...a,
 })
 export const unknownAccount = makeAccount()
 
@@ -532,17 +463,15 @@ export const rpcPaymentDetailToPaymentDetail = (p: RPCTypes.PaymentDetailsLocal)
     ...rpcPaymentToPaymentCommon(p.summary),
     externalTxURL: p.details.externalTxURL,
     feeChargedDescription: p.details.feeChargedDescription,
-    pathIntermediate: I.List(
-      (p.details.pathIntermediate || []).map(rpcAsset =>
-        makeAssetDescription({
-          code: rpcAsset.code,
-          infoUrl: rpcAsset.infoUrl,
-          infoUrlText: rpcAsset.infoUrlText,
-          issuerAccountID: rpcAsset.issuer,
-          issuerName: rpcAsset.issuerName,
-          issuerVerifiedDomain: rpcAsset.verifiedDomain,
-        })
-      )
+    pathIntermediate: (p.details.pathIntermediate || []).map(rpcAsset =>
+      makeAssetDescription({
+        code: rpcAsset.code,
+        infoUrl: rpcAsset.infoUrl,
+        infoUrlText: rpcAsset.infoUrlText,
+        issuerAccountID: rpcAsset.issuer,
+        issuerName: rpcAsset.issuerName,
+        issuerVerifiedDomain: rpcAsset.verifiedDomain,
+      })
     ),
     publicMemo: new HiddenString(p.details.publicNote),
     publicMemoType: p.details.publicNoteType,
@@ -684,40 +613,10 @@ export const paymentToYourInfoAndCounterparty = (
         yourRole: 'senderOnly',
       }
     default:
-      Flow.ifFlowComplainsAboutThisFunctionYouHaventHandledAllCasesInASwitch(p.delta)
       throw new Error(`Unexpected delta ${p.delta}`)
   }
 }
 
-export const updatePaymentDetail = (
-  map: I.Map<Types.PaymentID, Types.Payment>,
-  paymentDetail: Types.PaymentDetail
-): I.Map<Types.PaymentID, Types.Payment> => {
-  return map.update(paymentDetail.id, (oldPayment = makePayment()) => oldPayment.merge(paymentDetail))
-}
-
-export const updatePaymentsReceived = (
-  map: I.Map<Types.PaymentID, Types.Payment>,
-  paymentResults: Array<Types.PaymentResult>
-): I.Map<Types.PaymentID, Types.Payment> => {
-  return map.withMutations(mapMutable =>
-    paymentResults.forEach(paymentResult =>
-      mapMutable.update(paymentResult.id, (oldPayment = makePayment()) => oldPayment.merge(paymentResult))
-    )
-  )
-}
-
-export const inflationDestResultToAccountInflationDest = (res: RPCTypes.InflationDestinationResultLocal) => {
-  if (!res.destination) {
-    return noAccountInflationDestination
-  }
-  return makeAccountInflationDestination({
-    accountID: Types.stringToAccountID(res.destination),
-    name: res.knownDestination ? res.knownDestination.name : undefined,
-  })
-}
-
-export const airdropWaitingKey = 'wallets:airdrop'
 export const assetDepositWaitingKey = (issuerAccountID: Types.AccountID, assetCode: string) =>
   `wallets:assetDeposit:${Types.makeAssetID(issuerAccountID, assetCode)}`
 export const assetWithdrawWaitingKey = (issuerAccountID: Types.AccountID, assetCode: string) =>
@@ -743,7 +642,6 @@ export const validateAccountNameWaitingKey = 'wallets:validateAccountName'
 export const validateSecretKeyWaitingKey = 'wallets:validateSecretKey'
 export const getRequestDetailsWaitingKey = (id: Types.PaymentID) =>
   `wallets:requestDetailsWaitingKey:${Types.paymentIDToString(id)}`
-export const inflationDestinationWaitingKey = 'wallets:inflationDestination'
 export const setAccountMobileOnlyWaitingKey = (id: Types.AccountID) =>
   `wallets:setAccountMobileOnly:${Types.accountIDToString(id)}`
 export const checkOnlineWaitingKey = 'wallets:checkOnline'
@@ -757,32 +655,36 @@ export const searchTrustlineAssetsWaitingKey = 'wallets:searchTrustlineAssets'
 export const calculateBuildingAdvancedWaitingKey = 'wallets:calculateBuildingAdvanced'
 export const sendPaymentAdvancedWaitingKey = 'wallets:sendPaymentAdvanced'
 
-export const getAccountIDs = (state: TypedState) => state.wallets.accountMap.keySeq().toList()
+const getAccountMapKeys = memoize((accountMap: Map<string, Types.Account>) =>
+  // sort by account name but with primary account first
+  sortBy([...accountMap.entries()], ([_, {name, isDefault}]) => (isDefault ? '' : 'b' + name)).map(
+    ([id, _]) => id
+  )
+)
+export const getAccountIDs = (state: TypedState) => getAccountMapKeys(state.wallets.accountMap)
 
-export const getAccounts = (state: TypedState) => state.wallets.accountMap.valueSeq().toList()
-
-export const getAirdropSelected = (state: TypedState) =>
-  state.wallets.selectedAccount === Types.airdropAccountID
+const getAccountMapValues = memoize((accountMap: Map<string, Types.Account>) => [...accountMap.values()])
+export const getAccounts = (state: TypedState) => getAccountMapValues(state.wallets.accountMap)
 
 export const getSelectedAccount = (state: TypedState) => state.wallets.selectedAccount
 
 export const getSelectedAccountData = (state: TypedState) =>
-  state.wallets.accountMap.get(getSelectedAccount(state), unknownAccount)
+  state.wallets.accountMap.get(getSelectedAccount(state)) ?? unknownAccount
 
 export const getDisplayCurrencies = (state: TypedState) => state.wallets.currencies
 
 export const getPayments = (state: TypedState, accountID: Types.AccountID) =>
-  state.wallets.paymentsMap.get(accountID, null)
+  state.wallets.paymentsMap.get(accountID) ?? null
 
 export const getOldestUnread = (state: TypedState, accountID: Types.AccountID) =>
-  state.wallets.paymentOldestUnreadMap.get(accountID, Types.noPaymentID)
+  state.wallets.paymentOldestUnreadMap.get(accountID) ?? Types.noPaymentID
 
 export const getPayment = (state: TypedState, accountID: Types.AccountID, paymentID: Types.PaymentID) =>
-  state.wallets.paymentsMap.get(accountID, I.Map<Types.PaymentID, Types.Payment>()).get(paymentID) ||
-  makePayment()
+  state.wallets.paymentsMap.get(accountID)?.get(paymentID) ?? makePayment()
 
 export const getAccountInner = (state: Types.State, accountID: Types.AccountID) =>
-  state.accountMap.get(accountID, unknownAccount)
+  state.accountMap.get(accountID) ?? unknownAccount
+
 export const getAccount = (state: TypedState, accountID: Types.AccountID) =>
   getAccountInner(state.wallets, accountID)
 
@@ -792,31 +694,29 @@ export const getDisplayCurrency = (state: TypedState, accountID: Types.AccountID
   getDisplayCurrencyInner(state.wallets, accountID)
 
 export const getDefaultDisplayCurrencyInner = (state: Types.State) => {
-  const defaultAccount = state.accountMap.find(a => a.isDefault)
-  return defaultAccount ? defaultAccount.displayCurrency : unknownCurrency
+  const defaultAccount = getDefaultAccount(state)
+  return defaultAccount === unknownAccount ? unknownCurrency : defaultAccount.displayCurrency
 }
-export const getDefaultDisplayCurrency = (state: TypedState) => getDefaultDisplayCurrencyInner(state.wallets)
+export const getDefaultDisplayCurrency = (state: Types.State) => getDefaultDisplayCurrencyInner(state)
 
-export const getDefaultAccountID = (state: TypedState) => {
-  const defaultAccount = state.wallets.accountMap.find(a => a.isDefault)
-  return defaultAccount ? defaultAccount.accountID : null
+export const getDefaultAccountID = (state: Types.State) => {
+  const defaultAccount = getDefaultAccount(state)
+  return defaultAccount === unknownAccount ? null : defaultAccount.accountID
 }
 
-export const getDefaultAccount = (state: TypedState) => {
-  const defaultAccount = state.wallets.accountMap.find(a => a.isDefault)
+export const getDefaultAccount = (state: Types.State) => {
+  const defaultAccount = [...state.accountMap.values()].find(a => a.isDefault)
   return defaultAccount || unknownAccount
 }
 
-export const getInflationDestination = (state: TypedState, accountID: Types.AccountID) =>
-  state.wallets.inflationDestinationMap.get(accountID, noAccountInflationDestination)
-
 export const getExternalPartners = (state: TypedState) => state.wallets.externalPartners
 
-export const getAssets = (state: TypedState, accountID: Types.AccountID): I.List<Types.Assets> =>
-  state.wallets.assetsMap.get(accountID, I.List())
+const noAssets: Array<Types.Assets> = []
+export const getAssets = (state: TypedState, accountID: Types.AccountID): Array<Types.Assets> =>
+  state.wallets.assetsMap.get(accountID) ?? noAssets
 
 export const getFederatedAddress = (state: TypedState, accountID: Types.AccountID) => {
-  const account = state.wallets.accountMap.get(accountID, unknownAccount)
+  const account = state.wallets.accountMap.get(accountID) ?? unknownAccount
   const {username} = state.config
   return username && account.isDefault ? `${username}*keybase.io` : ''
 }
@@ -839,7 +739,7 @@ export const isAccountLoaded = (state: TypedState, accountID: Types.AccountID) =
 
 export const isFederatedAddress = (address: string | null) => (address ? address.includes('*') : false)
 
-export const displayCurrenciesLoaded = (state: TypedState) => state.wallets.currencies.size > 0
+export const displayCurrenciesLoaded = (state: TypedState) => state.wallets.currencies.length > 0
 
 export const getCurrencyAndSymbol = (state: TypedState, code: string) => {
   if (!state.wallets.currencies || !code) {
@@ -851,7 +751,10 @@ export const getCurrencyAndSymbol = (state: TypedState, code: string) => {
 
 export const getAcceptedDisclaimer = (state: TypedState) => state.wallets.acceptedDisclaimer
 
-export const getBalanceChangeColor = (delta: Types.PaymentDelta, status: Types.StatusSimplified) => {
+export const getBalanceChangeColor = (
+  delta: Types.PaymentDelta,
+  status: Types.StatusSimplified
+): AllowedColors => {
   let balanceChangeColor: AllowedColors = Styles.globalColors.black
   if (delta !== 'none') {
     balanceChangeColor = delta === 'increase' ? Styles.globalColors.greenDark : Styles.globalColors.purpleDark
@@ -874,19 +777,16 @@ export const inputPlaceholderForCurrency = (currency: string) => (currency !== '
 
 export const numDecimalsAllowedForCurrency = (currency: string) => (currency !== 'XLM' ? 2 : 7)
 
-export const rootWalletTab = Styles.isMobile ? Tabs.settingsTab : Tabs.walletsTab // tab for wallets
-export const rootWalletPath = [rootWalletTab, ...(Styles.isMobile ? [SettingsConstants.walletsTab] : [])] // path to wallets
-export const walletPath = Styles.isMobile ? rootWalletPath : [...rootWalletPath, 'wallet'] // path to wallet
+export const rootWalletTab = Styles.isPhone ? Tabs.settingsTab : Tabs.walletsTab // tab for wallets
+export const rootWalletPath = [rootWalletTab, ...(Styles.isPhone ? [SettingsConstants.walletsTab] : [])] // path to wallets
+export const walletPath = Styles.isPhone ? rootWalletPath : [...rootWalletPath, 'wallet'] // path to wallet
 export const trustlineHoldingBalance = 0.5
 
 // Info text for cancelable payments
 export const makeCancelButtonInfo = (username: string) =>
   `${assertionToDisplay(username)} can claim this when they set up their wallet.`
 
-export const getShowAirdropBanner = (state: TypedState) =>
-  flags.airdrop &&
-  state.wallets.airdropDetails.isPromoted &&
-  state.wallets.airdropShowBanner &&
-  (state.wallets.airdropState === 'qualified' ||
-    state.wallets.airdropState === 'unqualified' ||
-    state.wallets.airdropState === 'needDisclaimer')
+// Error descriptions to match on for reworded service errors; ideally these
+// would be separate error codes instead.
+export const exchangeRateErrorText = 'exchange rate'
+export const recipientRequiresAMemoErrorText = 'recipient requires a memo'

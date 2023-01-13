@@ -22,7 +22,7 @@ const PushPrompt = () => {
         hideBorder: true,
         rightButton: (
           <Kb.ClickableBox onClick={onNoPermissions}>
-            <Kb.Text type="Header" negative={true}>
+            <Kb.Text type="BodyBig" negative={true}>
               Skip
             </Kb.Text>
           </Kb.ClickableBox>
@@ -48,19 +48,16 @@ const PushPrompt = () => {
         hideBorder: true,
         style: styles.footer,
       }}
+      mobileStyle={styles.background}
     >
       <Kb.Box2 direction="vertical" fullHeight={true} fullWidth={true} gap="small" style={styles.container}>
-        <Kb.RequireImage
-          resizeMode="stretch"
-          style={styles.image}
-          src={require('../../images/illustrations/illustration-turn-on-notifications-460-x-252.png')}
-        />
+        <Kb.Icon type="illustration-turn-on-notifications" style={styles.image} />
         <Kb.Text center={true} type="BodySemibold" negative={true}>
           Notifications are very important.
         </Kb.Text>
         <Kb.Text center={true} type="Body" negative={true}>
-          Your phone might need to be contacted, for example if you install Keybase on another device. This is
-          a crucial security setting.
+          Your device might need to be contacted, for example if you install Keybase on another device. This
+          is a crucial security setting.
         </Kb.Text>
       </Kb.Box2>
     </Kb.Modal>
@@ -70,7 +67,15 @@ const PushPrompt = () => {
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      button: {maxHeight: 40},
+      background: {backgroundColor: Styles.globalColors.blue},
+      button: Styles.platformStyles({
+        common: {
+          maxHeight: 40,
+        },
+        isTablet: {
+          marginBottom: Styles.globalMargins.medium,
+        },
+      }),
       container: {
         ...Styles.globalStyles.fillAbsolute,
         backgroundColor: Styles.globalColors.blue,
@@ -84,10 +89,11 @@ const styles = Styles.styleSheetCreate(
         backgroundColor: Styles.globalColors.blue,
         color: Styles.globalColors.white,
       },
-      image: {
-        flex: 1,
-        width: '150%',
-      },
+      image: Styles.platformStyles({
+        isTablet: {
+          alignSelf: 'center',
+        },
+      }),
     } as const)
 )
 

@@ -1,5 +1,4 @@
-import * as React from 'react'
-import * as Types from '../../constants/types/people'
+import type * as Types from '../../constants/types/people'
 import {Box, ConnectedNameWithIcon, ScrollView, Text} from '../../common-adapters'
 import * as Styles from '../../styles'
 
@@ -9,7 +8,7 @@ export type Props = {
   suggestions: Array<FollowSuggestion>
 }
 
-export default (props: Props) => (
+const FollowSuggestions = (props: Props) => (
   <Box style={styles.container}>
     <Text type="BodySmallSemibold" style={styles.text}>
       Consider following...
@@ -33,10 +32,12 @@ export default (props: Props) => (
     </ScrollView>
   </Box>
 )
+export default FollowSuggestions
 
 const styles = Styles.styleSheetCreate(() => ({
   container: {
     ...Styles.globalStyles.flexBoxColumn,
+    backgroundColor: Styles.globalColors.fastBlank,
     paddingTop: Styles.globalMargins.tiny,
     position: 'relative',
   },
@@ -47,6 +48,7 @@ const styles = Styles.styleSheetCreate(() => ({
   scrollViewContainer: Styles.platformStyles({
     common: {
       ...Styles.globalStyles.flexBoxRow,
+      backgroundColor: Styles.globalColors.fastBlank,
       borderBottomWidth: 1,
       borderColor: Styles.globalColors.black_10,
       paddingBottom: Styles.globalMargins.small,
@@ -64,9 +66,8 @@ const styles = Styles.styleSheetCreate(() => ({
     height: 112,
     width: 112,
   },
-  text: Styles.platformStyles({
-    common: {marginBottom: Styles.globalMargins.tiny},
-    isElectron: {marginLeft: Styles.globalMargins.small},
-    isMobile: {marginLeft: Styles.globalMargins.tiny},
-  }),
+  text: {
+    marginBottom: Styles.globalMargins.tiny,
+    marginLeft: Styles.globalMargins.small,
+  },
 }))

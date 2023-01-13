@@ -1,13 +1,16 @@
 import * as React from 'react'
 import * as Kb from '../../../../../common-adapters/mobile.native'
 import * as Styles from '../../../../../styles'
-import {throttle} from 'lodash-es'
-import {Props} from '.'
-import SharedTimer, {SharedTimerID} from '../../../../../util/shared-timers'
+import throttle from 'lodash/throttle'
+// ios must animated plain colors not the dynamic ones
+import colors, {darkColors} from '../../../../../styles/colors'
+import type {Props} from '.'
+import SharedTimer, {type SharedTimerID} from '../../../../../util/shared-timers'
 
 // If this image changes, some hard coded dimensions
 // in this file also need to change.
 const explodedIllustrationURL = require('../../../../../images/icons/pattern-ashes-mobile-400-80.png')
+const explodedIllustrationDarkURL = require('../../../../../images/icons/dark-pattern-ashes-mobile-400-80.png')
 
 export const animationDuration = 1500
 
@@ -27,7 +30,7 @@ class ExplodingHeightRetainer extends React.Component<Props, State> {
     height: 20,
     numImages: 1,
   }
-  timeoutID?: NodeJS.Timer
+  timeoutID?: ReturnType<typeof setTimeout>
 
   static getDerivedStateFromProps(nextProps: Props, _: State) {
     return nextProps.retainHeight ? null : {children: copyChildren(nextProps.children)}
@@ -48,7 +51,7 @@ class ExplodingHeightRetainer extends React.Component<Props, State> {
     this._clearTimeout()
   }
 
-  _onLayout = evt => {
+  _onLayout = (evt: any) => {
     if (evt.nativeEvent && evt.nativeEvent.layout.height !== this.state.height) {
       this.setState({
         height: evt.nativeEvent.layout.height,
@@ -114,6 +117,7 @@ class AnimatedAshTower extends React.Component<AshTowerProps, AshTowerState> {
         duration: animationDuration,
         easing: Kb.NativeEasing.inOut(Kb.NativeEasing.ease),
         toValue: 100,
+        useNativeDriver: false,
       }).start()
       // insert 'EXPLODED' in sync with 'boom!' disappearing
       this.timerID && SharedTimer.removeObserver(this.props.messageKey, this.timerID)
@@ -200,21 +204,28 @@ class EmojiTower extends React.Component<
 const AshTower = (props: {explodedBy?: string; numImages: number; showExploded: boolean}) => {
   const children: Array<React.ReactNode> = []
   for (let i = 0; i < props.numImages; i++) {
-    children.push(<Kb.NativeImage key={i} source={explodedIllustrationURL} style={styles.ashes} />)
+    children.push(
+      <Kb.NativeImage
+        key={i}
+        source={Styles.isDarkMode() ? explodedIllustrationDarkURL : explodedIllustrationURL}
+        style={styles.ashes}
+      />
+    )
   }
   let exploded: React.ReactNode = null
   if (props.showExploded) {
     exploded = !props.explodedBy ? (
-      <Kb.Text type="BodyTiny" style={styles.exploded}>
+      <Kb.Text type="BodyTiny" style={styles.exploded} fixOverdraw={true}>
         EXPLODED
       </Kb.Text>
     ) : (
-      <Kb.Text lineClamp={1} type="BodyTiny" style={styles.exploded}>
+      <Kb.Text lineClamp={1} type="BodyTiny" style={styles.exploded} fixOverdraw={true}>
         EXPLODED BY{' '}
         <Kb.ConnectedUsernames
-          type="BodySmallSemibold"
+          type="BodySmallBold"
+          fixOverdraw="auto"
           onUsernameClicked="profile"
-          usernames={[props.explodedBy]}
+          usernames={props.explodedBy}
           inline={true}
           colorFollowing={true}
           colorYou={true}
@@ -234,6 +245,7 @@ const styles = Styles.styleSheetCreate(
   () =>
     ({
       ashes: {
+        backgroundColor: Styles.globalColors.fastBlank,
         height: 80,
         width: 400,
       },
@@ -248,15 +260,15 @@ const styles = Styles.styleSheetCreate(
         width: 20,
       },
       exploded: {
-        backgroundColor: Styles.globalColors.white,
-        color: Styles.globalColors.black_20_on_white,
+        backgroundColor: Styles.isDarkMode() ? darkColors.white : colors.white,
+        color: Styles.isDarkMode() ? darkColors.black_20_on_white : colors.black_20_on_white,
         paddingLeft: Styles.globalMargins.tiny,
       },
       retaining: {
         overflow: 'hidden',
       },
       slider: {
-        backgroundColor: Styles.globalColors.white,
+        backgroundColor: Styles.isDarkMode() ? darkColors.white : colors.white,
         bottom: 0,
         height: '100%',
         left: 0,
@@ -267,8 +279,9 @@ const styles = Styles.styleSheetCreate(
       tagBox: {
         ...Styles.globalStyles.flexBoxColumn,
         alignItems: 'flex-end',
+        backgroundColor: Styles.globalColors.fastBlank,
         bottom: 2,
-        minWidth: 200,
+        minWidth: 80,
         position: 'absolute',
         right: 0,
       },

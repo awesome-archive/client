@@ -1,25 +1,20 @@
 import * as React from 'react'
 import * as Kb from '../common-adapters/index'
 import * as Styles from '../styles'
-import {
-  serviceIdToIconFont,
-  serviceIdToAccentColor,
-  serviceIdToLongLabel,
-  serviceIdToWonderland,
-} from './shared'
-import {ServiceIdWithContact} from '../constants/types/team-building'
-import {Props, IconProps} from './service-tab-bar'
-import {difference} from 'lodash-es'
+import {serviceIdToIconFont, serviceIdToAccentColor, serviceIdToLongLabel, serviceIdToBadge} from './shared'
+import difference from 'lodash/difference'
+import type {ServiceIdWithContact} from '../constants/types/team-building'
+import type {Props, IconProps} from './service-tab-bar'
 
 const ServiceIcon = (props: IconProps) => {
   const [hover, setHover] = React.useState(false)
   const color = props.isActive || hover ? serviceIdToAccentColor(props.service) : Styles.globalColors.black
   return (
     <Kb.ClickableBox
-      onClick={props.onClick}
+      onClick={() => props.onClick(props.service)}
       onMouseOver={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{flex: 1}}
+      style={styles.serviceIconFlex}
     >
       <Kb.Box2 direction="horizontal" centerChildren={true} style={styles.serviceIconContainer}>
         <Kb.Box2
@@ -29,7 +24,7 @@ const ServiceIcon = (props: IconProps) => {
           style={styles.serviceIconContainerInner}
         >
           <Kb.Box2 direction="vertical" style={{position: 'relative'}}>
-            {serviceIdToWonderland(props.service) && (
+            {serviceIdToBadge(props.service) && (
               <Kb.Badge
                 border={true}
                 height={9}
@@ -58,25 +53,15 @@ const ServiceIcon = (props: IconProps) => {
               </Kb.Text>
             ))}
           </Kb.Box2>
-          {!!props.showCount &&
-            (props.count !== null ? (
-              <Kb.Text type="BodyTinySemibold">
-                {props.count && props.count > 10 ? '10+' : props.count}
-              </Kb.Text>
-            ) : (
-              <Kb.Icon
-                type="icon-progress-grey-animated"
-                color={Styles.globalColors.greyDark}
-                style={styles.pendingIcon}
-              />
-            ))}
         </Kb.Box2>
       </Kb.Box2>
       <Kb.Box2
         direction="horizontal"
         fullWidth={true}
         style={Styles.collapseStyles([
-          props.isActive ? styles.activeTabBar : styles.inactiveTabBar,
+          props.isActive
+            ? styles.activeTabBar
+            : {...styles.inactiveTabBar, ...(props.minimalBorder ? {borderBottomWidth: 0} : undefined)},
           props.isActive && {backgroundColor: serviceIdToAccentColor(props.service)},
         ])}
       />
@@ -84,13 +69,25 @@ const ServiceIcon = (props: IconProps) => {
   )
 }
 
-const MoreNetworksButton = Kb.OverlayParentHOC(
-  (
-    props: Kb.PropsWithOverlay<{
-      services: Array<ServiceIdWithContact>
-      onChangeService: (service: ServiceIdWithContact) => void
-    }>
-  ) => (
+const MoreNetworksButton = (props: {
+  services: Array<ServiceIdWithContact>
+  onChangeService: (service: ServiceIdWithContact) => void
+}) => {
+  const {toggleShowingPopup, showingPopup, popup, popupAnchor} = Kb.usePopup(attachTo => (
+    <Kb.FloatingMenu
+      attachTo={attachTo}
+      closeOnSelect={true}
+      items={props.services.map(service => ({
+        onClick: () => props.onChangeService(service),
+        title: service,
+        view: <MoreNetworkItem service={service} />,
+      }))}
+      onHidden={toggleShowingPopup}
+      visible={showingPopup}
+    />
+  ))
+
+  return (
     <>
       <Kb.Box2 direction="vertical" fullHeight={true} fullWidth={true} style={styles.moreNetworks0}>
         <Kb.Box2
@@ -98,10 +95,10 @@ const MoreNetworksButton = Kb.OverlayParentHOC(
           style={styles.moreNetworks1}
           fullHeight={true}
           centerChildren={true}
-          ref={props.setAttachmentRef}
+          ref={popupAnchor}
         >
           <Kb.WithTooltip tooltip="More networks" containerStyle={styles.moreNetworks2}>
-            <Kb.ClickableBox onClick={props.toggleShowingMenu} style={styles.moreNetworks3}>
+            <Kb.ClickableBox onClick={toggleShowingPopup} style={styles.moreNetworks3}>
               <Kb.Text type="BodyBigExtrabold" style={styles.moreText}>
                 •••
               </Kb.Text>
@@ -110,20 +107,10 @@ const MoreNetworksButton = Kb.OverlayParentHOC(
         </Kb.Box2>
         <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.inactiveTabBar} />
       </Kb.Box2>
-      <Kb.FloatingMenu
-        attachTo={props.getAttachmentRef}
-        closeOnSelect={true}
-        items={props.services.map(service => ({
-          onClick: () => props.onChangeService(service),
-          title: service,
-          view: <MoreNetworkItem service={service} />,
-        }))}
-        onHidden={props.toggleShowingMenu}
-        visible={props.showingMenu}
-      />
+      {popup}
     </>
   )
-)
+}
 
 const MoreNetworkItem = (props: {service: ServiceIdWithContact}) => (
   <Kb.Box2 direction="horizontal" fullHeight={true} alignItems="center">
@@ -136,15 +123,10 @@ const MoreNetworkItem = (props: {service: ServiceIdWithContact}) => (
   </Kb.Box2>
 )
 
-const undefToNull = (n: number | undefined | null): number | null => (n === undefined ? null : n)
-
 export const ServiceTabBar = (props: Props) => {
-  const [
-    lastSelectedUnlockedService,
-    setLastSelectedUnlockedService,
-  ] = React.useState<ServiceIdWithContact | null>(null)
-  const {services, onChangeService: propsOnChangeService} = props
-  const nLocked = 3 // Services always out front on the left. Add one to get the number out front.
+  const [lastSelectedUnlockedService, setLastSelectedUnlockedService] =
+    React.useState<ServiceIdWithContact | null>(null)
+  const {services, onChangeService: propsOnChangeService, servicesShown: nLocked = 3} = props
   const onChangeService = React.useCallback(
     (service: ServiceIdWithContact) => {
       if (services.indexOf(service) >= nLocked && service !== lastSelectedUnlockedService) {
@@ -174,11 +156,9 @@ export const ServiceTabBar = (props: Props) => {
           key={service}
           service={service}
           label={serviceIdToLongLabel(service)}
-          labelPresence={1}
-          onClick={() => onChangeService(service)}
-          count={undefToNull(props.serviceResultCount[service])}
-          showCount={props.showServiceResultCount}
+          onClick={onChangeService}
           isActive={props.selectedService === service}
+          minimalBorder={props.minimalBorder}
         />
       ))}
       {moreServices.length > 0 && (
@@ -197,24 +177,17 @@ const styles = Styles.styleSheetCreate(
       },
       badgeContainerStyle: {
         position: 'absolute',
-        right: 0,
+        right: -4,
         top: 10,
       },
       badgeStyle: {backgroundColor: Styles.globalColors.blue},
-      inactiveTabBar: {
-        borderBottomWidth: 1,
-        borderColor: Styles.globalColors.black_10,
-        borderStyle: 'solid',
-        height: 2,
-      },
+      inactiveTabBar: {height: 2},
       label: {
         marginTop: Styles.globalMargins.xtiny,
         minWidth: 64,
       },
       moreNetworkItemIcon: {marginRight: Styles.globalMargins.tiny},
-      moreNetworks0: {
-        flex: 1,
-      },
+      moreNetworks0: {flex: 1},
       moreNetworks1: {
         paddingBottom: Styles.globalMargins.tiny,
         paddingLeft: Styles.globalMargins.xsmall,
@@ -245,13 +218,9 @@ const styles = Styles.styleSheetCreate(
         maxWidth: '100%',
         width: '100%',
       },
-      moreText: {
-        color: Styles.globalColors.black_50,
-      },
-      pendingIcon: {height: 10, width: 10},
-      serviceIconBox: {
-        marginTop: 14,
-      },
+      moreText: {color: Styles.globalColors.black_50},
+      pendingAnimation: {height: 10, width: 10},
+      serviceIconBox: {marginTop: 14},
       serviceIconContainer: {
         flex: 1,
         height: 70,
@@ -260,14 +229,17 @@ const styles = Styles.styleSheetCreate(
         maxWidth: 72,
         minWidth: 40,
       },
-      serviceIconContainerInner: {
-        justifyContent: 'flex-start',
+      serviceIconContainerInner: {justifyContent: 'flex-start'},
+      serviceIconFlex: {
+        flex: 1,
+        maxWidth: 90,
       },
       tabBarContainer: {
+        borderBottomColor: Styles.globalColors.black_10,
+        borderBottomWidth: 1,
+        borderStyle: 'solid',
+        flexShrink: 0,
         minHeight: 30,
-      },
-      wonderland: {
-        color: Styles.globalColors.white,
       },
     } as const)
 )

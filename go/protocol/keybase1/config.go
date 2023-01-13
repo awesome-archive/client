@@ -1,20 +1,23 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.2 (https://github.com/keybase/node-avdl-compiler)
+// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
 //   Input file: avdl/keybase1/config.avdl
 
 package keybase1
 
 import (
 	"errors"
+	"fmt"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	context "golang.org/x/net/context"
+	"time"
 )
 
 type CurrentStatus struct {
-	Configured     bool  `codec:"configured" json:"configured"`
-	Registered     bool  `codec:"registered" json:"registered"`
-	LoggedIn       bool  `codec:"loggedIn" json:"loggedIn"`
-	SessionIsValid bool  `codec:"sessionIsValid" json:"sessionIsValid"`
-	User           *User `codec:"user,omitempty" json:"user,omitempty"`
+	Configured     bool   `codec:"configured" json:"configured"`
+	Registered     bool   `codec:"registered" json:"registered"`
+	LoggedIn       bool   `codec:"loggedIn" json:"loggedIn"`
+	SessionIsValid bool   `codec:"sessionIsValid" json:"sessionIsValid"`
+	User           *User  `codec:"user,omitempty" json:"user,omitempty"`
+	DeviceName     string `codec:"deviceName" json:"deviceName"`
 }
 
 func (o CurrentStatus) DeepCopy() CurrentStatus {
@@ -30,6 +33,7 @@ func (o CurrentStatus) DeepCopy() CurrentStatus {
 			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.User),
+		DeviceName: o.DeviceName,
 	}
 }
 
@@ -332,6 +336,7 @@ type KbServiceStatus struct {
 	Pid     string `codec:"pid" json:"pid"`
 	Log     string `codec:"log" json:"log"`
 	EkLog   string `codec:"ekLog" json:"ekLog"`
+	PerfLog string `codec:"perfLog" json:"perfLog"`
 }
 
 func (o KbServiceStatus) DeepCopy() KbServiceStatus {
@@ -341,6 +346,7 @@ func (o KbServiceStatus) DeepCopy() KbServiceStatus {
 		Pid:     o.Pid,
 		Log:     o.Log,
 		EkLog:   o.EkLog,
+		PerfLog: o.PerfLog,
 	}
 }
 
@@ -350,6 +356,7 @@ type KBFSStatus struct {
 	Running          bool   `codec:"running" json:"running"`
 	Pid              string `codec:"pid" json:"pid"`
 	Log              string `codec:"log" json:"log"`
+	PerfLog          string `codec:"perfLog" json:"perfLog"`
 	Mount            string `codec:"mount" json:"mount"`
 }
 
@@ -360,6 +367,7 @@ func (o KBFSStatus) DeepCopy() KBFSStatus {
 		Running:          o.Running,
 		Pid:              o.Pid,
 		Log:              o.Log,
+		PerfLog:          o.PerfLog,
 		Mount:            o.Mount,
 	}
 }
@@ -399,12 +407,14 @@ func (o StartStatus) DeepCopy() StartStatus {
 }
 
 type GitStatus struct {
-	Log string `codec:"log" json:"log"`
+	Log     string `codec:"log" json:"log"`
+	PerfLog string `codec:"perfLog" json:"perfLog"`
 }
 
 func (o GitStatus) DeepCopy() GitStatus {
 	return GitStatus{
-		Log: o.Log,
+		Log:     o.Log,
+		PerfLog: o.PerfLog,
 	}
 }
 
@@ -500,7 +510,7 @@ func (e ForkType) String() string {
 	if v, ok := ForkTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type Config struct {
@@ -540,11 +550,12 @@ func (o Config) DeepCopy() Config {
 }
 
 type ConfigValue struct {
-	IsNull bool    `codec:"isNull" json:"isNull"`
-	B      *bool   `codec:"b,omitempty" json:"b,omitempty"`
-	I      *int    `codec:"i,omitempty" json:"i,omitempty"`
-	S      *string `codec:"s,omitempty" json:"s,omitempty"`
-	O      *string `codec:"o,omitempty" json:"o,omitempty"`
+	IsNull bool     `codec:"isNull" json:"isNull"`
+	B      *bool    `codec:"b,omitempty" json:"b,omitempty"`
+	I      *int     `codec:"i,omitempty" json:"i,omitempty"`
+	F      *float64 `codec:"f,omitempty" json:"f,omitempty"`
+	S      *string  `codec:"s,omitempty" json:"s,omitempty"`
+	O      *string  `codec:"o,omitempty" json:"o,omitempty"`
 }
 
 func (o ConfigValue) DeepCopy() ConfigValue {
@@ -564,6 +575,13 @@ func (o ConfigValue) DeepCopy() ConfigValue {
 			tmp := (*x)
 			return &tmp
 		})(o.I),
+		F: (func(x *float64) *float64 {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x)
+			return &tmp
+		})(o.F),
 		S: (func(x *string) *string {
 			if x == nil {
 				return nil
@@ -623,7 +641,7 @@ func (e UpdateInfoStatus) String() string {
 	if v, ok := UpdateInfoStatusRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UpdateInfo struct {
@@ -696,7 +714,7 @@ func (e UpdateInfoStatus2) String() string {
 	if v, ok := UpdateInfoStatus2RevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type UpdateDetails struct {
@@ -817,7 +835,7 @@ func (e ProxyType) String() string {
 	if v, ok := ProxyTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type ProxyData struct {
@@ -844,6 +862,19 @@ type GetClientStatusArg struct {
 
 type GetFullStatusArg struct {
 	SessionID int `codec:"sessionID" json:"sessionID"`
+}
+
+type IsServiceRunningArg struct {
+	SessionID int `codec:"sessionID" json:"sessionID"`
+}
+
+type IsKBFSRunningArg struct {
+	SessionID int `codec:"sessionID" json:"sessionID"`
+}
+
+type GetNetworkStatsArg struct {
+	SessionID  int           `codec:"sessionID" json:"sessionID"`
+	NetworkSrc NetworkSource `codec:"networkSrc" json:"networkSrc"`
 }
 
 type LogSendArg struct {
@@ -922,8 +953,8 @@ type GetBootstrapStatusArg struct {
 	SessionID int `codec:"sessionID" json:"sessionID"`
 }
 
-type RequestFollowerInfoArg struct {
-	Uid UID `codec:"uid" json:"uid"`
+type RequestFollowingAndUnverifiedFollowersArg struct {
+	SessionID int `codec:"sessionID" json:"sessionID"`
 }
 
 type GetRememberPassphraseArg struct {
@@ -954,10 +985,20 @@ type AppendGUILogsArg struct {
 	Content string `codec:"content" json:"content"`
 }
 
+type GenerateWebAuthTokenArg struct {
+}
+
+type UpdateLastLoggedInAndServerConfigArg struct {
+	ServerConfigPath string `codec:"serverConfigPath" json:"serverConfigPath"`
+}
+
 type ConfigInterface interface {
 	GetCurrentStatus(context.Context, int) (CurrentStatus, error)
 	GetClientStatus(context.Context, int) ([]ClientStatus, error)
 	GetFullStatus(context.Context, int) (*FullStatus, error)
+	IsServiceRunning(context.Context, int) (bool, error)
+	IsKBFSRunning(context.Context, int) (bool, error)
+	GetNetworkStats(context.Context, GetNetworkStatsArg) ([]InstrumentationStat, error)
 	LogSend(context.Context, LogSendArg) (LogSendID, error)
 	GetAllProvisionedUsernames(context.Context, int) (AllProvisionedUsernames, error)
 	GetConfig(context.Context, int) (Config, error)
@@ -980,7 +1021,7 @@ type ConfigInterface interface {
 	// Wait for client type to connect to service.
 	WaitForClient(context.Context, WaitForClientArg) (bool, error)
 	GetBootstrapStatus(context.Context, int) (BootstrapStatus, error)
-	RequestFollowerInfo(context.Context, UID) error
+	RequestFollowingAndUnverifiedFollowers(context.Context, int) error
 	GetRememberPassphrase(context.Context, int) (bool, error)
 	SetRememberPassphrase(context.Context, SetRememberPassphraseArg) error
 	// getUpdateInfo2 is to drive the redbar on mobile and desktop apps. The redbar tells you if
@@ -990,6 +1031,8 @@ type ConfigInterface interface {
 	GetProxyData(context.Context) (ProxyData, error)
 	ToggleRuntimeStats(context.Context) error
 	AppendGUILogs(context.Context, string) error
+	GenerateWebAuthToken(context.Context) (string, error)
+	UpdateLastLoggedInAndServerConfig(context.Context, string) error
 }
 
 func ConfigProtocol(i ConfigInterface) rpc.Protocol {
@@ -1038,6 +1081,51 @@ func ConfigProtocol(i ConfigInterface) rpc.Protocol {
 						return
 					}
 					ret, err = i.GetFullStatus(ctx, typedArgs[0].SessionID)
+					return
+				},
+			},
+			"isServiceRunning": {
+				MakeArg: func() interface{} {
+					var ret [1]IsServiceRunningArg
+					return &ret
+				},
+				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+					typedArgs, ok := args.(*[1]IsServiceRunningArg)
+					if !ok {
+						err = rpc.NewTypeError((*[1]IsServiceRunningArg)(nil), args)
+						return
+					}
+					ret, err = i.IsServiceRunning(ctx, typedArgs[0].SessionID)
+					return
+				},
+			},
+			"isKBFSRunning": {
+				MakeArg: func() interface{} {
+					var ret [1]IsKBFSRunningArg
+					return &ret
+				},
+				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+					typedArgs, ok := args.(*[1]IsKBFSRunningArg)
+					if !ok {
+						err = rpc.NewTypeError((*[1]IsKBFSRunningArg)(nil), args)
+						return
+					}
+					ret, err = i.IsKBFSRunning(ctx, typedArgs[0].SessionID)
+					return
+				},
+			},
+			"getNetworkStats": {
+				MakeArg: func() interface{} {
+					var ret [1]GetNetworkStatsArg
+					return &ret
+				},
+				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+					typedArgs, ok := args.(*[1]GetNetworkStatsArg)
+					if !ok {
+						err = rpc.NewTypeError((*[1]GetNetworkStatsArg)(nil), args)
+						return
+					}
+					ret, err = i.GetNetworkStats(ctx, typedArgs[0])
 					return
 				},
 			},
@@ -1281,18 +1369,18 @@ func ConfigProtocol(i ConfigInterface) rpc.Protocol {
 					return
 				},
 			},
-			"requestFollowerInfo": {
+			"requestFollowingAndUnverifiedFollowers": {
 				MakeArg: func() interface{} {
-					var ret [1]RequestFollowerInfoArg
+					var ret [1]RequestFollowingAndUnverifiedFollowersArg
 					return &ret
 				},
 				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
-					typedArgs, ok := args.(*[1]RequestFollowerInfoArg)
+					typedArgs, ok := args.(*[1]RequestFollowingAndUnverifiedFollowersArg)
 					if !ok {
-						err = rpc.NewTypeError((*[1]RequestFollowerInfoArg)(nil), args)
+						err = rpc.NewTypeError((*[1]RequestFollowingAndUnverifiedFollowersArg)(nil), args)
 						return
 					}
-					err = i.RequestFollowerInfo(ctx, typedArgs[0].Uid)
+					err = i.RequestFollowingAndUnverifiedFollowers(ctx, typedArgs[0].SessionID)
 					return
 				},
 			},
@@ -1391,6 +1479,31 @@ func ConfigProtocol(i ConfigInterface) rpc.Protocol {
 					return
 				},
 			},
+			"generateWebAuthToken": {
+				MakeArg: func() interface{} {
+					var ret [1]GenerateWebAuthTokenArg
+					return &ret
+				},
+				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+					ret, err = i.GenerateWebAuthToken(ctx)
+					return
+				},
+			},
+			"updateLastLoggedInAndServerConfig": {
+				MakeArg: func() interface{} {
+					var ret [1]UpdateLastLoggedInAndServerConfigArg
+					return &ret
+				},
+				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+					typedArgs, ok := args.(*[1]UpdateLastLoggedInAndServerConfigArg)
+					if !ok {
+						err = rpc.NewTypeError((*[1]UpdateLastLoggedInAndServerConfigArg)(nil), args)
+						return
+					}
+					err = i.UpdateLastLoggedInAndServerConfig(ctx, typedArgs[0].ServerConfigPath)
+					return
+				},
+			},
 		},
 	}
 }
@@ -1401,36 +1514,53 @@ type ConfigClient struct {
 
 func (c ConfigClient) GetCurrentStatus(ctx context.Context, sessionID int) (res CurrentStatus, err error) {
 	__arg := GetCurrentStatusArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.config.getCurrentStatus", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getCurrentStatus", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GetClientStatus(ctx context.Context, sessionID int) (res []ClientStatus, err error) {
 	__arg := GetClientStatusArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.config.getClientStatus", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getClientStatus", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GetFullStatus(ctx context.Context, sessionID int) (res *FullStatus, err error) {
 	__arg := GetFullStatusArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.config.getFullStatus", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getFullStatus", []interface{}{__arg}, &res, 0*time.Millisecond)
+	return
+}
+
+func (c ConfigClient) IsServiceRunning(ctx context.Context, sessionID int) (res bool, err error) {
+	__arg := IsServiceRunningArg{SessionID: sessionID}
+	err = c.Cli.Call(ctx, "keybase.1.config.isServiceRunning", []interface{}{__arg}, &res, 0*time.Millisecond)
+	return
+}
+
+func (c ConfigClient) IsKBFSRunning(ctx context.Context, sessionID int) (res bool, err error) {
+	__arg := IsKBFSRunningArg{SessionID: sessionID}
+	err = c.Cli.Call(ctx, "keybase.1.config.isKBFSRunning", []interface{}{__arg}, &res, 0*time.Millisecond)
+	return
+}
+
+func (c ConfigClient) GetNetworkStats(ctx context.Context, __arg GetNetworkStatsArg) (res []InstrumentationStat, err error) {
+	err = c.Cli.Call(ctx, "keybase.1.config.getNetworkStats", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) LogSend(ctx context.Context, __arg LogSendArg) (res LogSendID, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.logSend", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.logSend", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GetAllProvisionedUsernames(ctx context.Context, sessionID int) (res AllProvisionedUsernames, err error) {
 	__arg := GetAllProvisionedUsernamesArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.config.getAllProvisionedUsernames", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getAllProvisionedUsernames", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GetConfig(ctx context.Context, sessionID int) (res Config, err error) {
 	__arg := GetConfigArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.config.getConfig", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getConfig", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
@@ -1438,125 +1568,136 @@ func (c ConfigClient) GetConfig(ctx context.Context, sessionID int) (res Config,
 // For example, to update primary picture source:
 // key=picture.source, value=twitter (or github)
 func (c ConfigClient) SetUserConfig(ctx context.Context, __arg SetUserConfigArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.setUserConfig", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.setUserConfig", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) SetPath(ctx context.Context, __arg SetPathArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.setPath", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.setPath", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) HelloIAm(ctx context.Context, details ClientDetails) (err error) {
 	__arg := HelloIAmArg{Details: details}
-	err = c.Cli.Call(ctx, "keybase.1.config.helloIAm", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.helloIAm", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) SetValue(ctx context.Context, __arg SetValueArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.setValue", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.setValue", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) ClearValue(ctx context.Context, path string) (err error) {
 	__arg := ClearValueArg{Path: path}
-	err = c.Cli.Call(ctx, "keybase.1.config.clearValue", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.clearValue", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GetValue(ctx context.Context, path string) (res ConfigValue, err error) {
 	__arg := GetValueArg{Path: path}
-	err = c.Cli.Call(ctx, "keybase.1.config.getValue", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getValue", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GuiSetValue(ctx context.Context, __arg GuiSetValueArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.guiSetValue", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.guiSetValue", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GuiClearValue(ctx context.Context, path string) (err error) {
 	__arg := GuiClearValueArg{Path: path}
-	err = c.Cli.Call(ctx, "keybase.1.config.guiClearValue", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.guiClearValue", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GuiGetValue(ctx context.Context, path string) (res ConfigValue, err error) {
 	__arg := GuiGetValueArg{Path: path}
-	err = c.Cli.Call(ctx, "keybase.1.config.guiGetValue", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.guiGetValue", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 // Check whether the API server has told us we're out of date.
 func (c ConfigClient) CheckAPIServerOutOfDateWarning(ctx context.Context) (res OutOfDateInfo, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.checkAPIServerOutOfDateWarning", []interface{}{CheckAPIServerOutOfDateWarningArg{}}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.checkAPIServerOutOfDateWarning", []interface{}{CheckAPIServerOutOfDateWarningArg{}}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GetUpdateInfo(ctx context.Context) (res UpdateInfo, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.getUpdateInfo", []interface{}{GetUpdateInfoArg{}}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getUpdateInfo", []interface{}{GetUpdateInfoArg{}}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) StartUpdateIfNeeded(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.startUpdateIfNeeded", []interface{}{StartUpdateIfNeededArg{}}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.startUpdateIfNeeded", []interface{}{StartUpdateIfNeededArg{}}, nil, 0*time.Millisecond)
 	return
 }
 
 // Wait for client type to connect to service.
 func (c ConfigClient) WaitForClient(ctx context.Context, __arg WaitForClientArg) (res bool, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.waitForClient", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.waitForClient", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GetBootstrapStatus(ctx context.Context, sessionID int) (res BootstrapStatus, err error) {
 	__arg := GetBootstrapStatusArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.config.getBootstrapStatus", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getBootstrapStatus", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
-func (c ConfigClient) RequestFollowerInfo(ctx context.Context, uid UID) (err error) {
-	__arg := RequestFollowerInfoArg{Uid: uid}
-	err = c.Cli.Call(ctx, "keybase.1.config.requestFollowerInfo", []interface{}{__arg}, nil)
+func (c ConfigClient) RequestFollowingAndUnverifiedFollowers(ctx context.Context, sessionID int) (err error) {
+	__arg := RequestFollowingAndUnverifiedFollowersArg{SessionID: sessionID}
+	err = c.Cli.Call(ctx, "keybase.1.config.requestFollowingAndUnverifiedFollowers", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GetRememberPassphrase(ctx context.Context, sessionID int) (res bool, err error) {
 	__arg := GetRememberPassphraseArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.config.getRememberPassphrase", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getRememberPassphrase", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) SetRememberPassphrase(ctx context.Context, __arg SetRememberPassphraseArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.setRememberPassphrase", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.setRememberPassphrase", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 // getUpdateInfo2 is to drive the redbar on mobile and desktop apps. The redbar tells you if
 // you are critically out of date.
 func (c ConfigClient) GetUpdateInfo2(ctx context.Context, __arg GetUpdateInfo2Arg) (res UpdateInfo2, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.getUpdateInfo2", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getUpdateInfo2", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) SetProxyData(ctx context.Context, proxyData ProxyData) (err error) {
 	__arg := SetProxyDataArg{ProxyData: proxyData}
-	err = c.Cli.Call(ctx, "keybase.1.config.setProxyData", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.setProxyData", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) GetProxyData(ctx context.Context) (res ProxyData, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.getProxyData", []interface{}{GetProxyDataArg{}}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.config.getProxyData", []interface{}{GetProxyDataArg{}}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) ToggleRuntimeStats(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.config.toggleRuntimeStats", []interface{}{ToggleRuntimeStatsArg{}}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.toggleRuntimeStats", []interface{}{ToggleRuntimeStatsArg{}}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c ConfigClient) AppendGUILogs(ctx context.Context, content string) (err error) {
 	__arg := AppendGUILogsArg{Content: content}
-	err = c.Cli.Call(ctx, "keybase.1.config.appendGUILogs", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.config.appendGUILogs", []interface{}{__arg}, nil, 0*time.Millisecond)
+	return
+}
+
+func (c ConfigClient) GenerateWebAuthToken(ctx context.Context) (res string, err error) {
+	err = c.Cli.Call(ctx, "keybase.1.config.generateWebAuthToken", []interface{}{GenerateWebAuthTokenArg{}}, &res, 0*time.Millisecond)
+	return
+}
+
+func (c ConfigClient) UpdateLastLoggedInAndServerConfig(ctx context.Context, serverConfigPath string) (err error) {
+	__arg := UpdateLastLoggedInAndServerConfigArg{ServerConfigPath: serverConfigPath}
+	err = c.Cli.Call(ctx, "keybase.1.config.updateLastLoggedInAndServerConfig", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }

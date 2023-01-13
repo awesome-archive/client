@@ -1,8 +1,5 @@
 {
-  "prelude": [
-    "import * as Types from '../constants/types/fs'",
-    "import * as ChatTypes from '../constants/types/chat2'"
-  ],
+  "prelude": ["import type * as Types from '../constants/types/fs'"],
   "actions": {
     "subscribePath": {
       "subscriptionID": "string",
@@ -19,20 +16,21 @@
     "pollJournalStatus": {},
     "getOnlineStatus": {},
     "folderListLoad": {
+      "recursive": "boolean",
       "path": "Types.Path"
     },
     "folderListLoaded": {
       "path": "Types.Path",
-      "pathItems": "I.Map<Types.Path, Types.PathItem>"
+      "pathItems": "Map<Types.Path, Types.PathItem>"
     },
     "favoritesLoad": {},
     "favoritesLoaded": {
-      "private": "I.Map<string, Types.Tlf>",
-      "public": "I.Map<string, Types.Tlf>",
-      "team": "I.Map<string, Types.Tlf>"
+      "private": "Types.TlfList",
+      "public": "Types.TlfList",
+      "team": "Types.TlfList"
     },
     "setFolderViewFilter": {
-      "filter": "string"
+      "filter": "string|null"
     },
     "tlfSyncConfigLoaded": {
       "tlfType": "Types.TlfType",
@@ -67,11 +65,16 @@
       "parentPath": "Types.Path",
       "localPath": "string"
     },
-    "uploadStarted": {
-      "path": "Types.Path"
+    "uploadFromDragAndDrop": {
+      "parentPath": "Types.Path",
+      "localPaths": "Array<string>"
     },
-    "uploadWritingSuccess": {
-      "path": "Types.Path"
+    "loadUploadStatus": {},
+    "loadedUploadStatus": {
+      "uploadStates": "Array<RPCTypes.UploadState>"
+    },
+    "dismissUpload": {
+      "uploadID": "string"
     },
     "journalUpdate": {
       "syncingPaths": "Array<Types.Path>",
@@ -90,8 +93,7 @@
     "setDriverStatus": {
       "driverStatus": "Types.DriverStatus"
     },
-    "hideSystemFileManagerIntegrationBanner": {},
-    "showSystemFileManagerIntegrationBanner": {},
+    "setSfmiBannerDismissed": {"dismissed": "boolean"},
     "driverEnable": {
       "isRetry?": "boolean | null"
     },
@@ -107,22 +109,19 @@
     },
 
     "openSecurityPreferences": {},
-    "refreshLocalHTTPServerInfo": {},
-    "localHTTPServerInfo": {
-      "address": "string",
-      "token": "string"
-    },
     "favoriteIgnore": {
       "path": "Types.Path"
     },
     "favoriteIgnoreError": {
-      "path": "Types.Path",
-      "error": "Types.FsError"
+      "path": "Types.Path"
     },
     "newFolderRow": {
       "parentPath": "Types.Path"
     },
-    "newFolderName": {
+    "startRename": {
+      "path": "Types.Path"
+    },
+    "setEditName": {
       "editID": "Types.EditID",
       "name": "string"
     },
@@ -130,18 +129,20 @@
       "editID": "Types.EditID"
     },
     "editSuccess": {
+      "editID": "Types.EditID"
+    },
+    "editError": {
       "editID": "Types.EditID",
-      "parentPath": "Types.Path"
+      "error": "string"
     },
     "discardEdit": {
       "editID": "Types.EditID"
     },
-    "fsError": {
-      "error": "Types.FsError",
-      "expectedIfOffline": "boolean"
+    "redbar": {
+      "error": "string"
     },
-    "dismissFsError": {
-      "key": "string"
+    "dismissRedbar": {
+      "index": "number"
     },
     "setLastPublicBannerClosedTlf": {
       "tlf": "string"
@@ -178,37 +179,22 @@
       "path": "Types.Path"
     },
     "showMoveOrCopy": {"initialDestinationParentPath": "Types.Path"},
-    "setIncomingShareLocalPath": {
-      "localPath": "Types.LocalPath"
+    "setIncomingShareSource": {
+      "source": "Array<RPCTypes.IncomingShareItem>"
     },
     "showIncomingShare": {"initialDestinationParentPath": "Types.Path"},
-    "closeDestinationPicker": {},
     "move": {"destinationParentPath": "Types.Path"},
     "copy": {"destinationParentPath": "Types.Path"},
-
-    "initSendAttachmentToChat": {
-      "path": "Types.Path"
-    },
-    "setSendAttachmentToChatConvID": {
-      "convID": "ChatTypes.ConversationIDKey"
-    },
-    "setSendAttachmentToChatFilter": {
-      "filter": "string"
-    },
-    "setSendAttachmentToChatTitle": {
-      "title": "string"
-    },
-    "sentAttachmentToChat": {},
-
     "setPathItemActionMenuView": {
       "view": "Types.PathItemActionMenuView"
     },
+    "checkKbfsDaemonRpcStatus": {},
     "waitForKbfsDaemon": {},
     "kbfsDaemonRpcStatusChanged": {
       "rpcStatus": "Types.KbfsDaemonRpcStatus"
     },
     "kbfsDaemonOnlineStatusChanged": {
-      "online": "boolean"
+      "onlineStatus": "RPCTypes.KbfsOnlineStatus"
     },
     "overallSyncStatusChanged": {
       "progress": "Types.SyncingFoldersProgress",
@@ -236,15 +222,15 @@
     "placeholderAction": {},
     "refreshMountDirsAfter10s": {},
     "setDirectMountDir": {"directMountDir": "string"},
-    "setPreferredMountDirs": {"preferredMountDirs": "I.List<string>"},
+    "setPreferredMountDirs": {"preferredMountDirs": "Array<string>"},
     "loadPathInfo": {"path": "Types.Path"},
     "loadedPathInfo": {"path": "Types.Path", "pathInfo": "Types.PathInfo"},
     "download": {"path": "Types.Path"},
     "loadDownloadStatus": {},
     "loadDownloadInfo": {"downloadID": "string"},
     "loadedDownloadStatus": {
-      "regularDownloads": "I.List<string>",
-      "state": "I.Map<string, Types.DownloadState>"
+      "regularDownloads": "Array<string>",
+      "state": "Map<string, Types.DownloadState>"
     },
     "loadedDownloadInfo": {"downloadID": "string", "info": "Types.DownloadInfo"},
     "cancelDownload": {"downloadID": "string"},
@@ -262,9 +248,32 @@
       "downloadID": "string",
       "mimeType": "string"
     },
+    "loadFileContext": {
+      "path": "Types.Path"
+    },
+    "loadedFileContext": {
+      "path": "Types.Path",
+      "fileContext": "Types.FileContext"
+    },
+    "loadAdditionalTlf": {
+      "tlfPath": "Types.Path"
+    },
+    "loadedAdditionalTlf": {
+      "tlf": "Types.Tlf",
+      "tlfPath": "Types.Path"
+    },
+    "loadFilesTabBadge": {},
+    "loadedFilesTabBadge": {
+      "badge": "RPCTypes.FilesTabBadge"
+    },
+    "userIn": {},
+    "userOut": {},
 
     "setDebugLevel": {
       "level": "string"
+    },
+    "setCriticalUpdate": {
+      "val": "boolean"
     }
   }
 }

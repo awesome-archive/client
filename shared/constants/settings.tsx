@@ -1,44 +1,21 @@
-import * as Types from './types/settings'
-import HiddenString from '../util/hidden-string'
-import {TypedState} from './reducer'
-import * as I from 'immutable'
-import * as WaitingConstants from './waiting'
-import {getMeta} from './chat2/meta'
+import * as ChatConstants from './chat2'
+import * as RPCChatTypes from './types/rpc-chat-gen'
 import * as RPCTypes from './types/rpc-gen'
-import {e164ToDisplay} from '../util/phone-numbers'
-import {RPCError} from 'util/errors'
-import {ContactResponse} from 'expo-contacts'
-import {phoneUtil, ValidationResult, PhoneNumberFormat} from '../util/phone-numbers'
+import * as WaitingConstants from './waiting'
+import HiddenString from '../util/hidden-string'
+import type * as Types from './types/settings'
+import type {ContactResponse} from 'expo-contacts'
+import type {RPCError} from '../util/errors'
+import type {TypedState} from './reducer'
+import {getMeta} from './chat2/meta'
+import type {
+  e164ToDisplay as e164ToDisplayType,
+  phoneUtil as phoneUtilType,
+  ValidationResult as ValidationResultType,
+  PhoneNumberFormat as PhoneNumberFormatType,
+} from '../util/phone-numbers'
 
-export const makeNotificationsGroup = I.Record<Types._NotificationsGroupState>({
-  settings: I.List(),
-  unsubscribedFromAll: false,
-})
-
-export const makeNotifications = I.Record<Types._NotificationsState>({
-  allowEdit: false,
-  groups: I.Map(),
-})
-
-export const makeUnfurl = I.Record<Types._ChatUnfurlState>({
-  unfurlError: undefined,
-  unfurlMode: undefined,
-  unfurlWhitelist: I.List(),
-})
-
-export const makeChat = I.Record<Types._ChatState>({
-  unfurl: makeUnfurl(),
-})
-
-export const makeEmail = I.Record<Types._EmailState>({
-  addedEmail: null,
-  addingEmail: null,
-  emails: null,
-  error: '',
-  newEmail: '',
-})
-
-export const makeEmailRow = I.Record<Types._EmailRow>({
+export const makeEmailRow = (): Types.EmailRow => ({
   email: '',
   isPrimary: false,
   isVerified: false,
@@ -46,7 +23,7 @@ export const makeEmailRow = I.Record<Types._EmailRow>({
   visibility: 0,
 })
 
-export const makePhoneRow = I.Record<Types._PhoneRow>({
+export const makePhoneRow = (): Types.PhoneRow => ({
   displayNumber: '',
   e164: '',
   searchable: false,
@@ -54,81 +31,72 @@ export const makePhoneRow = I.Record<Types._PhoneRow>({
   verified: false,
 })
 
-export const toPhoneRow = (p: RPCTypes.UserPhoneNumber) =>
-  makePhoneRow({
+export const toPhoneRow = (p: RPCTypes.UserPhoneNumber) => {
+  const {e164ToDisplay} = require('../util/phone-numbers') as {e164ToDisplay: typeof e164ToDisplayType}
+  return {
+    ...makePhoneRow(),
     displayNumber: e164ToDisplay(p.phoneNumber),
     e164: p.phoneNumber,
     searchable: p.visibility === RPCTypes.IdentityVisibility.public,
     superseded: p.superseded,
     verified: p.verified,
-  })
+  }
+}
 
-export const makeFeedback = I.Record<Types._FeedbackState>({
-  error: null,
-})
-
-export const makeInvites = I.Record<Types._InvitesState>({
-  acceptedInvites: I.List(),
-  error: null,
-  pendingInvites: I.List(),
-})
-
-export const makePassword = I.Record<Types._PasswordState>({
-  error: null,
-  hasPGPKeyOnServer: null,
-  newPassword: new HiddenString(''),
-  newPasswordConfirm: new HiddenString(''),
-  newPasswordConfirmError: null,
-  newPasswordError: null,
-  randomPW: null,
-  rememberPassword: true,
-})
-
-export const makePhoneNumbers = I.Record<Types._PhoneNumbersState>({
-  addedPhone: false,
-  error: '',
-  pendingVerification: '',
-  phones: null,
-  verificationState: null,
-})
-
-export const makeContacts = I.Record<Types._ContactsState>({
-  importEnabled: null,
-  importError: '',
-  importPromptDismissed: false,
-  importedCount: null,
-  permissionStatus: 'unknown',
-  userCountryCode: null,
-})
-
-export const makeState = I.Record<Types._State>({
+export const makeState = (): Types.State => ({
   allowDeleteAccount: false,
-  chat: makeChat(),
-  checkPasswordIsCorrect: null,
-  contacts: makeContacts(),
-  didToggleCertificatePinning: null,
-  email: makeEmail(),
-  feedback: makeFeedback(),
-  invites: makeInvites(),
-  lockdownModeEnabled: null,
-  notifications: makeNotifications(),
-  password: makePassword(),
-  phoneNumbers: makePhoneNumbers(),
-  proxyData: null,
+  chat: {
+    contactSettings: {
+      error: '',
+      settings: undefined,
+    },
+    unfurl: {
+      unfurlWhitelist: [],
+    },
+  },
+  contacts: {
+    alreadyOnKeybase: [],
+    importError: '',
+    importPromptDismissed: false,
+    permissionStatus: 'unknown',
+    waitingToShowJoinedModal: false,
+  },
+  email: {
+    error: '',
+    newEmail: '',
+  },
+  feedback: {},
+  invites: {
+    acceptedInvites: [],
+    pendingInvites: [],
+  },
+  notifications: {
+    allowEdit: false,
+    groups: new Map(),
+  },
+  password: {
+    newPassword: new HiddenString(''),
+    newPasswordConfirm: new HiddenString(''),
+    rememberPassword: true,
+  },
+  phoneNumbers: {
+    addedPhone: false,
+    error: '',
+    pendingVerification: '',
+  },
 })
 
 export const getPushTokenForLogSend = (state: TypedState) => ({pushToken: state.push.token})
 
 export const getExtraChatLogsForLogSend = (state: TypedState) => {
   const chat = state.chat2
-  const c = state.chat2.selectedConversation
+  const c = ChatConstants.getSelectedConversation()
   if (c) {
-    const metaMap = getMeta(state, c).toJS()
-    return I.Map({
+    const metaMap = getMeta(state, c)
+    return {
       badgeMap: chat.badgeMap.get(c),
       editingMap: chat.editingMap.get(c),
-      // @ts-ignore
-      messageMap: chat.messageMap.get(c, I.Map()).map(m => ({
+      messageMap: [...(chat.messageMap.get(c)?.values() ?? [])].map(m => ({
         a: m.author,
         i: m.id,
         o: m.ordinal,
@@ -149,11 +117,11 @@ export const getExtraChatLogsForLogSend = (state: TypedState) => {
         notificationsMobile: metaMap.notificationsMobile,
         offline: metaMap.offline,
         participants: 'x',
-        rekeyers: metaMap.rekeyers && metaMap.rekeyers.size,
-        resetParticipants: metaMap.resetParticipants && metaMap.resetParticipants.size,
+        rekeyers: metaMap.rekeyers?.size,
+        resetParticipants: metaMap.resetParticipants?.size,
         retentionPolicy: metaMap.retentionPolicy,
         snippet: 'x',
-        snippetDecoration: 'x',
+        snippetDecoration: RPCChatTypes.SnippetDecoration.none,
         supersededBy: metaMap.supersededBy,
         supersedes: metaMap.supersedes,
         teamRetentionPolicy: metaMap.teamRetentionPolicy,
@@ -165,9 +133,8 @@ export const getExtraChatLogsForLogSend = (state: TypedState) => {
         wasFinalizedBy: metaMap.wasFinalizedBy,
       },
       pendingOutboxToOrdinal: chat.pendingOutboxToOrdinal.get(c),
-      quote: chat.quote,
       unreadMap: chat.unreadMap.get(c),
-    }).toJS()
+    }
   }
   return {}
 }
@@ -190,14 +157,19 @@ export const makePhoneError = (e: RPCError) => {
 }
 
 // Get phone number in e.164, or null if we can't parse it.
-const getE164 = (phoneNumber: string, countryCode?: string) => {
+export const getE164 = (phoneNumber: string, countryCode?: string) => {
+  const {phoneUtil, ValidationResult, PhoneNumberFormat} = require('../util/phone-numbers') as {
+    phoneUtil: typeof phoneUtilType
+    ValidationResult: typeof ValidationResultType
+    PhoneNumberFormat: typeof PhoneNumberFormatType
+  }
   try {
     const parsed = countryCode ? phoneUtil.parse(phoneNumber, countryCode) : phoneUtil.parse(phoneNumber)
     const reason = phoneUtil.isPossibleNumberWithReason(parsed)
     if (reason !== ValidationResult.IS_POSSIBLE) {
       return null
     }
-    return phoneUtil.format(parsed, PhoneNumberFormat.E164) as string
+    return phoneUtil.format(parsed, PhoneNumberFormat.E164)
   } catch (e) {
     return null
   }
@@ -240,15 +212,17 @@ export const makeAddEmailError = (err: RPCError): string => {
   return err.message
 }
 export const securityGroup = 'security'
+export const soundGroup = 'sound'
 export const traceInProgressKey = 'settings:traceInProgress'
 export const traceInProgress = (state: TypedState) => WaitingConstants.anyWaiting(state, traceInProgressKey)
 export const processorProfileInProgressKey = 'settings:processorProfileInProgress'
 export const processorProfileInProgress = (state: TypedState) =>
   WaitingConstants.anyWaiting(state, processorProfileInProgressKey)
 export const importContactsConfigKey = (username: string) => `ui.importContacts.${username}`
-
 export const refreshNotificationsWaitingKey = 'settingsTabs.refreshNotifications'
 export const chatUnfurlWaitingKey = 'settings:chatUnfurlWaitingKey'
+export const contactSettingsLoadWaitingKey = 'settings:contactSettingsLoadWaitingKey'
+export const contactSettingsSaveWaitingKey = 'settings:contactSettingsSaveWaitingKey'
 export const setLockdownModeWaitingKey = 'settings:setLockdownMode'
 export const loadLockdownModeWaitingKey = 'settings:loadLockdownMode'
 export const checkPasswordWaitingKey = 'settings:checkPassword'
@@ -258,15 +232,16 @@ export const addPhoneNumberWaitingKey = 'settings:addPhoneNumber'
 export const resendVerificationForPhoneWaitingKey = 'settings:resendVerificationForPhone'
 export const verifyPhoneNumberWaitingKey = 'settings:verifyPhoneNumber'
 export const importContactsWaitingKey = 'settings:importContacts'
-export const addEmailWaitingKey = 'settings:addPhoneNumber'
+export const addEmailWaitingKey = 'settings:addEmail'
 export const loadSettingsWaitingKey = 'settings:loadSettings'
 export const settingsWaitingKey = 'settings:generic'
 
 export const aboutTab = 'settingsTabs.aboutTab'
 export const advancedTab = 'settingsTabs.advancedTab'
 export const chatTab = 'settingsTabs.chatTab'
-export const deleteMeTab = 'settingsTabs.deleteMeTab'
+export const cryptoTab = 'settingsTabs:cryptoTab'
 export const devicesTab = 'settingsTabs.devicesTab'
+export const displayTab = 'settingsTabs.displayTab'
 export const feedbackTab = 'settingsTabs.feedbackTab'
 export const foldersTab = 'settingsTabs.foldersTab'
 export const fsTab = 'settingsTabs.fsTab'
@@ -280,6 +255,7 @@ export const logOutTab = 'settingsTabs.logOutTab'
 export const updatePaymentTab = 'settingsTabs.updatePaymentTab'
 export const walletsTab = 'settingsTabs.walletsTab'
 export const contactsTab = 'settingsTabs.contactsTab'
+export const whatsNewTab = 'settingsTabs.whatsNewTab'
 
 export type SettingsTab =
   | typeof accountTab
@@ -287,10 +263,10 @@ export type SettingsTab =
   | typeof invitationsTab
   | typeof notificationsTab
   | typeof advancedTab
-  | typeof deleteMeTab
   | typeof feedbackTab
   | typeof aboutTab
   | typeof devicesTab
+  | typeof displayTab
   | typeof gitTab
   | typeof foldersTab
   | typeof fsTab
@@ -299,4 +275,6 @@ export type SettingsTab =
   | typeof passwordTab
   | typeof walletsTab
   | typeof chatTab
+  | typeof cryptoTab
   | typeof contactsTab
+  | typeof whatsNewTab

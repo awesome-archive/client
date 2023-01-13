@@ -3,7 +3,7 @@ import * as Styles from '../styles'
 import Box from './box'
 import Text, {getStyle as getTextStyle} from './text.desktop'
 
-import {Props, Selection, TextInfo} from './input'
+import type {Props, Selection, TextInfo} from './input'
 import {checkTextInfo} from './input.shared'
 
 type State = {
@@ -12,7 +12,7 @@ type State = {
 
 class Input extends React.PureComponent<Props, State> {
   _input: HTMLTextAreaElement | HTMLInputElement | null = null
-  _isComposingIME: boolean = false
+  _isComposingIME = false
 
   state = {
     focused: false,
@@ -22,12 +22,12 @@ class Input extends React.PureComponent<Props, State> {
     this._input = ref
   }
 
-  componentDidMount = () => {
+  componentDidMount() {
     this._autoResize()
     this.props.autoFocus && this.focus()
   }
 
-  componentDidUpdate = (prevProps: Props) => {
+  componentDidUpdate(prevProps: Props) {
     if (!this.props.uncontrolled && this.props.value !== prevProps.value) {
       this._autoResize()
     }
@@ -38,7 +38,7 @@ class Input extends React.PureComponent<Props, State> {
   }
 
   _getValue = () => {
-    return (this.props.uncontrolled ? this._input && this._input.value : this.props.value) || ''
+    return (this.props.uncontrolled ? this._input?.value : this.props.value) || ''
   }
 
   _clearText = () => {
@@ -70,7 +70,7 @@ class Input extends React.PureComponent<Props, State> {
   }
 
   _onChangeTextDone = value => {
-    this.props.onChangeText && this.props.onChangeText(value)
+    this.props.onChangeText?.(value)
   }
 
   _onChangeText = (text: string) => {
@@ -133,18 +133,18 @@ class Input extends React.PureComponent<Props, State> {
 
   focus = () => {
     const n = this._input
-    n && n.focus()
+    n?.focus()
     this.props.selectTextOnFocus && this.select()
   }
 
   select = () => {
     const n = this._input
-    n && n.select()
+    n?.select()
   }
 
   blur = () => {
     const n = this._input
-    n && n.blur()
+    n?.blur()
   }
 
   _transformText = (fn: (textInfo: TextInfo) => TextInfo, reflectChange?: boolean) => {
@@ -188,8 +188,11 @@ class Input extends React.PureComponent<Props, State> {
   }
 
   _onKeyDown = (e: React.KeyboardEvent) => {
+    if (this._isComposingIME) {
+      return
+    }
     if (this.props.onKeyDown) {
-      this.props.onKeyDown(e, this._isComposingIME)
+      this.props.onKeyDown(e)
     }
     if (this.props.onEnterKeyDown && e.key === 'Enter' && !e.shiftKey && !this._isComposingIME) {
       if (e.altKey || e.ctrlKey) {
@@ -212,20 +215,23 @@ class Input extends React.PureComponent<Props, State> {
   }
 
   _onKeyUp = (e: React.KeyboardEvent) => {
+    if (this._isComposingIME) {
+      return
+    }
     if (this.props.onKeyUp) {
-      this.props.onKeyUp(e, this._isComposingIME)
+      this.props.onKeyUp(e)
     }
   }
 
   _onFocus = () => {
     this.setState({focused: true})
-    this.props.onFocus && this.props.onFocus()
+    this.props.onFocus?.()
     this.props.selectTextOnFocus && this.select()
   }
 
   _onBlur = () => {
     this.setState({focused: false})
-    this.props.onBlur && this.props.onBlur()
+    this.props.onBlur?.()
   }
 
   _underlineColor = () => {
@@ -233,7 +239,7 @@ class Input extends React.PureComponent<Props, State> {
       return Styles.globalColors.transparent
     }
 
-    if (this.props.errorText && this.props.errorText.length) {
+    if (this.props.errorText?.length) {
       return Styles.globalColors.red
     }
 
@@ -280,7 +286,7 @@ class Input extends React.PureComponent<Props, State> {
         height: this.props.small ? 18 : 28,
         maxWidth: 460,
       },
-    ])
+    ] as any)
 
     const textareaStyle = Styles.collapseStyles([
       styles.commonInput,
@@ -297,7 +303,7 @@ class Input extends React.PureComponent<Props, State> {
         wrap: 'off',
         ...(this.props.rowsMax ? {maxHeight: this._rowsToHeight(this.props.rowsMax)} : {overflowY: 'hidden'}),
       },
-    ])
+    ] as any)
 
     const value = this._getValue()
 
@@ -345,7 +351,7 @@ class Input extends React.PureComponent<Props, State> {
     }
 
     return (
-      <Box style={Styles.collapseStyles([containerStyle, this.props.style])}>
+      <Box style={Styles.collapseStyles([containerStyle, this.props.style] as any)}>
         {!this.props.small && !this.props.hideLabel && (
           <Text center={true} type="BodySmallSemibold" style={styles.floating}>
             {floatingHintText}
@@ -382,21 +388,22 @@ class Input extends React.PureComponent<Props, State> {
 }
 
 const _lineHeight = 20
-const _headerTextStyle: any = getTextStyle('Header')
-const _bodyTextStyle: any = getTextStyle('Body')
-const _bodySmallTextStyle: any = getTextStyle('BodySmall')
+const _headerTextStyle = getTextStyle('Header')
+const _bodyTextStyle = getTextStyle('Body')
+const _bodySmallTextStyle = getTextStyle('BodySmall')
 
 const styles = Styles.styleSheetCreate(() => ({
-  commonInput: Styles.collapseStyles([
-    Styles.globalStyles.fontSemibold,
-    {
+  commonInput: Styles.platformStyles({
+    isElectron: {
+      ...Styles.globalStyles.fontSemibold,
       backgroundColor: Styles.globalColors.transparent,
       border: 'none',
       color: Styles.globalColors.black,
       flex: 1,
+      // @ts-ignore
       outlineWidth: 0,
     },
-  ]),
+  }),
   commonInputRegular: {
     fontSize: _headerTextStyle.fontSize,
     fontWeight: _headerTextStyle.fontWeight,
@@ -421,14 +428,15 @@ const styles = Styles.styleSheetCreate(() => ({
       minHeight: _bodySmallTextStyle.lineHeight,
     },
   }),
-  smallLabel: Styles.collapseStyles([
-    Styles.globalStyles.fontSemibold,
-    {
+  smallLabel: Styles.platformStyles({
+    // @ts-ignore
+    isElectron: {
+      ...Styles.globalStyles.fontSemibold,
       color: Styles.globalColors.blueDark,
       fontSize: _bodySmallTextStyle.fontSize,
       lineHeight: `${_lineHeight}px`,
       marginRight: 8,
     },
-  ]),
+  }),
 }))
 export default Input

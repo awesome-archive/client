@@ -26,7 +26,12 @@ export const Email = () => {
   const waiting = Container.useAnyWaiting(Constants.addEmailWaitingKey)
 
   // clean on unmount
-  React.useEffect(() => () => dispatch(SettingsGen.createClearAddingEmail()), [dispatch])
+  React.useEffect(
+    () => () => {
+      dispatch(SettingsGen.createClearAddingEmail())
+    },
+    [dispatch]
+  )
   // watch for + nav away on success
   React.useEffect(() => {
     if (addedEmail === addEmailInProgress) {
@@ -119,18 +124,29 @@ export const Phone = () => {
   const [searchable, onChangeSearchable] = React.useState(true)
   const disabled = !valid
 
+  const defaultCountry = Container.useSelector(state => state.settings.phoneNumbers.defaultCountry)
+
   const error = Container.useSelector(state => state.settings.phoneNumbers.error)
   const pendingVerification = Container.useSelector(state => state.settings.phoneNumbers.pendingVerification)
   const waiting = Container.useAnyWaiting(Constants.addPhoneNumberWaitingKey)
 
   // clean only errors on unmount so verify screen still has info
-  React.useEffect(() => () => dispatch(SettingsGen.createClearPhoneNumberErrors()), [dispatch])
+  React.useEffect(
+    () => () => {
+      dispatch(SettingsGen.createClearPhoneNumberErrors())
+    },
+    [dispatch]
+  )
   // watch for go to verify
   React.useEffect(() => {
     if (!error && !!pendingVerification) {
       dispatch(nav.safeNavigateAppendPayload({path: ['settingsVerifyPhone']}))
     }
   }, [dispatch, error, nav, pendingVerification])
+  // trigger a default phone number country rpc if it's not already loaded
+  React.useEffect(() => {
+    !defaultCountry && dispatch(SettingsGen.createLoadDefaultPhoneNumberCountry())
+  }, [defaultCountry, dispatch])
 
   const onClose = React.useCallback(() => {
     dispatch(SettingsGen.createClearPhoneNumberAdd())
@@ -186,6 +202,7 @@ export const Phone = () => {
         style={styles.body}
       >
         <EnterPhoneNumberBody
+          defaultCountry={defaultCountry}
           onChangeNumber={onChangeNumberCb}
           onContinue={onContinue}
           searchable={searchable}
@@ -222,7 +239,12 @@ export const VerifyPhone = () => {
   const verifyWaiting = Container.useAnyWaiting(Constants.verifyPhoneNumberWaitingKey)
 
   // clean everything on unmount
-  React.useEffect(() => () => dispatch(SettingsGen.createClearPhoneNumberAdd()), [dispatch])
+  React.useEffect(
+    () => () => {
+      dispatch(SettingsGen.createClearPhoneNumberAdd())
+    },
+    [dispatch]
+  )
   // Clear on success
   React.useEffect(() => {
     if (verificationState === 'success' && !error) {

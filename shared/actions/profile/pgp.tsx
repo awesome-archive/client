@@ -1,10 +1,11 @@
+import * as Container from '../../util/container'
 import * as ProfileGen from '../profile-gen'
 import * as RPCTypes from '../../constants/types/rpc-gen'
-import * as Saga from '../../util/saga'
 import * as RouteTreeGen from '../route-tree-gen'
+import {RPCError} from '../../util/errors'
 import {peopleTab} from '../../constants/tabs'
 
-function* generatePgp(state) {
+const generatePgp = async (state: Container.TypedState, _a: unknown, listenerApi: Container.ListenerApi) => {
   let canceled = false
 
   const ids = [state.profile.pgpEmail1, state.profile.pgpEmail2, state.profile.pgpEmail3]
@@ -15,69 +16,69 @@ function* generatePgp(state) {
       username: state.profile.pgpFullName || '',
     }))
 
-  const onKeyGenerated = ({key}, response) => {
-    if (canceled) {
-      response.error({code: RPCTypes.StatusCode.scinputcanceled, desc: 'Input canceled'})
-      return undefined
-    } else {
-      response.result()
-      return Saga.put(ProfileGen.createUpdatePgpPublicKey({publicKey: key.key}))
-    }
-  }
-
-  const onShouldPushPrivate = ({prompt}, response) => {
-    return Saga.callUntyped(function*() {
-      yield Saga.put(
-        RouteTreeGen.createNavigateAppend({
-          path: [
-            peopleTab,
-            'profile',
-            'profilePgp',
-            'profileProvideInfo',
-            'profileGenerate',
-            'profileFinished',
-          ],
-        })
-      )
-      yield Saga.put(
-        ProfileGen.createUpdatePromptShouldStoreKeyOnServer({promptShouldStoreKeyOnServer: prompt})
-      )
-      const action: ProfileGen.FinishedWithKeyGenPayload = yield Saga.take(ProfileGen.finishedWithKeyGen)
-      response.result(action.payload.shouldStoreKeyOnServer)
-    })
-  }
-  const onFinished = () => {}
-
-  yield Saga.put(
+  listenerApi.dispatch(
     RouteTreeGen.createNavigateAppend({
       path: [peopleTab, 'profile', 'profilePgp', 'profileProvideInfo', 'profileGenerate'],
     })
   )
   // We allow the UI to cancel this call. Just stash this intention and nav away and response with an error to the rpc
-  const cancelTask = yield Saga._fork(function*() {
-    yield Saga.take(ProfileGen.cancelPgpGen)
+  const cancelTask = listenerApi.fork(async () => {
+    await listenerApi.take(action => action.type === ProfileGen.cancelPgpGen)
     canceled = true
   })
+
   try {
-    yield RPCTypes.pgpPgpKeyGenDefaultRpcSaga({
-      customResponseIncomingCallMap: {
-        'keybase.1.pgpUi.keyGenerated': onKeyGenerated,
-        'keybase.1.pgpUi.shouldPushPrivate': onShouldPushPrivate,
+    await RPCTypes.pgpPgpKeyGenDefaultRpcListener(
+      {
+        customResponseIncomingCallMap: {
+          'keybase.1.pgpUi.keyGenerated': ({key}, response) => {
+            if (canceled) {
+              response.error({code: RPCTypes.StatusCode.scinputcanceled, desc: 'Input canceled'})
+              return undefined
+            } else {
+              response.result()
+              return ProfileGen.createUpdatePgpPublicKey({publicKey: key.key})
+            }
+          },
+          'keybase.1.pgpUi.shouldPushPrivate': async ({prompt}, response) => {
+            listenerApi.dispatch(
+              RouteTreeGen.createNavigateAppend({
+                path: [
+                  peopleTab,
+                  'profile',
+                  'profilePgp',
+                  'profileProvideInfo',
+                  'profileGenerate',
+                  'profileFinished',
+                ],
+              })
+            )
+            listenerApi.dispatch(
+              ProfileGen.createUpdatePromptShouldStoreKeyOnServer({promptShouldStoreKeyOnServer: prompt})
+            )
+            const [action] = await listenerApi.take<ProfileGen.FinishedWithKeyGenPayload>(
+              action => action.type === ProfileGen.finishedWithKeyGen
+            )
+            response.result(action.payload.shouldStoreKeyOnServer)
+          },
+        },
+        incomingCallMap: {'keybase.1.pgpUi.finished': () => {}},
+        params: {createUids: {ids, useDefault: false}},
       },
-      incomingCallMap: {'keybase.1.pgpUi.finished': onFinished},
-      params: {createUids: {ids, useDefault: false}},
-    })
-  } catch (e) {
+      listenerApi
+    )
+  } catch (error) {
+    if (!(error instanceof RPCError)) {
+      return
+    }
     // did we cancel?
-    if (e.code !== RPCTypes.StatusCode.scinputcanceled) {
-      throw e
+    if (error.code !== RPCTypes.StatusCode.scinputcanceled) {
+      throw error
     }
   }
   cancelTask.cancel()
 }
 
-function* pgpSaga(): Iterable<any> {
-  yield* Saga.chainGenerator<ProfileGen.GeneratePgpPayload>(ProfileGen.generatePgp, generatePgp)
+export const initPgp = () => {
+  Container.listenAction(ProfileGen.generatePgp, generatePgp)
 }
-
-export {pgpSaga}

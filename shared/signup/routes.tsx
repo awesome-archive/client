@@ -1,9 +1,9 @@
-import SignupEnterDevicename from './device-name/container'
-import SignupEnterEmail from './email/container'
-import SignupEnterUsername from './username/container'
-import SignupEnterPhoneNumber from './phone-number/container'
-import SignupVerifyPhoneNumber from './phone-number/verify-container'
-import SignupSendFeedback from './feedback/container'
+import type SignupEnterDevicename from './device-name/container'
+import type SignupEnterEmail from './email/container'
+import type SignupEnterUsername from './username/container'
+import type SignupEnterPhoneNumber from './phone-number/container'
+import type SignupVerifyPhoneNumber from './phone-number/verify-container'
+import type SignupSendFeedback from './feedback/container'
 
 export const newRoutes = {
   signupEnterDevicename: {
@@ -29,4 +29,18 @@ export const newModalRoutes = {
   signupVerifyPhoneNumber: {
     getScreen: (): typeof SignupVerifyPhoneNumber => require('./phone-number/verify-container').default,
   },
+}
+
+export type RootParamListSignup = {
+  signupEnterDevicename: undefined
+  signupEnterEmail: undefined
+  signupEnterPhoneNumber: undefined
+  signupEnterUsername: undefined
+  signupSendFeedbackLoggedIn: undefined
+  signupSendFeedbackLoggedOut: undefined
+  signupVerifyPhoneNumber: undefined
+  signupError: undefined
+  signupInviteCode: undefined
+  signupRequestInvite: undefined
+  signupRequestInviteSuccess: undefined
 }

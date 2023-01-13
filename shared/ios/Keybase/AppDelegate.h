@@ -8,18 +8,21 @@
 
 #import "CocoaLumberjack.h"
 #import <React/RCTBridgeDelegate.h>
+#import <UserNotifications/UNUserNotificationCenter.h>
+#import "ItemProviderHelper.h"
 #import <UIKit/UIKit.h>
-#import <UMReactNativeAdapter/UMModuleRegistryAdapter.h>
-
+#import <Expo/Expo.h>
+#import <Kb.h>
 
 @class Engine;
 
-@interface AppDelegate : UIResponder <UIApplicationDelegate, RCTBridgeDelegate>
+@interface AppDelegate : EXAppDelegateWrapper <UIApplicationDelegate, RCTBridgeDelegate>
 
-@property (nonatomic, strong) UMModuleRegistryAdapter *moduleRegistryAdapter;
 @property (nonatomic, strong) UIWindow *window;
-@property (nonatomic, strong) Engine *engine;
-@property (nonatomic, strong) DDFileLogger *fileLogger;
 @property UIImageView *resignImageView;
+@property(nonatomic, strong) NSDictionary *fsPaths;
+@property UIBackgroundTaskIdentifier backgroundTask;
+@property UIBackgroundTaskIdentifier shutdownTask;
+@property(nonatomic, strong) ItemProviderHelper *iph;
 
 @end

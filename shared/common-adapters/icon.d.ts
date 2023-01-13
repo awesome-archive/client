@@ -1,6 +1,6 @@
 import * as React from 'react'
 import {IconType} from './icon.constants-gen'
-import {StylesCrossPlatform, StylesCrossPlatformWithSomeDisallowed, Color, globalMargins} from '../styles'
+import {StylesCrossPlatform, Color, globalMargins, CustomStyles} from '../styles'
 
 export type SizeType = 'Huge' | 'Bigger' | 'Big' | 'Default' | 'Small' | 'Tiny'
 
@@ -10,7 +10,7 @@ export type DisallowedStyles = {
   hoverColor?: never
   fontSize?: never
 }
-export type IconStyle = StylesCrossPlatformWithSomeDisallowed<DisallowedStyles>
+export type IconStyle = CustomStyles<'color' | 'hoverColor' | 'fontSize', {}>
 
 export type Props = {
   type: IconType
@@ -18,8 +18,10 @@ export type Props = {
   noContainer?: boolean
   onClick?: ((event: React.BaseSyntheticEvent) => void) | null
   onPress?: void // Use onClick, not onPress.,,
+  onLongPress?: () => void // mobile only, rarely used just for debug currently
   onMouseEnter?: (() => void) | null
   onMouseLeave?: (() => void) | null
+  fixOverdraw?: boolean // use fastblank
   style?: IconStyle
   opacity?: boolean
   inheritColor?: boolean
@@ -48,9 +50,5 @@ export default Icon
 export declare function iconTypeToImgSet(imgMap: {[K in string]: IconType}, targetSize: number): string
 
 export declare function urlsToImgSet(imgMap: {[K in string]: string}, size: number): string | null
-
-export declare function castPlatformStyles(
-  styles: StylesCrossPlatform
-): StylesCrossPlatformWithSomeDisallowed<DisallowedStyles>
 
 export {IconType} from './icon.constants-gen'

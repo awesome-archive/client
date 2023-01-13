@@ -1,5 +1,5 @@
 import * as Styles from '../styles'
-import {MetaType, TextType, Background} from './text'
+import type {MetaType, TextType, Background} from './text'
 
 export function defaultColor(backgroundMode: Background | null) {
   return {
@@ -70,6 +70,11 @@ const _metaData = (): {[K in TextType]: MetaType} => {
       fontSize: 15,
       isLink: true,
       styleOverride: Styles.globalStyles.fontSemibold,
+    },
+    BodyBold: {
+      colorForBackground: whiteNegative,
+      fontSize: 14,
+      styleOverride: Styles.globalStyles.fontBold,
     },
     BodyExtrabold: {
       colorForBackground: whiteNegative,
@@ -269,6 +274,11 @@ const _metaData = (): {[K in TextType]: MetaType} => {
       fontSize: 18,
       isLink: true,
       styleOverride: Styles.globalStyles.fontBold,
+    },
+    Nyctographic: {
+      colorForBackground: whiteNegative,
+      fontSize: 14,
+      styleOverride: Styles.globalStyles.fontNyctographic,
     },
     Terminal: {
       colorForBackground: {

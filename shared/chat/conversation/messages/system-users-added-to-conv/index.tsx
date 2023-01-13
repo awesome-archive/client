@@ -1,8 +1,6 @@
-import * as React from 'react'
 import * as Kb from '../../../../common-adapters'
 import * as Styles from '../../../../styles'
 import UserNotice from '../user-notice'
-import SystemMessageTimestamp from '../system-message-timestamp'
 
 type YouAddedProps = {
   author: string
@@ -12,23 +10,13 @@ type YouAddedProps = {
 }
 
 const YouAdded = (props: YouAddedProps) => (
-  <UserNotice username={props.author} bgColor={Styles.globalColors.blueLighter2}>
-    <SystemMessageTimestamp timestamp={props.timestamp} />
-    <Kb.Text center={true} type="BodySmallSemibold">
-      <Kb.ConnectedUsernames
-        inline={true}
-        type="BodySmallSemibold"
-        onUsernameClicked="profile"
-        colorFollowing={true}
-        underline={true}
-        usernames={[props.author]}
-      />{' '}
+  <UserNotice>
+    <Kb.Text type="BodySmall">
       added you
       {!!props.otherUsers.length && [
         props.otherUsers.length === 1 ? ' and ' : ', ',
         ...getAddedUsernames(props.otherUsers),
-      ]}
-      {!props.otherUsers.length && ' '}
+      ]}{' '}
       to #{props.channelname}.
     </Kb.Text>
   </UserNotice>
@@ -37,24 +25,24 @@ const YouAdded = (props: YouAddedProps) => (
 const maxUsernamesToShow = 3
 const getAddedUsernames = (usernames: Array<string>) => {
   const diff = Math.max(0, usernames.length - maxUsernamesToShow)
-  const othersStr = diff ? `and ${diff} other${diff > 1 ? 's' : ''} ` : ''
+  const othersStr = diff ? ` and ${diff} other${diff > 1 ? 's' : ''}` : ''
   const users = usernames.slice(0, maxUsernamesToShow)
   return users.reduce<Array<React.ReactNode>>((res, username, idx) => {
     if (idx === users.length - 1 && users.length > 1 && !othersStr) {
       // last user and no others
-      res.push('and ')
+      res.push(' and ')
     }
     res.push(
       <Kb.ConnectedUsernames
         inline={true}
-        type="BodySmallSemibold"
+        type="BodySmallBold"
         onUsernameClicked="profile"
         colorFollowing={true}
         underline={true}
-        usernames={[username]}
+        usernames={username}
         key={username}
       />,
-      idx < users.length - (othersStr ? 1 : 2) ? ', ' : ' '
+      idx < users.length - (othersStr ? 1 : 2) ? ', ' : ''
     )
     if (idx === users.length - 1 && othersStr) {
       res.push(othersStr)
@@ -71,9 +59,11 @@ type OthersAddedProps = {
 }
 
 const OthersAdded = (props: OthersAddedProps) => (
-  <Kb.Text type="BodySmall" style={styles.text}>
-    added {getAddedUsernames(props.added)}to #{props.channelname}.
-  </Kb.Text>
+  <UserNotice>
+    <Kb.Text type="BodySmall" style={styles.text}>
+      added {getAddedUsernames(props.added)} to #{props.channelname}.
+    </Kb.Text>
+  </UserNotice>
 )
 
 const styles = Styles.styleSheetCreate(
@@ -83,4 +73,4 @@ const styles = Styles.styleSheetCreate(
     } as const)
 )
 
-export {OthersAdded, YouAdded}
+export {OthersAdded, YouAdded, getAddedUsernames}

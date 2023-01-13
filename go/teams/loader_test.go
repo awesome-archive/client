@@ -113,7 +113,9 @@ func TestLoaderByName(t *testing.T) {
 // Test loading a team with NeedKeyGeneration set.
 // User A creates a team and rotate the key several times.
 // User B caches the team at generation 1, and then loads with NeedKeyGeneration later.
-//   which should get the latest generation that exists.
+//
+//	which should get the latest generation that exists.
+//
 // User C is a bot and never has access to keys.
 func TestLoaderKeyGen(t *testing.T) {
 	fus, tcs, cleanup := setupNTests(t, 4)
@@ -291,7 +293,7 @@ func TestLoaderKBFSKeyGen(t *testing.T) {
 	require.NoError(t, err)
 
 	// See TODO below, CORE-9677. This test previously relied on buggy behavior, which now is fixed.
-	//require.Zero(t, len(team.KBFSCryptKeys(context.TODO(), keybase1.TeamApplication_CHAT)))
+	// require.Zero(t, len(team.KBFSCryptKeys(context.TODO(), keybase1.TeamApplication_CHAT)))
 
 	team, err = Load(context.TODO(), tcs[0].G, keybase1.LoadTeamArg{
 		ID: team.ID,
@@ -1215,7 +1217,10 @@ func TestLoaderCORE_10487(t *testing.T) {
 	_, ok = team.Data.PerTeamKeySeedsUnverified[1]
 	require.True(t, ok)
 	require.NotNil(t, team.Data.ReaderKeyMasks)
-	require.Len(t, team.Data.ReaderKeyMasks[keybase1.TeamApplication_KBFS], 0, "missing rkms")
+	if len(team.Data.ReaderKeyMasks[keybase1.TeamApplication_KBFS]) != 0 {
+		t.Logf("RKMs received. This is acceptable client behavior, but not suitable to test this particular regression.")
+		return
+	}
 
 	t.Logf("U1 loads A.B like KBFS")
 	_, err = LoadTeamPlusApplicationKeys(context.Background(), tcs[1].G, subBID,
@@ -1356,7 +1361,7 @@ func TestTombstoneViaDelete(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = Delete(context.TODO(), tcs[0].G, &teamsUI{}, rootName.String())
+	err = Delete(context.TODO(), tcs[0].G, &teamsUI{}, rootID)
 	require.NoError(t, err)
 
 	st := getStorageFromG(tcs[0].G)

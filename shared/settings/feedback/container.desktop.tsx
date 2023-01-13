@@ -1,13 +1,13 @@
-import Feedback from './index'
+import * as Constants from '../../constants/settings'
 import * as Container from '../../util/container'
 import * as RouteTreeGen from '../../actions/route-tree-gen'
 import * as SettingsGen from '../../actions/settings-gen'
+import Feedback from './index'
 import {anyWaiting} from '../../constants/waiting'
-import * as Constants from '../../constants/settings'
 
-type OwnProps = Container.RouteProps<{heading: string; feedback: string}>
+type OwnProps = Container.RouteProps<'settingsTabs.feedbackTab'>
 
-export default Container.namedConnect(
+export default Container.connect(
   state => ({
     loggedOut: !state.config.loggedIn,
     sendError: state.settings.feedback.error,
@@ -21,9 +21,8 @@ export default Container.namedConnect(
   (s, d, o: OwnProps) => ({
     ...s,
     ...d,
-    feedback: Container.getRouteProps(o, 'feedback', ''),
+    feedback: o.route.params?.feedback ?? '',
     onFeedbackDone: () => null,
     showInternalSuccessBanner: true,
-  }),
-  'Feedback'
+  })
 )(Feedback)

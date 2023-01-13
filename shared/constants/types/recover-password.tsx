@@ -1,17 +1,16 @@
-import * as I from 'immutable'
-import * as ProvisionTypes from './provision'
-import * as RPCTypes from './rpc-gen'
-import HiddenString from '../../util/hidden-string'
+import type * as ProvisionTypes from './provision'
+import type * as RPCTypes from './rpc-gen'
+import type HiddenString from '../../util/hidden-string'
 
-export type _State = {
-  devices: I.List<ProvisionTypes.Device>
-  error: HiddenString
-  explainedDevice?: {
+export type State = {
+  readonly devices: Array<ProvisionTypes.Device>
+  readonly error: HiddenString
+  readonly explainedDevice?: {
     name: string
     type: RPCTypes.DeviceType
   }
-  paperKeyError: HiddenString
-  username: string
+  readonly paperKeyError: HiddenString
+  readonly passwordError: HiddenString
+  readonly resetEmailSent?: boolean
+  readonly username: string
 }
-
-export type State = I.RecordOf<_State>

@@ -1,39 +1,50 @@
 import * as React from 'react'
 import Box from './box'
-// @ts-ignore
-import animationData from './animation-data.json'
-import {Props} from './animation'
+import lottie from 'lottie-web'
+import type {Props, AnimationType} from './animation'
 
 const defaultDimension = 16
+const _typeToData = new Map<AnimationType, unknown>()
 
-class Animation extends React.Component<Props> {
-  render() {
-    // jest doesnt' support canvas out of the box, so lets just not do anything
-    if (__STORYSHOT__) {
-      return (
-        <Box>
-          {JSON.stringify({
-            height: this.props.height || defaultDimension,
-            options: {animationData: animationData[this.props.animationType]},
-            style: this.props.style,
-            width: this.props.width || defaultDimension,
-          })}
-        </Box>
-      )
-    }
-    // jest pukes if the import is on top so just defer till render
-    const Lottie = require('lottie-react-web').default
-    return (
-      <Box style={this.props.containerStyle}>
-        <Lottie
-          options={{animationData: animationData[this.props.animationType]}}
-          width={this.props.width || defaultDimension}
-          height={this.props.height || defaultDimension}
-          style={this.props.style}
-        />
-      </Box>
-    )
+const useAnimationData = (type: AnimationType) => {
+  const existing = _typeToData.get(type)
+  if (existing) {
+    return existing
   }
+  const animationData = require('./animation-data.json')
+
+  const options = animationData[type]
+  _typeToData.set(type, options)
+  return options
 }
+
+const Animation = React.memo(function Animation(props: Props) {
+  const {style, width, height, animationType} = props
+  const element = React.useRef<HTMLDivElement>(null)
+  const lottieInstance = React.useRef<any>()
+  const animationData = useAnimationData(animationType)
+  React.useEffect(() => {
+    if (element.current) {
+      lottieInstance.current?.destroy()
+      lottieInstance.current = lottie.loadAnimation({
+        animationData,
+        container: element.current,
+      })
+    }
+    return () => {
+      lottieInstance.current?.destroy()
+      lottieInstance.current = null
+    }
+  }, [animationData])
+  return (
+    <Box className={props.className} style={props.containerStyle}>
+      <div
+        // @ts-ignore
+        style={{height: height ?? defaultDimension, width: width ?? defaultDimension, ...style}}
+        ref={element}
+      />
+    </Box>
+  )
+})
 
 export default Animation

@@ -1,11 +1,11 @@
 import * as React from 'react'
-import {Props} from './video'
-import Box from './box'
 import * as Styles from '../styles'
-import {useVideoSizer, CheckURL} from './video.shared'
-import RNVideo from 'react-native-video'
+import Box from './box'
+import type {Props} from './video'
+import useFixStatusbar from './use-fix-statusbar.native'
 import {StatusBar} from 'react-native'
-import logger from '../logger'
+import {Video as AVVideo, VideoFullscreenUpdate} from 'expo-av'
+import {useVideoSizer, CheckURL} from './video.shared'
 
 const Kb = {
   Box,
@@ -25,37 +25,32 @@ const DelayMount = ({children}) => {
 
 const Video = (props: Props) => {
   const [videoSize, setContainerSize, setVideoNaturalSize] = useVideoSizer()
-  // Somehow onFullscreenPlayerDidDismiss doesn't trigger, and RNVideo doesn't
-  // automatically bring back the status bar either. As a workaround, call it
-  // on unmount so at least we get the status bar back when user leaves the
-  // screen.
-  React.useEffect(() => () => StatusBar.setHidden(false), [])
+  useFixStatusbar()
   return (
-    <CheckURL url={props.url}>
+    <CheckURL url={props.url} allowFile={props.allowFile}>
       <DelayMount>
         <Kb.Box
           style={styles.container}
-          onLayout={event =>
-            event &&
-            event.nativeEvent &&
-            event.nativeEvent.layout &&
-            setContainerSize(event.nativeEvent.layout.height, event.nativeEvent.layout.width)
-          }
+          onLayout={event => {
+            event?.nativeEvent?.layout &&
+              setContainerSize(event.nativeEvent.layout.height, event.nativeEvent.layout.width)
+          }}
         >
-          <RNVideo
+          <AVVideo
             source={{uri: props.url}}
             onError={e => {
-              logger.error(`Error loading vid: ${JSON.stringify(e)}`)
+              props.onUrlError && props.onUrlError(JSON.stringify(e))
             }}
-            controls={true}
-            onFullscreenPlayerDidDismiss={() => {
-              StatusBar.setHidden(false)
+            useNativeControls={true}
+            shouldPlay={true}
+            onFullscreenUpdate={event => {
+              if (event.fullscreenUpdate === VideoFullscreenUpdate.PLAYER_DID_DISMISS) {
+                StatusBar.setHidden(false)
+              }
             }}
-            onLoad={loaded =>
-              loaded &&
-              loaded.naturalSize &&
-              setVideoNaturalSize(loaded.naturalSize.height, loaded.naturalSize.width)
-            }
+            onReadyForDisplay={event => {
+              setVideoNaturalSize(event.naturalSize.height, event.naturalSize.width)
+            }}
             style={videoSize}
           />
         </Kb.Box>

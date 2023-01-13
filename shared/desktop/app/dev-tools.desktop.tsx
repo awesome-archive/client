@@ -1,15 +1,18 @@
-import * as SafeElectron from '../../util/safe-electron.desktop'
-import {showDevTools} from '../../local-debug.desktop'
+import * as Electron from 'electron'
+import {showDevTools, skipExtensions} from '../../local-debug.desktop'
 import flags from '../../util/feature-flags'
 
-function setupDevToolsExtensions() {
-  if (process.env.KEYBASE_DEV_TOOL_EXTENSIONS) {
+export function setupDevToolsExtensions() {
+  if (!skipExtensions && process.env.KEYBASE_DEV_TOOL_EXTENSIONS) {
     process.env.KEYBASE_DEV_TOOL_EXTENSIONS.split(',').forEach(p => {
-      try {
-        SafeElectron.BrowserWindow.addDevToolsExtension(p)
-      } catch (e) {
-        console.error('Dev tool loading crash', p, e)
-      }
+      Electron.app
+        .whenReady()
+        .then(async () => {
+          await Electron.session.defaultSession.loadExtension(p, {allowFileAccess: true})
+        })
+        .catch(e => {
+          console.log('loading dev extensions failed', e)
+        })
     })
   }
 }
@@ -18,9 +21,9 @@ function setupOpenDevtools() {
   let devToolsState = showDevTools
 
   if (flags.admin) {
-    SafeElectron.getGlobalShortcut().register('CommandOrControl+Alt+k+b', () => {
+    Electron.globalShortcut.register('CommandOrControl+Alt+k+b', () => {
       devToolsState = !devToolsState
-      SafeElectron.BrowserWindow.getAllWindows().map(bw =>
+      Electron.BrowserWindow.getAllWindows().map(bw =>
         devToolsState ? bw.webContents.openDevTools({mode: 'detach'}) : bw.webContents.closeDevTools()
       )
     })
@@ -29,23 +32,20 @@ function setupOpenDevtools() {
 
 function cleanupOpenDevtools() {
   if (flags.admin) {
-    SafeElectron.getGlobalShortcut().unregister('CommandOrControl+Alt+k+b')
+    Electron.globalShortcut.unregister('CommandOrControl+Alt+k+b')
   }
 }
 
-export default function() {
-  const app = SafeElectron.getApp()
-  if (app.isReady()) {
+export default function () {
+  if (Electron.app.isReady()) {
     setupOpenDevtools()
-    setupDevToolsExtensions()
   } else {
-    app.on('ready', () => {
+    Electron.app.on('ready', () => {
       setupOpenDevtools()
-      setupDevToolsExtensions()
     })
   }
 
-  SafeElectron.getApp().on('will-quit', () => {
+  Electron.app.on('will-quit', () => {
     cleanupOpenDevtools()
   })
 }

@@ -1,4 +1,4 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.2 (https://github.com/keybase/node-avdl-compiler)
+// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
 //   Input file: avdl/keybase1/usersearch.avdl
 
 package keybase1
@@ -6,6 +6,7 @@ package keybase1
 import (
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	context "golang.org/x/net/context"
+	"time"
 )
 
 type APIUserServiceID string
@@ -172,14 +173,16 @@ func (o APIUserSearchResult) DeepCopy() APIUserSearchResult {
 }
 
 type NonUserDetails struct {
-	IsNonUser      bool                  `codec:"isNonUser" json:"isNonUser"`
-	AssertionValue string                `codec:"assertionValue" json:"assertionValue"`
-	AssertionKey   string                `codec:"assertionKey" json:"assertionKey"`
-	Description    string                `codec:"description" json:"description"`
-	Contact        *ProcessedContact     `codec:"contact,omitempty" json:"contact,omitempty"`
-	Service        *APIUserServiceResult `codec:"service,omitempty" json:"service,omitempty"`
-	SiteIcon       []SizedImage          `codec:"siteIcon" json:"siteIcon"`
-	SiteIconFull   []SizedImage          `codec:"siteIconFull" json:"siteIconFull"`
+	IsNonUser            bool                  `codec:"isNonUser" json:"isNonUser"`
+	AssertionValue       string                `codec:"assertionValue" json:"assertionValue"`
+	AssertionKey         string                `codec:"assertionKey" json:"assertionKey"`
+	Description          string                `codec:"description" json:"description"`
+	Contact              *ProcessedContact     `codec:"contact,omitempty" json:"contact,omitempty"`
+	Service              *APIUserServiceResult `codec:"service,omitempty" json:"service,omitempty"`
+	SiteIcon             []SizedImage          `codec:"siteIcon" json:"siteIcon"`
+	SiteIconDarkmode     []SizedImage          `codec:"siteIconDarkmode" json:"siteIconDarkmode"`
+	SiteIconFull         []SizedImage          `codec:"siteIconFull" json:"siteIconFull"`
+	SiteIconFullDarkmode []SizedImage          `codec:"siteIconFullDarkmode" json:"siteIconFullDarkmode"`
 }
 
 func (o NonUserDetails) DeepCopy() NonUserDetails {
@@ -213,6 +216,17 @@ func (o NonUserDetails) DeepCopy() NonUserDetails {
 			}
 			return ret
 		})(o.SiteIcon),
+		SiteIconDarkmode: (func(x []SizedImage) []SizedImage {
+			if x == nil {
+				return nil
+			}
+			ret := make([]SizedImage, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.SiteIconDarkmode),
 		SiteIconFull: (func(x []SizedImage) []SizedImage {
 			if x == nil {
 				return nil
@@ -224,6 +238,39 @@ func (o NonUserDetails) DeepCopy() NonUserDetails {
 			}
 			return ret
 		})(o.SiteIconFull),
+		SiteIconFullDarkmode: (func(x []SizedImage) []SizedImage {
+			if x == nil {
+				return nil
+			}
+			ret := make([]SizedImage, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.SiteIconFullDarkmode),
+	}
+}
+
+type EmailOrPhoneNumberSearchResult struct {
+	Input          string `codec:"input" json:"input"`
+	Assertion      string `codec:"assertion" json:"assertion"`
+	AssertionValue string `codec:"assertionValue" json:"assertionValue"`
+	AssertionKey   string `codec:"assertionKey" json:"assertionKey"`
+	FoundUser      bool   `codec:"foundUser" json:"foundUser"`
+	Username       string `codec:"username" json:"username"`
+	FullName       string `codec:"fullName" json:"fullName"`
+}
+
+func (o EmailOrPhoneNumberSearchResult) DeepCopy() EmailOrPhoneNumberSearchResult {
+	return EmailOrPhoneNumberSearchResult{
+		Input:          o.Input,
+		Assertion:      o.Assertion,
+		AssertionValue: o.AssertionValue,
+		AssertionKey:   o.AssertionKey,
+		FoundUser:      o.FoundUser,
+		Username:       o.Username,
+		FullName:       o.FullName,
 	}
 }
 
@@ -240,9 +287,16 @@ type UserSearchArg struct {
 	IncludeContacts        bool   `codec:"includeContacts" json:"includeContacts"`
 }
 
+type BulkEmailOrPhoneSearchArg struct {
+	SessionID    int           `codec:"sessionID" json:"sessionID"`
+	Emails       string        `codec:"emails" json:"emails"`
+	PhoneNumbers []PhoneNumber `codec:"phoneNumbers" json:"phoneNumbers"`
+}
+
 type UserSearchInterface interface {
 	GetNonUserDetails(context.Context, GetNonUserDetailsArg) (NonUserDetails, error)
 	UserSearch(context.Context, UserSearchArg) ([]APIUserSearchResult, error)
+	BulkEmailOrPhoneSearch(context.Context, BulkEmailOrPhoneSearchArg) ([]EmailOrPhoneNumberSearchResult, error)
 }
 
 func UserSearchProtocol(i UserSearchInterface) rpc.Protocol {
@@ -279,6 +333,21 @@ func UserSearchProtocol(i UserSearchInterface) rpc.Protocol {
 					return
 				},
 			},
+			"bulkEmailOrPhoneSearch": {
+				MakeArg: func() interface{} {
+					var ret [1]BulkEmailOrPhoneSearchArg
+					return &ret
+				},
+				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+					typedArgs, ok := args.(*[1]BulkEmailOrPhoneSearchArg)
+					if !ok {
+						err = rpc.NewTypeError((*[1]BulkEmailOrPhoneSearchArg)(nil), args)
+						return
+					}
+					ret, err = i.BulkEmailOrPhoneSearch(ctx, typedArgs[0])
+					return
+				},
+			},
 		},
 	}
 }
@@ -288,11 +357,16 @@ type UserSearchClient struct {
 }
 
 func (c UserSearchClient) GetNonUserDetails(ctx context.Context, __arg GetNonUserDetailsArg) (res NonUserDetails, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.userSearch.getNonUserDetails", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.userSearch.getNonUserDetails", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c UserSearchClient) UserSearch(ctx context.Context, __arg UserSearchArg) (res []APIUserSearchResult, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.userSearch.userSearch", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.userSearch.userSearch", []interface{}{__arg}, &res, 0*time.Millisecond)
+	return
+}
+
+func (c UserSearchClient) BulkEmailOrPhoneSearch(ctx context.Context, __arg BulkEmailOrPhoneSearchArg) (res []EmailOrPhoneNumberSearchResult, err error) {
+	err = c.Cli.Call(ctx, "keybase.1.userSearch.bulkEmailOrPhoneSearch", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }

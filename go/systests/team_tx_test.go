@@ -16,11 +16,10 @@ func testTeamTx1(t *testing.T, byUV bool) {
 	tt := newTeamTester(t)
 	defer tt.cleanup()
 
-	ann := makeUserStandalone(t, "ann", standaloneUserArgs{
+	ann := makeUserStandalone(t, tt, "ann", standaloneUserArgs{
 		disableGregor:            true,
 		suppressTeamChatAnnounce: true,
 	})
-	tt.users = append(tt.users, ann)
 	t.Logf("Signed up ann (%s)", ann.username)
 
 	bob := tt.addPuklessUser("bob")
@@ -44,6 +43,7 @@ func testTeamTx1(t *testing.T, byUV bool) {
 
 	var err error
 	tx := teams.CreateAddMemberTx(teamObj)
+	tx.AllowPUKless = true
 	if byUV {
 		err = tx.AddMemberByUV(context.Background(), bob.userVersion(), keybase1.TeamRole_WRITER, nil)
 		require.NoError(t, err)
@@ -130,11 +130,10 @@ func TestTeamTxDependency(t *testing.T) {
 	tt := newTeamTester(t)
 	defer tt.cleanup()
 
-	ann := makeUserStandalone(t, "ann", standaloneUserArgs{
+	ann := makeUserStandalone(t, tt, "ann", standaloneUserArgs{
 		disableGregor:            true,
 		suppressTeamChatAnnounce: true,
 	})
-	tt.users = append(tt.users, ann)
 	t.Logf("Signed up ann (%s)", ann.username)
 
 	bob := tt.addPuklessUser("bob")
@@ -213,7 +212,8 @@ func TestTeamTxDependency(t *testing.T) {
 	bob.loginAfterResetPukless()
 
 	tx = teams.CreateAddMemberTx(teamObj)
-	_, _, _, err = tx.AddMemberByAssertionOrEmail(context.Background(), fmt.Sprintf("%s@rooter", tracy.username), keybase1.TeamRole_WRITER, nil)
+	tx.AllowPUKless = true
+	_, _, _, err = tx.AddOrInviteMemberByAssertion(context.Background(), fmt.Sprintf("%s@rooter", tracy.username), keybase1.TeamRole_WRITER, nil)
 	require.NoError(t, err)
 	err = tx.AddMemberByUsername(context.Background(), bob.username, keybase1.TeamRole_WRITER, nil)
 	require.NoError(t, err)
@@ -249,7 +249,8 @@ func TestTeamTxSweepMembers(t *testing.T) {
 	t.Logf("Bob (%s) resets and reprovisions, he is now: %v", bob.username, bob.userVersion())
 
 	// Wait for CLKR and RotateKey link.
-	ann.waitForRotateByID(ann.loadTeam(team, false /* admin */).ID, keybase1.Seqno(3))
+	teamID := ann.loadTeam(team, false /* admin */).ID
+	ann.waitForAnyRotateByID(teamID, keybase1.Seqno(2) /* toSeqno */, keybase1.Seqno(1) /* toHiddenSeqno */)
 
 	teamObj := ann.loadTeam(team, true /* admin */)
 	tx := teams.CreateAddMemberTx(teamObj)
@@ -295,6 +296,7 @@ func TestTeamTxMultipleMembers(t *testing.T) {
 
 	teamObj := ann.loadTeam(team, true /* admin */)
 	tx := teams.CreateAddMemberTx(teamObj)
+	tx.AllowPUKless = true
 	for i := 1; i < 7; i++ {
 		err := tx.AddMemberByUsername(context.Background(), tt.users[i].username, keybase1.TeamRole_WRITER, nil)
 		require.NoError(t, err)
@@ -397,5 +399,6 @@ func TestTeamTxBadAdds(t *testing.T) {
 	// Trying to add deleted bob.
 	err = tx.AddMemberByUV(context.Background(), bobUV, keybase1.TeamRole_WRITER, nil)
 	require.Error(t, err)
+	require.IsType(t, libkb.UserDeletedError{}, err)
 	require.True(t, tx.IsEmpty())
 }

@@ -3,54 +3,51 @@ import * as React from 'react'
 import * as Styles from '../styles'
 import * as Shared from './shim.shared'
 import * as Container from '../util/container'
+import {SafeAreaView} from 'react-native'
 
-export const shim = (routes: any) => Shared.shim(routes, shimNewRoute)
+export const shim = (routes: any, isModal: boolean, isLoggedOut: boolean) =>
+  Shared.shim(routes, shimNewRoute, isModal, isLoggedOut)
 
-const shimNewRoute = (Original: any) => {
+const shimNewRoute = (Original: any, isModal: boolean, isLoggedOut: boolean) => {
   // Wrap everything in a keyboard avoiding view (maybe this is opt in/out?)
-  // Also light/dark aware
-  class ShimmedNew extends React.PureComponent<any, void> {
-    static navigationOptions = Original.navigationOptions
-    render() {
-      const navigationOptions =
-        typeof Original.navigationOptions === 'function'
-          ? Original.navigationOptions({navigation: this.props.navigation})
-          : Original.navigationOptions
-      const body = <Original {...this.props} key={this.props.isDarkMode ? 'dark' : 'light'} />
-      const keyboardBody = (
-        <Kb.KeyboardAvoidingView
-          style={styles.keyboard}
-          behavior={Styles.isIOS ? 'padding' : undefined}
-          keyboardVerticalOffset={(navigationOptions && navigationOptions.headerHeight) || undefined}
-        >
-          {body}
-        </Kb.KeyboardAvoidingView>
+  const ShimmedNew = React.memo(function ShimmedNew(props: any) {
+    const navigationOptions =
+      typeof Original.navigationOptions === 'function'
+        ? Original.navigationOptions({navigation: props.navigation, route: props.route})
+        : Original.navigationOptions
+    const original = <Original {...props} />
+    const body = original
+    let wrap = body
+
+    const isSafe = navigationOptions?.needsSafe || isModal || isLoggedOut
+    if (isSafe) {
+      wrap = (
+        <SafeAreaView style={Styles.collapseStyles([styles.keyboard, navigationOptions?.safeAreaStyle])}>
+          {wrap}
+        </SafeAreaView>
       )
-
-      // don't make safe areas
-      if (navigationOptions && navigationOptions.underNotch) {
-        return keyboardBody
-      }
-
-      const safeKeyboardBody = (
-        <Kb.NativeSafeAreaView style={styles.keyboard}>{keyboardBody}</Kb.NativeSafeAreaView>
-      )
-
-      return safeKeyboardBody
     }
-  }
-  return Container.connect(() => ({isDarkMode: Styles.isDarkMode()}), undefined, (s, _, o) => ({
-    ...s,
-    ...o,
-    // @ts-ignore
-  }))(ShimmedNew)
+
+    // TODO remove and make all root views have a good background
+    wrap = <Kb.NativeView style={isModal ? styles.modal : styles.keyboard}>{wrap}</Kb.NativeView>
+    return wrap
+  })
+  Container.hoistNonReactStatic(ShimmedNew, Original)
+  return ShimmedNew
 }
+
 const styles = Styles.styleSheetCreate(
   () =>
     ({
       keyboard: {
+        flexGrow: 1,
+        maxHeight: '100%',
+        position: 'relative',
+      },
+      modal: {
         backgroundColor: Styles.globalColors.white,
         flexGrow: 1,
+        maxHeight: '100%',
         position: 'relative',
       },
     } as const)

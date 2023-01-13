@@ -98,7 +98,8 @@ func TestFastLoaderKeyGen(t *testing.T) {
 		Applications:  []keybase1.TeamApplication{keybase1.TeamApplication_CHAT},
 		NeedLatestKey: true,
 	}
-	_, err = tcs[3].G.GetFastTeamLoader().Load(m[3], arg)
+	team, err = tcs[3].G.GetFastTeamLoader().Load(m[3], arg)
+	require.Error(t, err)
 	require.IsType(t, FTLMissingSeedError{}, err)
 	require.Zero(t, len(team.ApplicationKeys))
 
@@ -181,6 +182,7 @@ func TestFastLoaderKeyGen(t *testing.T) {
 		KeyGenerationsNeeded: []keybase1.PerTeamKeyGeneration{keybase1.PerTeamKeyGeneration(1)},
 	}
 	team, err = tcs[3].G.GetFastTeamLoader().Load(m[3], arg)
+	require.Error(t, err)
 	require.IsType(t, FTLMissingSeedError{}, err)
 	require.Zero(t, len(team.ApplicationKeys))
 

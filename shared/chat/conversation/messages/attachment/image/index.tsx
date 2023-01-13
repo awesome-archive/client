@@ -3,25 +3,31 @@ import * as Kb from '../../../../../common-adapters'
 import * as Styles from '../../../../../styles'
 import {ImageRender} from './image-render'
 import {isMobile} from '../../../../../util/container'
-import * as Types from '../../../../../constants/types/chat2'
+import {memoize} from '../../../../../util/memoize'
+import type * as Types from '../../../../../constants/types/chat2'
 import * as Constants from '../../../../../constants/chat2'
-import {ShowToastAfterSaving} from '../shared'
+import {getEditStyle, ShowToastAfterSaving} from '../shared'
 
 type Props = {
   arrowColor: string
+  downloadError: boolean
   hasProgress: boolean
   height: number
   isCollapsed: boolean
+  isHighlighted?: boolean
+  isEditing: boolean
   onClick: () => void
   onCollapse: () => void
   onShowInFinder?: (e: React.BaseSyntheticEvent) => void
   onDoubleClick: () => void
+  onRetry: () => void
   path: string
   fullPath: string
   fileName: string
+  message: Types.MessageAttachment
   progress: number
   transferState: Types.MessageAttachmentTransferState
-  showButton: null | 'play' | 'film'
+  showButton: boolean
   title: string
   toggleMessageMenu: () => void
   videoDuration: string
@@ -41,10 +47,11 @@ class ImageAttachment extends React.PureComponent<Props, State> {
   imageRef: any
 
   state = {loaded: false, loadingVideo: 'notloaded', playingVideo: false} as State
-  _setLoaded = () => this.setState({loaded: true})
-  _setVideoLoaded = () => this.setState({loadingVideo: 'loaded'})
+  private setLoaded = () => this.setState(s => (s.loaded ? null : {loaded: true}))
+  private setVideoLoaded = () =>
+    this.setState(s => (s.loadingVideo === 'loaded' ? null : {loadingVideo: 'loaded'}))
 
-  _onClick = () => {
+  private onClick = () => {
     // Once the user clicks the inline video once, then just let the native controls handle everything else.
     if (this.state.playingVideo) {
       return
@@ -59,36 +66,59 @@ class ImageAttachment extends React.PureComponent<Props, State> {
       this.props.onClick()
     }
   }
-  _onDoubleClick = () => {
+  private onDoubleClick = () => {
     if (this.props.inlineVideoPlayable && this.imageRef) {
       this.imageRef.pauseVideo()
     }
     this.props.onDoubleClick()
   }
 
+  private imageRenderStyle = memoize((height, width) =>
+    Styles.collapseStyles([
+      styles.image,
+      {
+        backgroundColor: undefined,
+        height,
+        width,
+      },
+    ])
+  )
+
+  private getStyleOverride = memoize((isEditing, isHighlighted) => ({
+    paragraph: {
+      ...getEditStyle(isEditing, isHighlighted),
+      backgroundColor: Styles.globalColors.black_05_on_white,
+    },
+  }))
+
   render() {
     const progressLabel = Constants.messageAttachmentTransferStateToProgressLabel(this.props.transferState)
+    const mobileImageFilename = this.props.message.deviceType === 'mobile'
+
     return (
       <>
         <ShowToastAfterSaving transferState={this.props.transferState} />
-        <Kb.Box2 direction="vertical" fullWidth={true}>
-          <Kb.Box2 direction="horizontal" fullWidth={true} gap="xtiny">
-            <Kb.Text type="BodyTiny">{this.props.fileName}</Kb.Text>
-            <Kb.Icon
-              boxStyle={styles.collapseBox}
-              style={styles.collapse}
-              onClick={this.props.onCollapse}
-              sizeType="Tiny"
-              type={this.props.isCollapsed ? 'iconfont-caret-right' : 'iconfont-caret-down'}
-            />
-          </Kb.Box2>
+        <Kb.Box2
+          direction="vertical"
+          fullWidth={true}
+          style={getEditStyle(this.props.isEditing, this.props.isHighlighted)}
+        >
+          {(!mobileImageFilename || !Styles.isMobile) && (
+            <Kb.Box2 direction="horizontal" fullWidth={true} gap="xtiny" style={styles.fileNameContainer}>
+              <Kb.Text type="BodyTiny" lineClamp={1} style={styles.filename}>
+                {mobileImageFilename ? 'Image from mobile' : this.props.fileName}
+              </Kb.Text>
+              <Kb.Icon
+                boxStyle={styles.collapseBox}
+                style={styles.collapse}
+                onClick={this.props.onCollapse}
+                sizeType="Tiny"
+                type={this.props.isCollapsed ? 'iconfont-caret-right' : 'iconfont-caret-down'}
+              />
+            </Kb.Box2>
+          )}
           {!this.props.isCollapsed && (
-            <Kb.ClickableBox
-              style={styles.imageContainer}
-              onClick={this._onClick}
-              onDoubleClick={this._onDoubleClick}
-              onLongPress={this.props.toggleMessageMenu}
-            >
+            <Kb.Box2 direction="vertical" fullWidth={true} style={styles.imageContainer}>
               <Kb.Box
                 style={Styles.collapseStyles([
                   styles.backgroundContainer,
@@ -103,91 +133,142 @@ class ImageAttachment extends React.PureComponent<Props, State> {
               >
                 {!!this.props.path && (
                   <Kb.Box2 direction="vertical" alignItems="center">
-                    <ImageRender
-                      ref={ref => {
-                        this.imageRef = ref
-                      }}
-                      src={this.props.path}
-                      videoSrc={this.props.fullPath}
-                      onLoad={this._setLoaded}
-                      onLoadedVideo={this._setVideoLoaded}
-                      loaded={this.state.loaded}
-                      inlineVideoPlayable={this.props.inlineVideoPlayable}
-                      height={this.props.height}
-                      width={this.props.width}
-                      style={Styles.collapseStyles([
-                        styles.image,
-                        {
-                          backgroundColor: this.state.loaded ? undefined : Styles.globalColors.fastBlank,
+                    <Kb.ClickableBox
+                      onClick={this.onClick}
+                      onDoubleClick={this.onDoubleClick}
+                      onLongPress={this.props.toggleMessageMenu}
+                    >
+                      <Kb.Box2
+                        direction="vertical"
+                        alignItems="center"
+                        style={{
                           height: this.props.height,
+                          margin: 3,
+                          overflow: 'hidden',
                           width: this.props.width,
-                        },
-                      ])}
-                    />
-                    {!this.state.playingVideo && (
-                      <Kb.Box
-                        style={Styles.collapseStyles([
-                          styles.absoluteContainer,
-                          {
-                            height: this.props.height,
-                            width: this.props.width,
-                          },
-                        ])}
+                        }}
                       >
-                        {!!this.props.showButton && (
-                          <Kb.Icon
-                            type={this.props.showButton === 'play' ? 'icon-play-64' : 'icon-film-64'}
-                            style={Kb.iconCastPlatformStyles(styles.playButton)}
-                          />
-                        )}
-                        {this.props.videoDuration.length > 0 && this.state.loaded && (
-                          <Kb.Box style={styles.durationContainer}>
-                            <Kb.Text type="BodyTinyBold" style={styles.durationText}>
-                              {this.props.videoDuration}
-                            </Kb.Text>
+                        <ImageRender
+                          ref={ref => {
+                            this.imageRef = ref
+                          }}
+                          src={this.props.path}
+                          videoSrc={this.props.fullPath}
+                          onLoad={this.setLoaded}
+                          onLoadedVideo={this.setVideoLoaded}
+                          loaded={this.state.loaded}
+                          inlineVideoPlayable={this.props.inlineVideoPlayable}
+                          height={this.props.height}
+                          width={this.props.width}
+                          style={this.imageRenderStyle(this.props.height, this.props.width)}
+                        />
+                        {!this.state.playingVideo && (
+                          <Kb.Box
+                            style={Styles.collapseStyles([
+                              styles.absoluteContainer,
+                              {
+                                height: this.props.height,
+                                width: this.props.width,
+                              },
+                            ])}
+                          >
+                            {!!this.props.showButton && (
+                              <Kb.Icon
+                                type={this.props.showButton ? 'icon-play-64' : 'icon-film-64'}
+                                style={styles.playButton}
+                              />
+                            )}
+                            {this.props.videoDuration.length > 0 && this.state.loaded && (
+                              <Kb.Box style={styles.durationContainer}>
+                                <Kb.Text type="BodyTinyBold" style={styles.durationText}>
+                                  {this.props.videoDuration}
+                                </Kb.Text>
+                              </Kb.Box>
+                            )}
+                            {!!this.props.arrowColor && (
+                              <Kb.Box style={styles.downloadedIconWrapper}>
+                                <Kb.Icon
+                                  type="iconfont-download"
+                                  style={styles.downloadIcon}
+                                  color={this.props.arrowColor}
+                                />
+                              </Kb.Box>
+                            )}
+                            {!this.state.loaded && (
+                              <Kb.Box2
+                                direction="vertical"
+                                centerChildren={true}
+                                style={Styles.collapseStyles([
+                                  styles.spinnerContainer,
+                                  {
+                                    height: this.props.height,
+                                    width: this.props.width,
+                                  },
+                                ])}
+                              >
+                                <Kb.ProgressIndicator style={styles.progress} />
+                              </Kb.Box2>
+                            )}
                           </Kb.Box>
                         )}
-                        {!!this.props.arrowColor && (
-                          <Kb.Box style={styles.downloadedIconWrapper}>
-                            <Kb.Icon
-                              type="iconfont-download"
-                              style={Kb.iconCastPlatformStyles(styles.downloadIcon)}
-                              color={this.props.arrowColor}
-                            />
-                          </Kb.Box>
-                        )}
-                        {!this.state.loaded && <Kb.ProgressIndicator style={styles.progress} />}
-                      </Kb.Box>
-                    )}
+                      </Kb.Box2>
+                    </Kb.ClickableBox>
                     {this.props.title.length > 0 && (
-                      <Kb.Text
-                        type="Body"
-                        style={Styles.collapseStyles([
-                          styles.title,
-                          {
-                            marginTop: !this.state.loaded && !isMobile ? this.props.height : undefined,
-                          },
-                        ])}
+                      <Kb.Box2
+                        direction="vertical"
+                        style={Styles.collapseStyles([styles.title])}
+                        alignItems="flex-start"
                       >
-                        {this.props.title}
-                      </Kb.Text>
+                        <Kb.Markdown
+                          messageType="attachment"
+                          selectable={true}
+                          style={getEditStyle(this.props.isEditing, this.props.isHighlighted)}
+                          styleOverride={
+                            Styles.isMobile
+                              ? this.getStyleOverride(this.props.isEditing, this.props.isHighlighted)
+                              : undefined
+                          }
+                          allowFontScaling={true}
+                        >
+                          {this.props.title}
+                        </Kb.Markdown>
+                      </Kb.Box2>
                     )}
                   </Kb.Box2>
                 )}
                 {Styles.isMobile && this.state.loadingVideo === 'loading' && (
-                  <Kb.ProgressIndicator style={styles.progress} />
+                  <Kb.Box2
+                    style={Styles.collapseStyles([
+                      styles.spinnerContainer,
+                      {
+                        height: this.props.height,
+                        width: this.props.width,
+                      },
+                    ])}
+                    centerChildren={true}
+                    direction="vertical"
+                  >
+                    <Kb.ProgressIndicator style={styles.progress} />
+                  </Kb.Box2>
                 )}
               </Kb.Box>
               <Kb.Box style={styles.progressContainer}>
-                {!this.props.onShowInFinder && (
+                {!this.props.onShowInFinder && !this.props.downloadError && (
                   <Kb.Text type="BodySmall" style={styles.progressLabel}>
-                    {progressLabel ||
-                      '\u00A0' /* always show this so we don't change sizes when we're uploading. This is a short term thing, ultimately we should hoist this type of overlay up over the content so it can go away and we won't be left with a gap */}
+                    {progressLabel}
                   </Kb.Text>
                 )}
                 {this.props.hasProgress && <Kb.ProgressBar ratio={this.props.progress} />}
+                {this.props.downloadError && (
+                  <Kb.Text type="BodySmall" style={styles.downloadErrorLabel}>
+                    Failed to download.{' '}
+                    <Kb.Text type="BodySmall" style={styles.retry} onClick={this.props.onRetry}>
+                      Retry
+                    </Kb.Text>
+                  </Kb.Text>
+                )}
               </Kb.Box>
-            </Kb.ClickableBox>
+            </Kb.Box2>
           )}
           {this.props.onShowInFinder && (
             <Kb.Text
@@ -208,11 +289,9 @@ class ImageAttachment extends React.PureComponent<Props, State> {
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      absoluteContainer: {
-        position: 'absolute',
-      },
+      absoluteContainer: {position: 'absolute'},
       backgroundContainer: {
-        backgroundColor: Styles.globalColors.black_05,
+        backgroundColor: Styles.globalColors.black_05_on_white,
         borderRadius: Styles.borderRadius,
         maxWidth: 330,
         position: 'relative',
@@ -225,6 +304,10 @@ const styles = Styles.styleSheetCreate(
       collapseBox: {
         ...Styles.globalStyles.flexBoxRow,
         alignItems: 'center',
+      },
+      downloadErrorLabel: {
+        color: Styles.globalColors.redDark,
+        marginRight: Styles.globalMargins.tiny,
       },
       downloadIcon: {
         maxHeight: 14,
@@ -254,19 +337,23 @@ const styles = Styles.styleSheetCreate(
         paddingLeft: 3,
         paddingRight: 3,
       },
+      fileNameContainer: {paddingRight: Styles.globalMargins.small},
+      filename: {backgroundColor: Styles.globalColors.fastBlank},
       image: {
         ...Styles.globalStyles.rounded,
         backgroundColor: Styles.globalColors.fastBlank,
-        margin: 3,
+        marginBottom: 3,
+        marginLeft: 3,
+        marginRight: 3,
+        marginTop: 0,
         maxWidth: 320,
         position: 'relative',
       },
       imageContainer: {
-        ...Styles.globalStyles.flexBoxColumn,
         alignItems: 'flex-start',
+        alignSelf: 'flex-start',
         paddingBottom: Styles.globalMargins.xtiny,
         paddingTop: Styles.globalMargins.xtiny,
-        width: '100%',
       },
       link: {
         color: Styles.globalColors.black_50,
@@ -283,15 +370,6 @@ const styles = Styles.styleSheetCreate(
         top: '50%',
       },
       progress: {
-        bottom: '50%',
-        left: '50%',
-        marginBottom: -24,
-        marginLeft: -24,
-        marginRight: -24,
-        marginTop: -24,
-        position: 'absolute',
-        right: '50%',
-        top: '50%',
         width: 48,
       },
       progressContainer: {
@@ -301,6 +379,13 @@ const styles = Styles.styleSheetCreate(
       progressLabel: {
         color: Styles.globalColors.black_50,
         marginRight: Styles.globalMargins.tiny,
+      },
+      retry: {
+        color: Styles.globalColors.redDark,
+        textDecorationLine: 'underline',
+      },
+      spinnerContainer: {
+        position: 'absolute',
       },
       title: Styles.platformStyles({
         common: {

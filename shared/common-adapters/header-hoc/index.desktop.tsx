@@ -4,8 +4,7 @@ import BackButton from '../back-button'
 import Box from '../box'
 import Icon from '../icon'
 import * as Styles from '../../styles'
-import {Props, LeftActionProps} from './types'
-import {hoistNonReactStatic} from '../../util/container'
+import type {Props, LeftActionProps} from '.'
 
 export const HeaderHocHeader = ({
   headerStyle,
@@ -16,11 +15,11 @@ export const HeaderHocHeader = ({
   rightActions,
   theme = 'light',
 }: Props) => (
-  <Box style={Styles.collapseStyles([_headerStyle, _headerStyleThemed[theme], headerStyle])}>
+  <Box style={Styles.collapseStyles([_headerStyle, _headerStyleThemed[theme], headerStyle] as any)}>
     {customComponent}
     {onCancel && (
       <Icon
-        style={Styles.collapseStyles([_styleClose, _styleCloseThemed[theme]])}
+        style={Styles.collapseStyles([_styleClose, _styleCloseThemed[theme]] as any)}
         type="iconfont-close"
         onClick={onCancel}
       />
@@ -46,7 +45,7 @@ export const LeftAction = ({
   leftActionText,
   onLeftAction,
   theme,
-}: LeftActionProps): React.ReactNode => (
+}: LeftActionProps) => (
   <Box style={Styles.collapseStyles([styles.leftAction, hasTextTitle && styles.grow])}>
     {onLeftAction &&
       (leftAction === 'cancel' ? (
@@ -66,16 +65,14 @@ export const LeftAction = ({
           }
           style={styles.action}
           textStyle={disabled ? styles.disabledText : undefined}
-          onClick={disabled ? null : onLeftAction}
+          onClick={disabled ? undefined : onLeftAction}
         />
       ))}
   </Box>
 )
 
-function HeaderHoc<P extends {}>(WrappedComponent: React.ComponentType<P>) {
-  const HH = (props: P & Props) => <WrappedComponent {...props as P} />
-  hoistNonReactStatic(HH, WrappedComponent)
-  return HH
+export const HeaderHocWrapper = (props: Props & {children: React.ReactNode}) => {
+  return props.children
 }
 
 const _headerStyle = {
@@ -157,4 +154,27 @@ const styles = Styles.styleSheetCreate(() => ({
   }),
 }))
 
-export default HeaderHoc
+const noop = () => {}
+export const HeaderLeftBlank = () => (
+  <LeftAction badgeNumber={0} leftAction="back" onLeftAction={noop} style={{opacity: 0}} />
+)
+
+export const HeaderLeftArrow = hp =>
+  hp.canGoBack ? (
+    <LeftAction
+      badgeNumber={0}
+      leftAction="back"
+      onLeftAction={hp.onPress} // react navigation makes sure this onPress can only happen once
+      customIconColor={hp.tintColor}
+    />
+  ) : null
+
+export const HeaderLeftCancel = hp =>
+  hp.canGoBack ? (
+    <LeftAction
+      badgeNumber={0}
+      leftAction="cancel"
+      onLeftAction={hp.onPress} // react navigation makes sure this onPress can only happen once
+      customIconColor={hp.tintColor}
+    />
+  ) : null

@@ -7,7 +7,6 @@ package libgit
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -36,7 +35,7 @@ func initConfigForAutogit(t *testing.T) (
 
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
 
-	tempdir, err := ioutil.TempDir(os.TempDir(), "journal_server")
+	tempdir, err := os.MkdirTemp(os.TempDir(), "journal_server")
 	require.NoError(t, err)
 	defer func() {
 		if !success {
@@ -47,7 +46,7 @@ func initConfigForAutogit(t *testing.T) (
 	err = config.EnableDiskLimiter(tempdir)
 	require.NoError(t, err)
 	err = config.EnableJournaling(
-		ctx, tempdir, libkbfs.TLFJournalSingleOpBackgroundWorkEnabled)
+		ctx, tempdir, libkbfs.TLFJournalBackgroundWorkEnabled)
 	require.NoError(t, err)
 
 	success = true

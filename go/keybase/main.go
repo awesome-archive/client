@@ -6,7 +6,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"runtime"
@@ -262,6 +261,7 @@ func mainInner(g *libkb.GlobalContext, startupErrors []error) error {
 func configOtherLibraries(g *libkb.GlobalContext) error {
 	// Set our UID -> Username mapping service
 	g.SetUIDMapper(uidmap.NewUIDMap(g.Env.GetUIDMapFullNameCacheSize()))
+	g.SetServiceSummaryMapper(uidmap.NewServiceSummaryMap(1000))
 	return nil
 }
 
@@ -302,7 +302,7 @@ func configureProcesses(g *libkb.GlobalContext, cl *libcmdline.CommandLine, cmd 
 		if err != nil {
 			return err
 		}
-		err = svc.StartLoopbackServer()
+		err = svc.StartLoopbackServer(libkb.LoginAttemptOffline)
 		if err != nil {
 			return err
 		}
@@ -494,7 +494,7 @@ func startProfile(g *libkb.GlobalContext) {
 		for {
 			time.Sleep(interval)
 			g.Log.Debug("dumping periodic memory profile")
-			f, err := ioutil.TempFile("", "keybase_memprofile")
+			f, err := os.CreateTemp("", "keybase_memprofile")
 			if err != nil {
 				g.Log.Debug("could not create memory profile: ", err)
 				continue

@@ -4,17 +4,19 @@ import * as Types from '../constants/types/people'
 export type Props = {
   oldItems: Array<Types.PeopleScreenItem>
   newItems: Array<Types.PeopleScreenItem>
+  wotUpdates: Map<string, Types.WotUpdate>
   followSuggestions: Array<Types.FollowSuggestion>
-  getData: (markViewed?: boolean) => void
+  getData: (markViewed?: boolean, force?: boolean) => void
   onClickUser: (username: string) => void
   onOpenAccountSwitcher?: () => void
-  showAirdrop: boolean
   signupEmail: string
   myUsername: string
-  waiting: boolean
 }
+export type WrapProps = {
+  waiting: boolean
+} & Props
 
-export default class People extends React.Component<Props> {}
+export default class People extends React.Component<WrapProps> {}
 export class Header extends React.Component<{
   onClickUser: (username: string) => void
   myUsername: string

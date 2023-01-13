@@ -5,7 +5,6 @@ package libkb
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,7 +30,7 @@ func NewSecretStoreFile(dir string) *SecretStoreFile {
 }
 
 func (s *SecretStoreFile) RetrieveSecret(mctx MetaContext, username NormalizedUsername) (secret LKSecFullSecret, err error) {
-	defer mctx.TraceTimed(fmt.Sprintf("SecretStoreFile.RetrieveSecret(%s)", username), func() error { return err })()
+	defer mctx.Trace(fmt.Sprintf("SecretStoreFile.RetrieveSecret(%s)", username), &err)()
 	mctx.Debug("Retrieving secret V2 from file")
 	secret, err = s.retrieveSecretV2(mctx, username)
 	switch err.(type) {
@@ -62,7 +61,7 @@ func (s *SecretStoreFile) RetrieveSecret(mctx MetaContext, username NormalizedUs
 func (s *SecretStoreFile) retrieveSecretV1(mctx MetaContext, username NormalizedUsername) (LKSecFullSecret, error) {
 	userpath := s.userpath(username)
 	mctx.Debug("SecretStoreFile.retrieveSecretV1: checking path: %s", userpath)
-	secret, err := ioutil.ReadFile(userpath)
+	secret, err := os.ReadFile(userpath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return LKSecFullSecret{}, NewErrSecretForUserNotFound(username)
@@ -77,7 +76,7 @@ func (s *SecretStoreFile) retrieveSecretV1(mctx MetaContext, username Normalized
 func (s *SecretStoreFile) retrieveSecretV2(mctx MetaContext, username NormalizedUsername) (LKSecFullSecret, error) {
 	userpath := s.userpathV2(username)
 	mctx.Debug("SecretStoreFile.retrieveSecretV2: checking path: %s", userpath)
-	xor, err := ioutil.ReadFile(userpath)
+	xor, err := os.ReadFile(userpath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return LKSecFullSecret{}, NewErrSecretForUserNotFound(username)
@@ -86,7 +85,7 @@ func (s *SecretStoreFile) retrieveSecretV2(mctx MetaContext, username Normalized
 		return LKSecFullSecret{}, err
 	}
 
-	noise, err := ioutil.ReadFile(s.noisepathV2(username))
+	noise, err := os.ReadFile(s.noisepathV2(username))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return LKSecFullSecret{}, NewErrSecretForUserNotFound(username)
@@ -108,7 +107,7 @@ func (s *SecretStoreFile) retrieveSecretV2(mctx MetaContext, username Normalized
 }
 
 func (s *SecretStoreFile) StoreSecret(mctx MetaContext, username NormalizedUsername, secret LKSecFullSecret) (err error) {
-	defer mctx.TraceTimed(fmt.Sprintf("SecretStoreFile.StoreSecret(%s)", username), func() error { return err })()
+	defer mctx.Trace(fmt.Sprintf("SecretStoreFile.StoreSecret(%s)", username), &err)()
 	noise, err := MakeNoise()
 	if err != nil {
 		return err
@@ -124,11 +123,11 @@ func (s *SecretStoreFile) StoreSecret(mctx MetaContext, username NormalizedUsern
 		return err
 	}
 
-	fsec, err := ioutil.TempFile(s.dir, username.String())
+	fsec, err := os.CreateTemp(s.dir, username.String())
 	if err != nil {
 		return err
 	}
-	fnoise, err := ioutil.TempFile(s.dir, username.String())
+	fnoise, err := os.CreateTemp(s.dir, username.String())
 	if err != nil {
 		return err
 	}
@@ -207,7 +206,7 @@ func (s *SecretStoreFile) StoreSecret(mctx MetaContext, username NormalizedUsern
 }
 
 func (s *SecretStoreFile) ClearSecret(mctx MetaContext, username NormalizedUsername) (err error) {
-	defer mctx.TraceTimed(fmt.Sprintf("SecretStoreFile.ClearSecret(%s)", username), func() error { return err })()
+	defer mctx.Trace(fmt.Sprintf("SecretStoreFile.ClearSecret(%s)", username), &err)()
 	// try both
 
 	if username.IsNil() {
@@ -258,7 +257,7 @@ func (s *SecretStoreFile) clearSecretV2(username NormalizedUsername) error {
 }
 
 func (s *SecretStoreFile) GetUsersWithStoredSecrets(mctx MetaContext) (users []string, err error) {
-	defer mctx.TraceTimed("SecretStoreFile.GetUsersWithStoredSecrets", func() error { return err })()
+	defer mctx.Trace("SecretStoreFile.GetUsersWithStoredSecrets", &err)()
 	files, err := filepath.Glob(filepath.Join(s.dir, "*.ss*"))
 	if err != nil {
 		return nil, err

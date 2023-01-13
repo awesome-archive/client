@@ -15,7 +15,6 @@ const disabledDescription = 'Import your phone contacts and start encrypted chat
 
 const ManageContacts = () => {
   const dispatch = Container.useDispatch()
-  const nav = Container.useSafeNavigation()
 
   const status = Container.useSelector(s => s.settings.contacts.permissionStatus)
   const contactsImported = Container.useSelector(s => s.settings.contacts.importEnabled)
@@ -25,20 +24,18 @@ const ManageContacts = () => {
     dispatch(SettingsGen.createLoadContactImportEnabled())
   }
 
-  const onBack = React.useCallback(() => dispatch(nav.safeNavigateUpPayload()), [dispatch, nav])
   const onToggle = React.useCallback(
     () =>
       dispatch(
         status !== 'granted'
-          ? SettingsGen.createRequestContactPermissions({thenToggleImportOn: true})
-          : SettingsGen.createEditContactImportEnabled({enable: !contactsImported})
+          ? SettingsGen.createRequestContactPermissions({fromSettings: true, thenToggleImportOn: true})
+          : SettingsGen.createEditContactImportEnabled({enable: !contactsImported, fromSettings: true})
       ),
     [dispatch, contactsImported, status]
   )
 
   return (
     <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.positionRelative}>
-      <Kb.HeaderHocHeader title="Contacts" onBack={onBack} />
       <Kb.BoxGrow>
         <ManageContactsBanner />
         <SettingsSection>
@@ -49,7 +46,7 @@ const ManageContacts = () => {
             </Kb.Text>
             <Kb.ButtonBar align="flex-start" style={styles.buttonBar}>
               <Kb.Button
-                disabled={status === 'never_ask_again'}
+                disabled={status === 'denied'}
                 mode="Secondary"
                 label={contactsImported && status === 'granted' ? 'Remove contacts' : 'Import phone contacts'}
                 type={contactsImported && status === 'granted' ? 'Danger' : 'Default'}
@@ -63,6 +60,11 @@ const ManageContacts = () => {
       </Kb.BoxGrow>
     </Kb.Box2>
   )
+}
+
+ManageContacts.navigationOptions = {
+  header: undefined,
+  title: 'Contacts',
 }
 
 const ManageContactsBanner = () => {
@@ -88,13 +90,13 @@ const ManageContactsBanner = () => {
 
   return (
     <>
-      {importedCount !== null && (
+      {!!importedCount && (
         <Kb.Banner color="green">
           <Kb.BannerParagraph bannerColor="green" content={[`You imported ${importedCount} contacts.`]} />
           <Kb.BannerParagraph bannerColor="green" content={[{onClick: onStartChat, text: 'Start a chat'}]} />
         </Kb.Banner>
       )}
-      {(status === 'never_ask_again' || (Styles.isAndroid && status !== 'granted' && contactsImported)) && (
+      {(status === 'denied' || (Styles.isAndroid && status !== 'granted' && contactsImported)) && (
         <Kb.Banner color="red">
           <Kb.BannerParagraph
             bannerColor="red"
@@ -119,6 +121,11 @@ const ManageContactsBanner = () => {
       )}
     </>
   )
+}
+
+ManageContacts.navigationOptions = {
+  header: undefined,
+  title: 'Contacts',
 }
 
 const styles = Styles.styleSheetCreate(

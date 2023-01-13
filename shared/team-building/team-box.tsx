@@ -1,14 +1,11 @@
+import * as Container from '../util/container'
+import * as Kb from '../common-adapters'
 import * as React from 'react'
+import * as Styles from '../styles'
 import GoButton from './go-button'
 import UserBubble from './user-bubble'
-import * as Kb from '../common-adapters'
-import * as Styles from '../styles'
-import * as Container from '../util/container'
-import {SelectedUser} from '../constants/types/team-building'
-import {FloatingRolePicker, sendNotificationFooter} from '../teams/role-picker'
-import {pluralize} from '../util/string'
+import type {SelectedUser, GoButtonLabel} from '../constants/types/team-building'
 import {e164ToDisplay} from '../util/phone-numbers'
-import {RolePickerProps} from '.'
 
 type Props = {
   allowPhoneEmail: boolean
@@ -18,10 +15,10 @@ type Props = {
   onUpArrowKeyDown: () => void
   teamSoFar: Array<SelectedUser>
   onRemove: (userId: string) => void
-  onBackspace: () => void
   onFinishTeamBuilding: () => void
   searchString: string
-  rolePickerProps?: RolePickerProps
+  goButtonLabel?: GoButtonLabel
+  waitingKey: string | null
 }
 
 const formatNameForUserBubble = (u: SelectedUser) => {
@@ -74,20 +71,23 @@ const TeamBox = (props: Props) => {
 
   const addMorePrompt = props.teamSoFar.length === 1 && (
     <Kb.Text type="BodyTiny" style={styles.addMorePrompt}>
-      Keep adding people, or click Start when done.
+      {`Keep adding people, or click ${props.goButtonLabel ?? 'Start'} when done.`}
     </Kb.Text>
   )
+
   return Styles.isMobile ? (
-    <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.container}>
-      <Kb.ScrollView
-        horizontal={true}
-        alwaysBounceHorizontal={false}
-        ref={scrollViewRef}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <UserBubbleCollection teamSoFar={props.teamSoFar} onRemove={props.onRemove} />
-        {addMorePrompt}
-      </Kb.ScrollView>
+    <Kb.Box2 direction="horizontal" fullWidth={true}>
+      <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.container}>
+        <Kb.ScrollView
+          horizontal={true}
+          alwaysBounceHorizontal={false}
+          ref={scrollViewRef}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <UserBubbleCollection teamSoFar={props.teamSoFar} onRemove={props.onRemove} />
+          {addMorePrompt}
+        </Kb.ScrollView>
+      </Kb.Box2>
     </Kb.Box2>
   ) : (
     <Kb.Box2 direction="horizontal" style={styles.container} fullWidth={true}>
@@ -106,30 +106,13 @@ const TeamBox = (props: Props) => {
         </Kb.ScrollView>
       </Kb.Box2>
       <Kb.Box2 direction="horizontal" fullHeight={true} style={{marginLeft: 'auto'}}>
-        {!!props.teamSoFar.length &&
-          (props.rolePickerProps ? (
-            <FloatingRolePicker
-              open={props.rolePickerProps.showRolePicker}
-              onConfirm={props.onFinishTeamBuilding}
-              onSelectRole={props.rolePickerProps.onSelectRole}
-              selectedRole={props.rolePickerProps.selectedRole}
-              onCancel={() => props.rolePickerProps && props.rolePickerProps.changeShowRolePicker(false)}
-              disabledRoles={props.rolePickerProps.disabledRoles}
-              confirmLabel={`Add as ${pluralize(props.rolePickerProps.selectedRole, props.teamSoFar.length)}`}
-              footerComponent={sendNotificationFooter(
-                'Announce them in team chats',
-                props.rolePickerProps.sendNotification,
-                props.rolePickerProps.changeSendNotification
-              )}
-            >
-              <GoButton
-                label="Add"
-                onClick={() => props.rolePickerProps && props.rolePickerProps.changeShowRolePicker(true)}
-              />
-            </FloatingRolePicker>
-          ) : (
-            <GoButton label="Start" onClick={props.onFinishTeamBuilding} />
-          ))}
+        {!!props.teamSoFar.length && (
+          <GoButton
+            label={props.goButtonLabel ?? 'Start'}
+            onClick={props.onFinishTeamBuilding}
+            waitingKey={props.waitingKey}
+          />
+        )}
       </Kb.Box2>
     </Kb.Box2>
   )

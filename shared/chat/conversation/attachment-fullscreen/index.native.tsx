@@ -2,9 +2,10 @@ import * as React from 'react'
 import * as Kb from '../../../common-adapters/mobile.native'
 import * as Styles from '../../../styles'
 import MessagePopup from '../messages/message-popup'
-import {Props} from '.'
-import RNVideo from 'react-native-video'
+import {Video, ResizeMode} from 'expo-av'
 import logger from '../../../logger'
+import {ShowToastAfterSaving} from '../messages/attachment/shared'
+import type {Props} from '.'
 
 const {width: screenWidth, height: screenHeight} = Kb.NativeDimensions.get('window')
 
@@ -41,113 +42,175 @@ class AutoMaxSizeImage extends React.Component<
   render() {
     return (
       <Kb.ZoomableBox
-        contentContainerStyle={{flex: 1, position: 'relative'}}
+        contentContainerStyle={styles.zoomableBoxContainer}
         maxZoom={10}
-        style={{height: '100%', overflow: 'hidden', position: 'relative', width: '100%'}}
+        style={styles.zoomableBox}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
       >
         <Kb.NativeFastImage
           {...this.props}
-          resizeMode="contain"
-          style={{
-            alignSelf: 'center',
-            flex: 1,
-            height: Math.min(this.state.height, screenHeight),
-            opacity: this.props.opacity,
-            width: Math.min(this.state.width, screenWidth),
-          }}
+          resizeMode={ResizeMode.CONTAIN}
+          style={Styles.collapseStyles([
+            styles.fastImage,
+            {
+              height: Math.min(this.state.height, screenHeight),
+              opacity: this.props.opacity,
+              width: Math.min(this.state.width, screenWidth),
+            },
+          ])}
         />
       </Kb.ZoomableBox>
     )
   }
 }
 
-class _Fullscreen extends React.Component<Props & Kb.OverlayParentProps, {loaded: boolean}> {
-  state = {loaded: false}
-  _setLoaded = () => this.setState({loaded: true})
-  render() {
-    return (
-      <Kb.SafeAreaViewTop
-        style={{
-          backgroundColor: Styles.globalColors.black,
-          ...Styles.globalStyles.flexBoxColumn,
-          ...Styles.globalStyles.fillAbsolute,
-        }}
-      >
-        <Kb.Text
-          type="Body"
-          onClick={this.props.onClose}
-          style={{color: Styles.globalColors.white, padding: Styles.globalMargins.small}}
+const Fullscreen = (p: Props) => {
+  const {path, previewHeight, message, onAllMedia, onClose, isVideo} = p
+  const [loaded, setLoaded] = React.useState(false)
+
+  const {toggleShowingPopup, showingPopup, popup} = Kb.usePopup(attachTo => (
+    <MessagePopup
+      attachTo={attachTo}
+      conversationIDKey={message.conversationIDKey}
+      ordinal={message.id}
+      onHidden={toggleShowingPopup}
+      position="bottom left"
+      visible={showingPopup}
+    />
+  ))
+
+  let content: React.ReactNode = null
+  let spinner: React.ReactNode = null
+  if (path) {
+    if (isVideo) {
+      content = (
+        <Kb.Box2
+          direction="vertical"
+          fullWidth={true}
+          fullHeight={true}
+          centerChildren={true}
+          style={styles.videoWrapper}
         >
-          Close
-        </Kb.Text>
-        <Kb.Box style={{...Styles.globalStyles.flexBoxCenter, flex: 1}}>
-          {!!this.props.path && this.props.isVideo ? (
-            <Kb.Box2
-              direction="vertical"
-              fullWidth={true}
-              centerChildren={true}
-              style={{position: 'relative'}}
-            >
-              <RNVideo
-                source={{uri: `${this.props.path}&contentforce=true`}}
-                onError={e => {
-                  logger.error(`Error loading vid: ${JSON.stringify(e)}`)
-                }}
-                onLoad={this._setLoaded}
-                paused={true}
-                controls={true}
-                style={{
-                  height: this.props.previewHeight,
-                  width: this.props.previewWidth,
-                }}
-                resizeMode="contain"
-              />
-            </Kb.Box2>
-          ) : (
-            <AutoMaxSizeImage
-              source={{uri: `${this.props.path}`}}
-              onLoad={this._setLoaded}
-              opacity={this.state.loaded ? 1 : 0}
-            />
-          )}
-          {!this.state.loaded && (
-            <Kb.ProgressIndicator
-              style={{alignSelf: 'center', margin: 'auto', position: 'absolute', top: '50%', width: 48}}
-              white={true}
-            />
-          )}
-        </Kb.Box>
-        <Kb.Icon
-          type="iconfont-ellipsis"
-          // @ts-ignore TODO fix styles
-          style={styles.headerFooter}
-          color={Styles.globalColors.white}
-          onClick={this.props.toggleShowingMenu}
-        />
-        <MessagePopup
-          attachTo={this.props.getAttachmentRef}
-          message={this.props.message}
-          onHidden={this.props.toggleShowingMenu}
-          position="bottom left"
-          visible={this.props.showingMenu}
-        />
-      </Kb.SafeAreaViewTop>
+          <Video
+            source={{uri: `${path}&contentforce=true`}}
+            onError={e => {
+              logger.error(`Error loading vid: ${JSON.stringify(e)}`)
+            }}
+            onLoad={() => setLoaded(true)}
+            shouldPlay={false}
+            useNativeControls={true}
+            style={{
+              height: Math.max(previewHeight, 100),
+              width: '100%',
+            }}
+            resizeMode={ResizeMode.CONTAIN}
+          />
+        </Kb.Box2>
+      )
+    } else {
+      content = (
+        <AutoMaxSizeImage source={{uri: `${path}`}} onLoad={() => setLoaded(true)} opacity={loaded ? 1 : 0} />
+      )
+    }
+  }
+  if (!loaded) {
+    spinner = (
+      <Kb.Box2
+        direction="vertical"
+        style={styles.progressWrapper}
+        centerChildren={true}
+        fullHeight={true}
+        fullWidth={true}
+      >
+        <Kb.ProgressIndicator style={styles.progressIndicator} white={true} />
+      </Kb.Box2>
     )
   }
+
+  return (
+    <Kb.Box2
+      direction="vertical"
+      style={{backgroundColor: Styles.globalColors.blackOrBlack}}
+      fullWidth={true}
+      fullHeight={true}
+    >
+      {spinner}
+      <ShowToastAfterSaving transferState={message.transferState} />
+      <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.headerWrapper}>
+        <Kb.Text type="Body" onClick={onClose} style={styles.close}>
+          Close
+        </Kb.Text>
+        <Kb.Text type="Body" onClick={onAllMedia} style={styles.allMedia}>
+          All media
+        </Kb.Text>
+      </Kb.Box2>
+      <Kb.BoxGrow>{content}</Kb.BoxGrow>
+      <Kb.Button icon="iconfont-ellipsis" style={styles.headerFooter} onClick={toggleShowingPopup} />
+      {popup}
+    </Kb.Box2>
+  )
 }
-const Fullscreen = Kb.OverlayParentHOC(_Fullscreen)
 
 const styles = Styles.styleSheetCreate(
   () =>
     ({
+      allMedia: {
+        backgroundColor: Styles.globalColors.blackOrBlack,
+        color: Styles.globalColors.blueDark,
+        marginLeft: 'auto',
+        padding: Styles.globalMargins.small,
+      },
+      assetWrapper: {
+        ...Styles.globalStyles.flexBoxCenter,
+        flex: 1,
+      },
+      close: {
+        backgroundColor: Styles.globalColors.blackOrBlack,
+        color: Styles.globalColors.blueDark,
+        padding: Styles.globalMargins.small,
+      },
+      fastImage: {
+        alignSelf: 'center',
+        flex: 1,
+      },
       headerFooter: {
         ...Styles.globalStyles.flexBoxRow,
         alignItems: 'center',
+        backgroundColor: Styles.globalColors.blackOrBlack,
+        bottom: Styles.globalMargins.small,
         flexShrink: 0,
-        height: 44,
-        paddingLeft: Styles.globalMargins.small,
+        height: 34,
+        left: Styles.globalMargins.small,
+        position: 'absolute',
+        width: 34,
+        zIndex: 3,
+      },
+      headerWrapper: {backgroundColor: Styles.globalColors.blackOrBlack},
+      progressIndicator: {
+        width: 48,
+      },
+      progressWrapper: {
+        position: 'absolute',
+      },
+      safeAreaTop: {
+        ...Styles.globalStyles.flexBoxColumn,
+        ...Styles.globalStyles.fillAbsolute,
+        backgroundColor: Styles.globalColors.blackOrBlack,
+      },
+      videoWrapper: {
+        position: 'relative',
+      },
+      zoomableBox: {
+        backgroundColor: Styles.globalColors.blackOrBlack,
+        height: '100%',
+        overflow: 'hidden',
+        position: 'relative',
+        width: '100%',
+      },
+      zoomableBoxContainer: {
+        flex: 1,
+        position: 'relative',
       },
     } as const)
 )

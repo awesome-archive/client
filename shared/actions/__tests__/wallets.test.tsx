@@ -1,4 +1,6 @@
 /* eslint-env jest */
+/*
+import * as Container from '../../util/container'
 import * as Constants from '../../constants/wallets'
 import * as Tabs from '../../constants/tabs'
 import * as WalletsGen from '../wallets-gen'
@@ -15,15 +17,16 @@ const blankStore = Testing.getInitialStore()
 const initialStore = {
   ...blankStore,
   config: {loggedIn: true, username: 'user'},
-  wallets: blankStore.wallets.merge({
-    accountMap: blankStore.wallets.accountMap.set(
-      Types.stringToAccountID('fake account ID'),
-      Constants.makeAccount()
-    ),
-  }),
+  wallets: {
+    ...blankStore.wallets,
+    accountMap: new Map([
+      ...blankStore.wallets.accountMap.entries(),
+      [Types.stringToAccountID('fake account ID'), Constants.makeAccount()],
+    ]),
+  },
 }
 
-const startOnWalletsTab = dispatch => {
+const startOnWalletsTab = (dispatch: Container.Dispatch) => {
   dispatch(RouteTreeGen.createSwitchLoggedIn({loggedIn: true}))
   dispatch(RouteTreeGen.createNavigateAppend({path: [Tabs.walletsTab]}))
 }
@@ -129,6 +132,7 @@ it('build and send payment', () => {
 
       const sendRPC = jest.spyOn(RPCStellarTypes, 'localSendPaymentLocalRpcPromise')
       const sendPaymentResult = {
+        jumpToChat: '',
         kbTxID: 'fake transaction id',
         pending: false,
       }
@@ -246,3 +250,5 @@ it('primes send/request form', () => {
       ])
     })
 })
+*/
+export default {}

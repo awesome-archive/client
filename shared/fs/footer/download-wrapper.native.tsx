@@ -1,6 +1,6 @@
 import * as React from 'react'
 import {NativeAnimated, NativeEasing} from '../../common-adapters/mobile.native'
-import {Props} from './download-wrapper'
+import type {Props} from './download-wrapper'
 
 type State = {
   opacity: NativeAnimated.AnimatedValue
@@ -12,6 +12,7 @@ export default class DownloadNativeWrapper extends React.PureComponent<Props, St
     duration: 3000,
     easing: NativeEasing.linear,
     toValue: 0,
+    useNativeDriver: false,
   })
 
   _started = false

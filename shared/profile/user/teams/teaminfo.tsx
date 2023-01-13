@@ -3,7 +3,7 @@ import * as Styles from '../../../styles'
 import * as Constants from '../../../constants/tracker2'
 import OpenMeta from './openmeta'
 import FloatingMenu from '../../../common-adapters/floating-menu'
-import ConnectedUsernames from '../../../common-adapters/usernames/container'
+import ConnectedUsernames from '../../../common-adapters/usernames'
 import NameWithIcon from '../../../common-adapters/name-with-icon'
 import Text from '../../../common-adapters/text'
 import {Box2} from '../../../common-adapters/box'
@@ -25,10 +25,11 @@ type Props = {
   isOpen: boolean
   membersCount: number
   name: string
+  position?: Styles.Position
   onChat?: () => void
   onHidden: () => void
-  onJoinTeam: (arg0: string) => void
-  onViewTeam: (arg0: string) => void
+  onJoinTeam: (teamname: string) => void
+  onViewTeam: () => void
   publicAdmins: Array<string>
   visible: boolean
 }
@@ -43,7 +44,7 @@ class TeamInfo extends React.Component<Props, {requested: boolean}> {
     this.setState({requested: true})
   }
   _onViewTeam = () => {
-    this.props.onViewTeam(this.props.name)
+    this.props.onViewTeam()
     this.props.onHidden()
   }
   _onChat = () => {
@@ -63,72 +64,69 @@ class TeamInfo extends React.Component<Props, {requested: boolean}> {
         onHidden={this.props.onHidden}
         visible={this.props.visible}
         propagateOutsideClicks={true}
-        header={{
-          title: 'header',
-          view: (
-            <Kb.Box2
-              centerChildren={true}
-              direction="vertical"
-              gap="tiny"
-              gapStart={true}
-              gapEnd={true}
-              style={styles.infoPopup}
-            >
-              <Kb.NameWithIcon
-                size="small"
-                teamname={this.props.name}
-                title={this.props.name}
-                metaOne={<OpenMeta isOpen={this.props.isOpen} />}
-                metaTwo={<Kb.Text type="BodySmall">{memberText}</Kb.Text>}
+        header={
+          <Kb.Box2
+            centerChildren={true}
+            direction="vertical"
+            gap="tiny"
+            gapStart={true}
+            gapEnd={true}
+            style={styles.infoPopup}
+          >
+            <Kb.NameWithIcon
+              size="small"
+              teamname={this.props.name}
+              title={this.props.name}
+              metaOne={<OpenMeta isOpen={this.props.isOpen} />}
+              metaTwo={<Kb.Text type="BodySmall">{memberText}</Kb.Text>}
+            />
+            <Kb.Text type="Body" selectable={true} style={styles.description}>
+              {this.props.description}
+            </Kb.Text>
+            {this.props.onChat && (
+              <Kb.WaitingButton
+                waitingKey={Constants.waitingKey}
+                label="Chat"
+                onClick={this._onChat}
+                mode="Secondary"
               />
-              <Kb.Text type="Body" selectable={true} style={styles.description}>
-                {this.props.description}
+            )}
+            {/* With teamsRedesign we have external team page, always show view team button */}
+            <Kb.WaitingButton
+              waitingKey={Constants.waitingKey}
+              label="View team"
+              onClick={this._onViewTeam}
+              mode="Secondary"
+            />
+            {!this.props.inTeam && (
+              <Kb.WaitingButton
+                waitingKey={Constants.waitingKey}
+                label={
+                  this.state.requested ? 'Requested!' : this.props.isOpen ? 'Join team' : 'Request to join'
+                }
+                onClick={this.state.requested ? undefined : this._onJoinTeam}
+                type={this.props.isOpen ? 'Success' : 'Default'}
+                mode={this.state.requested ? 'Secondary' : 'Primary'}
+              />
+            )}
+            {!!this.props.publicAdmins.length && (
+              <Kb.Text center={true} type="BodySmall">
+                Public admins:{' '}
+                {
+                  <Kb.ConnectedUsernames
+                    type="BodySmallBold"
+                    colorFollowing={true}
+                    colorBroken={true}
+                    onUsernameClicked="profile"
+                    usernames={this.props.publicAdmins}
+                    containerStyle={styles.publicAdmins}
+                  />
+                }
               </Kb.Text>
-              {this.props.onChat && (
-                <Kb.WaitingButton
-                  waitingKey={Constants.waitingKey}
-                  label="Chat"
-                  onClick={this._onChat}
-                  mode="Secondary"
-                />
-              )}
-              {this.props.inTeam ? (
-                <Kb.WaitingButton
-                  waitingKey={Constants.waitingKey}
-                  label="View team"
-                  onClick={this._onViewTeam}
-                  mode="Secondary"
-                />
-              ) : (
-                <Kb.WaitingButton
-                  waitingKey={Constants.waitingKey}
-                  label={
-                    this.state.requested ? 'Requested!' : this.props.isOpen ? 'Join team' : 'Request to join'
-                  }
-                  onClick={this.state.requested ? undefined : this._onJoinTeam}
-                  type={this.props.isOpen ? 'Success' : 'Default'}
-                  mode={this.state.requested ? 'Secondary' : 'Primary'}
-                />
-              )}
-              {!!this.props.publicAdmins.length && (
-                <Kb.Text center={true} type="BodySmall">
-                  Public admins:{' '}
-                  {
-                    <Kb.ConnectedUsernames
-                      type="BodySmallSemibold"
-                      colorFollowing={true}
-                      colorBroken={true}
-                      onUsernameClicked="profile"
-                      usernames={this.props.publicAdmins}
-                      containerStyle={styles.publicAdmins}
-                    />
-                  }
-                </Kb.Text>
-              )}
-            </Kb.Box2>
-          ),
-        }}
-        position="bottom left"
+            )}
+          </Kb.Box2>
+        }
+        position={this.props.position ?? 'bottom left'}
         items={[]}
       />
     )
@@ -138,7 +136,15 @@ class TeamInfo extends React.Component<Props, {requested: boolean}> {
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      description: {textAlign: 'center'},
+      description: Styles.platformStyles({
+        common: {
+          textAlign: 'center',
+        },
+        isElectron: {
+          width: '100%',
+          wordWrap: 'break-word',
+        },
+      }),
       infoPopup: {
         maxWidth: 225,
         padding: Styles.globalMargins.small,

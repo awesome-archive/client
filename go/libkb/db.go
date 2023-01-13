@@ -21,6 +21,19 @@ const (
 	DBTeamChain         = 0x10
 	DBUserPlusAllKeysV1 = 0x19
 
+	DBIncomingSharePreference        = 0xa4
+	DBChatUserEmojis                 = 0xa5
+	DBChatInboxIndex                 = 0xa6
+	DBChatInboxConvs                 = 0xa7
+	DBChatParticipants               = 0xa8
+	DBOpenTeams                      = 0xa9
+	DBNetworkInstrumentation         = 0xaa
+	DBFeaturedBots                   = 0xab
+	DBChatEphemeralTracker           = 0xac
+	DBLoginTimes                     = 0xad
+	DBChatJourney                    = 0xae
+	DBTeamRoleMap                    = 0xaf
+	DBMisc                           = 0xb0
 	DBTeamMerkleCheck                = 0xb1
 	DBUidToServiceMap                = 0xb2
 	DBChatPinIgnore                  = 0xb3
@@ -36,13 +49,14 @@ const (
 	DBUserPlusKeysVersionedUnstubbed = 0xbd
 	DBOfflineRPC                     = 0xbe
 	DBChatCollapses                  = 0xbf
+	DBSupportsHiddenFlagStorage      = 0xc0
 	DBMerkleAudit                    = 0xca
 	DBUnfurler                       = 0xcb
 	DBStellarDisclaimer              = 0xcc
 	DBFTLStorage                     = 0xcd
 	DBTeamAuditor                    = 0xce
 	DBAttachmentUploader             = 0xcf
-	DBHasRandomPW                    = 0xd0
+	DBLegacyHasRandomPW              = 0xd0
 	DBDiskLRUEntries                 = 0xda
 	DBDiskLRUIndex                   = 0xdb
 	DBImplicitTeamConflictInfo       = 0xdc
@@ -66,8 +80,8 @@ const (
 	DBMerkleRoot                     = 0xf0
 	DBTrackers                       = 0xf1
 	DBGregor                         = 0xf2
-	DBTrackers2                      = 0xf3
-	DBTrackers2Reverse               = 0xf4
+	DBUnverifiedTrackersFollowers    = 0xf3
+	DBUnverifiedTrackersFollowing    = 0xf4
 	DBNotificationDismiss            = 0xf5
 	DBChatBlockIndex                 = 0xf6
 	DBChatBlocks                     = 0xf7
@@ -115,14 +129,16 @@ func IsPermDbKey(typ ObjType) bool {
 		DBDiskLRUIndex,
 		DBOfflineRPC,
 		DBChatCollapses,
-		DBHasRandomPW,
+		DBLegacyHasRandomPW,
 		DBChatReacji,
 		DBStellarDisclaimer,
 		DBChatIndex,
 		DBBoxAuditorPermanent,
 		DBSavedContacts,
 		DBContactResolution,
-		DBTeambotKeyWrongKID:
+		DBTeambotKeyWrongKID,
+		DBMisc,
+		DBIncomingSharePreference:
 		return true
 	default:
 		return false
@@ -142,19 +158,31 @@ func tablePrefix(table string) []byte {
 	return []byte(fmt.Sprintf("%s:", table))
 }
 
-func (k DbKey) ToString(table string) string {
-	return fmt.Sprintf("%s:%s", PrefixString(table, k.Typ), k.Key)
-}
-
-func (k DbKey) ToBytes(table string) []byte {
-	if IsPermDbKey(k.Typ) {
-		table = levelDbTablePerm
-	}
-	return []byte(k.ToString(table))
-}
-
-func PrefixString(table string, typ ObjType) string {
+func prefixStringWithTable(table string, typ ObjType) string {
 	return fmt.Sprintf("%s:%02x", table, typ)
+}
+
+func PrefixString(typ ObjType) string {
+	return prefixStringWithTable(typ.table(), typ)
+}
+
+func (t ObjType) table() string {
+	if IsPermDbKey(t) {
+		return levelDbTablePerm
+	}
+	return levelDbTableKv
+}
+
+func (k DbKey) toBytes(prefixString string) []byte {
+	return []byte(fmt.Sprintf("%s:%s", prefixString, k.Key))
+}
+
+func (k DbKey) ToBytes() []byte {
+	return k.toBytes(PrefixString(k.Typ))
+}
+
+func (k DbKey) ToBytesLookup() []byte {
+	return k.toBytes(prefixStringWithTable(levelDbTableLo, k.Typ))
 }
 
 var fieldExp = regexp.MustCompile(`[a-f0-9]{2}`)

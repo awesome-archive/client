@@ -1,112 +1,116 @@
-import * as React from 'react'
 import * as Kb from '../../../../../common-adapters/mobile.native'
+import * as React from 'react'
+import * as Reanimated from 'react-native-reanimated'
+import * as RowSizes from '../../sizes'
 import * as Styles from '../../../../../styles'
-import {Props} from '.'
+import type {Props} from '.'
+import {RectButton} from 'react-native-gesture-handler'
+import {Swipeable} from '../../../../../common-adapters/swipeable.native'
 
-let curSwipeRef: React.RefObject<Kb.Swipeable> | null = null
+const Action = (p: {
+  text: string
+  mult: number
+  color: Styles.Color
+  iconType: Kb.IconType
+  onClick: () => void
+  progress: Reanimated.SharedValue<number>
+}) => {
+  const {text, color, iconType, onClick, progress, mult} = p
+  const as = Reanimated.useAnimatedStyle(() => ({
+    transform: [{translateX: -mult * progress.value}],
+  }))
 
-const onPress = (onPressAction: () => void, ref: React.RefObject<Kb.Swipeable>) => {
-  ref.current && ref.current.close()
-  curSwipeRef = null
-  onPressAction()
-}
-
-const renderRightAction = (
-  text: string,
-  color: Styles.Color,
-  icon: React.ReactNode,
-  x: number,
-  handler: () => void,
-  progress: Kb.NativeAnimated.AnimatedInterpolation
-) => {
-  const trans = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [x, 0],
-  })
   return (
-    <Kb.NativeAnimated.View style={{flex: 1, transform: [{translateX: trans}]}}>
-      <Kb.RectButton
-        // @ts-ignore TODO fix styles
-        style={[styles.rightAction, {backgroundColor: color}]}
-        onPress={handler}
-      >
-        {icon}
+    <Reanimated.default.View style={[styles.action, as]}>
+      <RectButton style={[styles.rightAction, {backgroundColor: color as string}]} onPress={onClick}>
+        <Kb.Icon type={iconType} color={Styles.globalColors.white} />
         <Kb.Text type="BodySmall" style={styles.actionText}>
           {text}
         </Kb.Text>
-      </Kb.RectButton>
-    </Kb.NativeAnimated.View>
+      </RectButton>
+    </Reanimated.default.View>
   )
-}
-
-const renderRightActions = (
-  props: Props,
-  ref: React.RefObject<Kb.Swipeable>,
-  progress: Kb.NativeAnimated.AnimatedInterpolation
-) => {
-  return (
-    <Kb.NativeView style={styles.container}>
-      {renderRightAction(
-        props.isMuted ? 'Unmute' : 'Mute',
-        Styles.globalColors.orange,
-        <Kb.Icon type="iconfont-shh" color={Styles.globalColors.white} />,
-        128,
-        () => onPress(props.onMuteConversation, ref),
-        progress
-      )}
-      {renderRightAction(
-        'Hide',
-        Styles.globalColors.greyDarker,
-        <Kb.Icon type="iconfont-hide" color={Styles.globalColors.white} />,
-        64,
-        () => onPress(props.onHideConversation, ref),
-        progress
-      )}
-    </Kb.NativeView>
-  )
-}
-
-const onOpen = ref => {
-  if (curSwipeRef && curSwipeRef.current && curSwipeRef !== ref) {
-    curSwipeRef.current.close()
-  }
-  curSwipeRef = ref
 }
 
 const SwipeConvActions = (props: Props) => {
-  const swiperef = React.useRef<Kb.Swipeable>(null)
+  const {children, isMuted, onMuteConversation, onHideConversation, swipeCloseRef, extraData} = props
+
+  const onMute = React.useCallback(() => {
+    onMuteConversation()
+    swipeCloseRef?.current?.()
+  }, [swipeCloseRef, onMuteConversation])
+
+  const onHide = React.useCallback(() => {
+    onHideConversation()
+    swipeCloseRef?.current?.()
+  }, [swipeCloseRef, onHideConversation])
+
+  const makeActions = React.useCallback(
+    (progress: Reanimated.SharedValue<number>) => (
+      <Kb.NativeView style={styles.container}>
+        <Action
+          text={isMuted ? 'Unmute' : 'Mute'}
+          color={Styles.globalColors.orange}
+          iconType="iconfont-shh"
+          onClick={onMute}
+          mult={0}
+          progress={progress}
+        />
+        <Action
+          text="Hide"
+          color={Styles.globalColors.greyDarker}
+          iconType="iconfont-hide"
+          onClick={onHide}
+          mult={0.5}
+          progress={progress}
+        />
+      </Kb.NativeView>
+    ),
+    [isMuted, onHide, onMute]
+  )
+
   return (
-    <Kb.Swipeable
-      ref={swiperef}
-      renderRightActions={(progress: Kb.NativeAnimated.AnimatedInterpolation) =>
-        renderRightActions(props, swiperef, progress)
-      }
-      onSwipeableWillOpen={() => onOpen(swiperef)}
-      friction={2}
-      leftThreshold={30}
-      rightThreshold={40}
+    <Swipeable
+      actionWidth={128}
+      swipeCloseRef={swipeCloseRef}
+      makeActions={makeActions}
+      style={styles.row}
+      extraData={extraData}
     >
-      {props.children}
-    </Kb.Swipeable>
+      {children}
+    </Swipeable>
   )
 }
 
 const styles = Styles.styleSheetCreate(
   () =>
     ({
+      action: {
+        height: '100%',
+        left: 0,
+        position: 'absolute',
+        top: 0,
+        width: 64,
+      },
       actionText: {
         backgroundColor: 'transparent',
         color: Styles.globalColors.white,
       },
       container: {
+        display: 'flex',
         flexDirection: 'row',
+        height: '100%',
         width: 128,
       },
       rightAction: {
         alignItems: 'center',
-        flex: 1,
+        height: '100%',
         justifyContent: 'center',
-        width: 65, // set to one pixel larger to stop a visual blinking artifact
+        width: '100%',
+      },
+      row: {
+        flexShrink: 0,
+        height: RowSizes.smallRowHeight,
       },
     } as const)
 )

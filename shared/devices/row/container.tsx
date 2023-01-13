@@ -1,7 +1,7 @@
 import * as Container from '../../util/container'
 import * as Constants from '../../constants/devices'
 import * as DevicesGen from '../../actions/devices-gen'
-import * as Types from '../../constants/types/devices'
+import type * as Types from '../../constants/types/devices'
 import DeviceRow from '.'
 
 type OwnProps = {
@@ -12,7 +12,7 @@ type OwnProps = {
 const mapStateToProps = (state: Container.TypedState, ownProps: OwnProps) => {
   const device = Constants.getDevice(state, ownProps.deviceID)
   return {
-    iconNumber: Constants.getDeviceIconNumber(state, ownProps.deviceID),
+    device,
     isCurrentDevice: device.currentDevice,
     isNew: state.devices.isNew.has(device.deviceID),
     isRevoked: !!device.revokedByName,
@@ -26,12 +26,12 @@ const mapDispatchToProps = (dispatch: Container.TypedDispatch) => ({
     dispatch(DevicesGen.createShowDevicePage({deviceID})),
 })
 
-export default Container.namedConnect(
+export default Container.connect(
   mapStateToProps,
   mapDispatchToProps,
   (stateProps, dispatchProps, ownProps: OwnProps) => ({
+    device: stateProps.device,
     firstItem: ownProps.firstItem,
-    iconNumber: stateProps.iconNumber,
     isCurrentDevice: stateProps.isCurrentDevice,
     isNew: stateProps.isNew,
     isRevoked: stateProps.isRevoked,
@@ -40,6 +40,5 @@ export default Container.namedConnect(
       dispatchProps._showExistingDevicePage(ownProps.deviceID)
     },
     type: stateProps.type,
-  }),
-  'DeviceRow'
+  })
 )(DeviceRow)

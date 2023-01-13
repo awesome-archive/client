@@ -12,10 +12,9 @@ import {
   Keyboard as NativeKeyboard,
   KeyboardAvoidingView as NativeKeyboardAvoidingView,
   Linking as NativeLinking,
-  ListView as NativeListView,
   Modal as NativeModal,
   PanResponder as NativePanResponder,
-  Picker as NativePicker,
+  Pressable as NativePressable,
   RefreshControl as NativeRefreshControl,
   SafeAreaView as NativeSafeAreaView,
   SectionList as NativeSectionList,
@@ -23,17 +22,18 @@ import {
   StyleSheet as NativeStyleSheet,
   Switch as NativeSwitch,
   Text as NativeText,
+  TextInput as NativeTextInput,
   TouchableHighlight as NativeTouchableHighlight,
   TouchableNativeFeedback as NativeTouchableNativeFeedback,
   TouchableOpacity as NativeTouchableOpacity,
   TouchableWithoutFeedback as NativeTouchableWithoutFeedback,
   View as NativeView,
+  VirtualizedList as NativeVirtualizedList,
 } from 'react-native'
 import NativeScrollView from './scroll-view.native'
 import {NativeImage, FastImage as NativeFastImage} from './native-image.native'
-import NativeVirtualizedList from './virtualized-list.native'
 import {WebView as NativeWebView} from 'react-native-webview'
-import NativeTextInput from './kb-text-input.native'
+import {Picker as NativePicker} from '@react-native-picker/picker'
 
 // We set some useful default here
 export {
@@ -52,9 +52,9 @@ export {
   NativeKeyboard,
   NativeKeyboardAvoidingView,
   NativeLinking,
-  NativeListView,
   NativeModal,
   NativePanResponder,
+  NativePressable,
   NativePicker,
   NativeRefreshControl,
   NativeSafeAreaView,

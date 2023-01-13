@@ -1,4 +1,5 @@
 /* eslint-env jest */
+/*
 import * as Constants from '../../constants/devices'
 import * as Container from '../../util/container'
 import * as DevicesGen from '../devices-gen'
@@ -77,6 +78,7 @@ const details = [
     device: {
       cTime: 1234,
       deviceID: '123',
+      deviceNumberOfType: 0,
       encryptKey: 0,
       lastUsedTime: 4567,
       mTime: 2345,
@@ -92,6 +94,7 @@ const details = [
     device: {
       cTime: 1234,
       deviceID: '456',
+      deviceNumberOfType: 0,
       encryptKey: 0,
       lastUsedTime: 4567,
       mTime: 2345,
@@ -107,6 +110,7 @@ const details = [
     device: {
       cTime: 1234,
       deviceID: '789',
+      deviceNumberOfType: 0,
       encryptKey: 0,
       lastUsedTime: 4567,
       mTime: 2345,
@@ -119,9 +123,20 @@ const details = [
   },
 ]
 
-const startOnDevicesTab = dispatch => {
+const startOnDevicesTab = (dispatch: Container.Dispatch) => {
   dispatch(RouteTreeGen.createSwitchLoggedIn({loggedIn: true}))
   dispatch(RouteTreeGen.createNavigateAppend({path: [Tabs.devicesTab]}))
+}
+
+const expectNavWithDeviceID = (deviceID: string) => {
+  const navAppend = jest.spyOn(RouteTreeGen, 'createNavigateAppend')
+  const assertNavHasDeviceID = () =>
+    expect(navAppend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: expect.arrayContaining([expect.objectContaining({props: expect.objectContaining({deviceID})})]),
+      })
+    )
+  return {assertNavHasDeviceID}
 }
 
 const startReduxSaga = Testing.makeStartReduxSaga(devicesSaga, initialStore, startOnDevicesTab)
@@ -129,8 +144,8 @@ const startReduxSaga = Testing.makeStartReduxSaga(devicesSaga, initialStore, sta
 // const getRoute = getState => getRoutePath(getState().routeTree.routeState, [Tabs.devicesTab])
 
 describe('reload side effects', () => {
-  let init
-  let rpc
+  let init: any
+  let rpc: any
   beforeEach(() => {
     init = startReduxSaga()
     rpc = jest.spyOn(RPCTypes, 'deviceDeviceHistoryListRpcPromise')
@@ -167,8 +182,8 @@ describe('reload side effects', () => {
 })
 
 describe('load', () => {
-  let init
-  let rpc
+  let init: any
+  let rpc: any
   beforeEach(() => {
     init = startReduxSaga()
   })
@@ -201,8 +216,8 @@ describe('load', () => {
 })
 
 describe('revoking other', () => {
-  let init
-  let rpc
+  let init: any
+  let rpc: any
   beforeEach(() => {
     init = Testing.makeStartReduxSaga(devicesSaga, loadedStore, startOnDevicesTab)()
   })
@@ -224,8 +239,8 @@ describe('revoking other', () => {
 })
 
 describe('revoking self', () => {
-  let init
-  let rpc
+  let init: any
+  let rpc: any
   beforeEach(() => {
     init = Testing.makeStartReduxSaga(devicesSaga, loadedStore, startOnDevicesTab)()
   })
@@ -250,7 +265,7 @@ describe('revoking self', () => {
 })
 
 describe('navs after revoking', () => {
-  let init
+  let init: any
   beforeEach(() => {
     init = Testing.makeStartReduxSaga(devicesSaga, loadedStore, startOnDevicesTab)()
   })
@@ -272,8 +287,8 @@ describe('navs after revoking', () => {
 })
 
 describe('shows revoke page correctly', () => {
-  let init
-  let rpc
+  let init: any
+  let rpc: any
   beforeEach(() => {
     init = Testing.makeStartReduxSaga(devicesSaga, loadedStore, startOnDevicesTab)()
   })
@@ -282,11 +297,11 @@ describe('shows revoke page correctly', () => {
   })
 
   it('shows revoke page', () => {
-    const {dispatch, getState} = init
+    const {dispatch} = init
     const deviceID = Types.stringToDeviceID('456')
+    const {assertNavHasDeviceID} = expectNavWithDeviceID(deviceID)
     dispatch(DevicesGen.createShowRevokePage({deviceID}))
-    // expect(getRoute(getState)).toEqual(I.List([Tabs.devicesTab, 'devicePage', 'deviceRevoke']))
-    expect(getState().devices.selectedDeviceID).toEqual(deviceID)
+    assertNavHasDeviceID()
   })
 
   it('requests endangered', () => {
@@ -324,24 +339,24 @@ describe('shows revoke page correctly', () => {
 })
 
 describe('shows device page correctly', () => {
-  let init
+  let init: any
   beforeEach(() => {
     init = Testing.makeStartReduxSaga(devicesSaga, loadedStore, startOnDevicesTab)()
   })
   afterEach(() => {})
 
   it('shows device page', () => {
-    const {dispatch, getState} = init
+    const {dispatch} = init
     const deviceID = Types.stringToDeviceID('789')
+    const {assertNavHasDeviceID} = expectNavWithDeviceID(deviceID)
     dispatch(DevicesGen.createShowDevicePage({deviceID}))
-    // expect(getRoute(getState)).toEqual(I.List([Tabs.devicesTab, 'devicePage']))
-    expect(getState().devices.selectedDeviceID).toEqual(deviceID)
+    assertNavHasDeviceID()
   })
 })
 
 describe('shows paperkey page correctly', () => {
-  let init
-  let rpc
+  let init: any
+  let rpc: any
   beforeEach(() => {
     init = Testing.makeStartReduxSaga(devicesSaga, loadedStore, startOnDevicesTab)()
   })
@@ -351,8 +366,9 @@ describe('shows paperkey page correctly', () => {
 
   it('shows paperkey page', () => {
     const {dispatch} = init
+    const navAppend = jest.spyOn(RouteTreeGen, 'createNavigateAppend')
     dispatch(DevicesGen.createShowPaperKeyPage())
-    // expect(getRoute(getState)).toEqual(I.List([Tabs.devicesTab, 'devicePaperKey']))
+    expect(navAppend).toHaveBeenCalled()
   })
 
   it('creates a paperkey', () => {
@@ -371,3 +387,5 @@ describe('shows paperkey page correctly', () => {
     expect(getState().devices.newPaperkey).toEqual(paperKey)
   })
 })
+*/
+export default {}

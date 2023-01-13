@@ -2,18 +2,27 @@ import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 import * as Platform from '../../constants/platform'
+import * as Container from '../../util/container'
+import * as SettingsGen from '../../actions/settings-gen'
 import {SignupScreen, errorBanner} from '../common'
-import PhoneInput from './phone-input'
-import {ButtonType} from '../../common-adapters/button'
+import type {ButtonType} from '../../common-adapters/button'
 
 export type Props = {
   error: string
+  defaultCountry?: string
   onContinue: (phoneNumber: string, searchable: boolean) => void
   onSkip: () => void
   waiting: boolean
 }
 
 const EnterPhoneNumber = (props: Props) => {
+  // trigger a default phone number country rpc if it's not already loaded
+  const {defaultCountry} = props
+  const dispatch = Container.useDispatch()
+  React.useEffect(() => {
+    !defaultCountry && dispatch(SettingsGen.createLoadDefaultPhoneNumberCountry())
+  }, [defaultCountry, dispatch])
+
   const [phoneNumber, onChangePhoneNumber] = React.useState('')
   const [valid, onChangeValidity] = React.useState(false)
   // const [searchable, onChangeSearchable] = React.useState(true)
@@ -34,16 +43,6 @@ const EnterPhoneNumber = (props: Props) => {
           type: 'Success' as ButtonType,
           waiting: props.waiting,
         },
-        ...(Styles.isMobile
-          ? []
-          : [
-              {
-                disabled: props.waiting,
-                label: 'Skip for now',
-                onClick: props.onSkip,
-                type: 'Dim' as ButtonType,
-              },
-            ]),
       ]}
       banners={errorBanner(props.error)}
       rightActionLabel="Skip"
@@ -52,9 +51,8 @@ const EnterPhoneNumber = (props: Props) => {
       showHeaderInfoicon={true}
     >
       <EnterPhoneNumberBody
-        // the push prompt might be overlaying us
-        // TODO Y2K-57 move phone number earlier and check that email won't have this problem
         autoFocus={!Styles.isMobile}
+        defaultCountry={props.defaultCountry}
         onChangeNumber={onChangeNumberCb}
         onContinue={onContinue}
         searchable={true}
@@ -65,7 +63,8 @@ const EnterPhoneNumber = (props: Props) => {
 }
 
 type BodyProps = {
-  autoFocus: boolean
+  autoFocus?: boolean
+  defaultCountry?: string
   onChangeNumber: (phoneNumber: string, valid: boolean) => void
   onContinue: () => void
   searchable: boolean
@@ -80,12 +79,13 @@ export const EnterPhoneNumberBody = (props: BodyProps) => {
       direction="vertical"
       gap={Styles.isMobile ? 'small' : 'medium'}
       fullWidth={true}
-      style={Styles.globalStyles.flexOne}
+      style={styles.container}
     >
       <Kb.Icon type={props.iconType} />
       <Kb.Box2 direction="vertical" gap="tiny" style={styles.inputBox}>
-        <PhoneInput
-          autoFocus={props.autoFocus}
+        <Kb.PhoneInput
+          autoFocus={props.autoFocus ?? true}
+          defaultCountry={props.defaultCountry}
           style={styles.input}
           onChangeNumber={props.onChangeNumber}
           onEnterKeyDown={props.onContinue}
@@ -104,12 +104,13 @@ export const EnterPhoneNumberBody = (props: BodyProps) => {
     </Kb.Box2>
   )
 }
-EnterPhoneNumberBody.defaultProps = {
-  autoFocus: true,
-}
 
 const styles = Styles.styleSheetCreate(() => ({
   checkbox: {width: '100%'},
+  container: Styles.platformStyles({
+    common: Styles.globalStyles.flexOne,
+    isTablet: {maxWidth: 386},
+  }),
   input: Styles.platformStyles({
     isElectron: {
       height: 38,

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 //
+//go:build !windows
 // +build !windows
 
 package libfuse
@@ -197,6 +198,7 @@ func (tlf *TLF) Attr(ctx context.Context, a *fuse.Attr) error {
 // not, which can cause a tracker popup storm (see KBFS-2649).
 var tlfLoadAvoidingLookupNames = map[string]bool{
 	".localized": true,
+	"Contents":   true,
 }
 
 // Lookup implements the fs.NodeRequestLookuper interface for TLF.

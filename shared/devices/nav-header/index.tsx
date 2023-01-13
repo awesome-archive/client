@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 
@@ -17,7 +16,7 @@ export const HeaderTitle = (props: HeaderTitleProps) => (
 )
 
 export const HeaderRightActions = ({onAdd}: {onAdd: () => void}) => (
-  <Kb.Button small={true} label="Add device or paper key" onClick={onAdd} style={styles.addDeviceButton} />
+  <Kb.Button small={true} label="Add a device or paper key" onClick={onAdd} style={styles.addDeviceButton} />
 )
 
 const styles = Styles.styleSheetCreate(() => ({

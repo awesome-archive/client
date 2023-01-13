@@ -1,59 +1,58 @@
-import * as Types from '../../../../constants/types/chat2'
+import * as React from 'react'
+import type * as Types from '../../../../constants/types/chat2'
 import * as Constants from '../../../../constants/chat2'
-import * as RouteTreeGen from '../../../../actions/route-tree-gen'
+import * as Chat2Gen from '../../../../actions/chat2-gen'
+import * as TeamsGen from '../../../../actions/teams-gen'
+import * as ProfileGen from '../../../../actions/profile-gen'
 import Joined from '.'
-import {connect, isMobile} from '../../../../util/container'
+import * as Container from '../../../../util/container'
 
-type OwnProps = {
-  message: Types.MessageSystemJoined
-}
+type OwnProps = {message: Types.MessageSystemJoined}
 
-const mapStateToProps = (state, {message}) => ({
-  _meta: Constants.getMeta(state, message.conversationIDKey),
-  author: message.author,
-  authorIsYou: state.config.username === message.author,
-  joiners: !message.joiners.length && !message.leavers.length ? [message.author] : message.joiners,
-  leavers: message.leavers,
-  timestamp: message.timestamp,
-})
+const JoinedContainer = React.memo(function JoinedContainer(p: OwnProps) {
+  const {message} = p
+  const {joiners, author, conversationIDKey, leavers, timestamp} = message
 
-const mapDispatchToProps = dispatch => ({
-  _onManageChannels: (teamname: string) =>
-    isMobile
-      ? dispatch(
-          RouteTreeGen.createNavigateAppend({
-            path: [{props: {teamname}, selected: 'chatManageChannels'}],
-          })
-        )
-      : dispatch(
-          RouteTreeGen.createNavigateAppend({path: [{props: {teamname}, selected: 'chatManageChannels'}]})
-        ),
-  _onManageNotifications: conversationIDKey =>
+  const meta = Container.useSelector(state => Constants.getMeta(state, conversationIDKey))
+  const {channelname, teamType, teamname, teamID} = meta
+  const authorIsYou = Container.useSelector(state => state.config.username === author)
+
+  const dispatch = Container.useDispatch()
+  const onManageChannels = React.useCallback(() => {
+    dispatch(TeamsGen.createManageChatChannels({teamID}))
+  }, [dispatch, teamID])
+  const onManageNotifications = React.useCallback(() => {
     dispatch(
-      RouteTreeGen.createNavigateAppend({
-        path: [{props: {conversationIDKey: conversationIDKey, tab: 'settings'}, selected: 'chatInfoPanel'}],
+      Chat2Gen.createShowInfoPanel({
+        conversationIDKey,
+        show: true,
+        tab: 'settings',
       })
-    ),
+    )
+  }, [dispatch, conversationIDKey])
+  const onAuthorClick = (username: string) => {
+    dispatch(ProfileGen.createShowUserProfile({username}))
+  }
+
+  const joiners2 = React.useMemo(() => {
+    return !joiners.length && !leavers.length ? [author] : joiners
+  }, [joiners, leavers, author])
+
+  const props = {
+    author,
+    authorIsYou,
+    channelname,
+    isAdHoc: teamType === 'adhoc',
+    isBigTeam: teamType === 'big',
+    joiners: joiners2,
+    leavers,
+    onAuthorClick,
+    onManageChannels,
+    onManageNotifications,
+    teamname,
+    timestamp,
+  }
+  return <Joined {...props} />
 })
 
-const mergeProps = (stateProps, dispatchProps, _: OwnProps) => {
-  const {_meta} = stateProps
-  return {
-    author: stateProps.author,
-    authorIsYou: stateProps.authorIsYou,
-    channelname: _meta.channelname,
-    isBigTeam: _meta.teamType === 'big',
-    joiners: stateProps.joiners,
-    leavers: stateProps.leavers,
-    onManageChannels: () => dispatchProps._onManageChannels(_meta.teamname),
-    onManageNotifications: () => dispatchProps._onManageNotifications(_meta.conversationIDKey),
-    teamname: _meta.teamname,
-    timestamp: stateProps.timestamp,
-  }
-}
-
-export default connect(
-  mapStateToProps,
-  mapDispatchToProps,
-  mergeProps
-)(Joined)
+export default JoinedContainer

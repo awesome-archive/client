@@ -1,8 +1,11 @@
 import * as React from 'react'
+import * as Container from '../../util/container'
 import * as Styles from '../../styles'
 import * as Kb from '../../common-adapters'
+import * as RecoverPasswordGen from '../../actions/recover-password-gen'
 import {SignupScreen, errorBanner} from '../../signup/common'
 import {isMobile} from '../../constants/platform'
+import UserCard from '../../login/user-card'
 
 export type Props = {
   onSubmit: (password: string) => void
@@ -11,16 +14,37 @@ export type Props = {
   waiting: boolean
   error: string
   username?: string
+  resetEmailSent?: boolean
 }
 
 const Password = (props: Props) => {
   const [password, setPassword] = React.useState('')
+  const dispatch = Container.useDispatch()
   const {onSubmit} = props
   const _onSubmit = React.useCallback(() => onSubmit(password), [password, onSubmit])
 
+  React.useEffect(
+    () => () => {
+      dispatch(RecoverPasswordGen.createResetResetPasswordState())
+    },
+    [dispatch]
+  )
+
   return (
     <SignupScreen
-      banners={[...errorBanner(props.error)]}
+      banners={[
+        ...(props.resetEmailSent
+          ? [
+              <Kb.Banner color="green" key="resetBanner">
+                <Kb.BannerParagraph
+                  bannerColor="green"
+                  content="We've sent you an email with password reset instructions."
+                />
+              </Kb.Banner>,
+            ]
+          : []),
+        ...errorBanner(props.error),
+      ]}
       buttons={[
         {
           disabled: !password,
@@ -39,7 +63,7 @@ const Password = (props: Props) => {
         style={styles.fill}
         contentContainerStyle={styles.scrollContentContainer}
       >
-        <Kb.UserCard
+        <UserCard
           style={styles.card}
           username={props.username}
           avatarBackgroundStyle={styles.outerCardAvatar}
@@ -65,14 +89,13 @@ const Password = (props: Props) => {
               Forgot password?
             </Kb.Text>
           </Kb.Box2>
-        </Kb.UserCard>
+        </UserCard>
       </Kb.ScrollView>
     </SignupScreen>
   )
 }
 
 Password.navigationOptions = {
-  header: null,
   headerBottomStyle: {height: undefined},
   headerLeft: null, // no back button
 }
@@ -89,7 +112,10 @@ const styles = Styles.styleSheetCreate(() => ({
     },
   }),
   contentContainer: Styles.platformStyles({isMobile: {...Styles.padding(0)}}),
-  fill: Styles.platformStyles({isMobile: {height: '100%', width: '100%'}}),
+  fill: Styles.platformStyles({
+    isMobile: {height: '100%', width: '100%'},
+    isTablet: {width: 410},
+  }),
   forgotPassword: {
     alignSelf: 'flex-end',
   },

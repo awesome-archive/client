@@ -5,12 +5,13 @@ package status
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"mime/multipart"
 	"os"
 	"os/exec"
@@ -89,12 +90,15 @@ func logFilesFromStatus(g *libkb.GlobalContext, fstatus *keybase1.FullStatus) Lo
 		return Logs{
 			GUI:        fstatus.Desktop.Log,
 			Kbfs:       fstatus.Kbfs.Log,
+			KbfsPerf:   fstatus.Kbfs.PerfLog,
 			Service:    fstatus.Service.Log,
 			EK:         fstatus.Service.EkLog,
+			Perf:       fstatus.Service.PerfLog,
 			Updater:    fstatus.Updater.Log,
 			Start:      fstatus.Start.Log,
 			System:     install.SystemLogPath(),
 			Git:        fstatus.Git.Log,
+			GitPerf:    fstatus.Git.PerfLog,
 			Install:    installLogPath,
 			Trace:      traceDir,
 			CPUProfile: cpuProfileDir,
@@ -107,9 +111,12 @@ func logFilesFromStatus(g *libkb.GlobalContext, fstatus *keybase1.FullStatus) Lo
 		Kbfs:     filepath.Join(logDir, libkb.KBFSLogFileName),
 		Service:  getServiceLog(libkb.NewMetaContextTODO(g), logDir),
 		EK:       filepath.Join(logDir, libkb.EKLogFileName),
+		Perf:     filepath.Join(logDir, libkb.PerfLogFileName),
+		KbfsPerf: filepath.Join(logDir, libkb.KBFSPerfLogFileName),
 		Updater:  filepath.Join(logDir, libkb.UpdaterLogFileName),
 		Start:    filepath.Join(logDir, libkb.StartLogFileName),
 		Git:      filepath.Join(logDir, libkb.GitLogFileName),
+		GitPerf:  filepath.Join(logDir, libkb.GitPerfLogFileName),
 		Install:  installLogPath,
 		Trace:    traceDir,
 		Watchdog: watchdogLogPath,
@@ -206,7 +213,7 @@ func listLogFiles(log logger.Logger, stem string) (ret []string) {
 	stem = filepath.Clean(stem)
 	dir := filepath.Dir(stem)
 	base := filepath.Base(stem)
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 
 	defer func() {
 		log.Debug("listLogFiles(%q) -> %v", stem, ret)
@@ -322,7 +329,7 @@ func tailSystemdJournal(log logger.Logger, userUnits []string, numBytes int) (re
 	// Once we start reading output, don't short-circuit on errors. Just log
 	// them, and return whatever we got.
 	stdoutLimited := io.LimitReader(stdout, int64(maxBytes))
-	output, err := ioutil.ReadAll(stdoutLimited)
+	output, err := io.ReadAll(stdoutLimited)
 	if err != nil {
 		output = appendError(log, output, "Error reading from journalctl pipe: %s", err)
 	}
@@ -370,7 +377,7 @@ func tailFile(log logger.Logger, which string, filename string, numBytes int) (r
 			return ret, seeked
 		}
 	}
-	buf, err := ioutil.ReadAll(f)
+	buf, err := io.ReadAll(f)
 	if err != nil {
 		log.Errorf("Failure in reading file %q: %s", filename, err)
 		return ret, seeked
@@ -484,7 +491,7 @@ func DirSize(dirPath string) (size uint64, numFiles int, err error) {
 
 func CacheSizeInfo(g *libkb.GlobalContext) (info []keybase1.DirSizeInfo, err error) {
 	cacheDir := g.GetCacheDir()
-	files, err := ioutil.ReadDir(cacheDir)
+	files, err := os.ReadDir(cacheDir)
 	if err != nil {
 		return nil, err
 	}
@@ -493,7 +500,11 @@ func CacheSizeInfo(g *libkb.GlobalContext) (info []keybase1.DirSizeInfo, err err
 	var totalFiles int
 	for _, file := range files {
 		if !file.IsDir() {
-			totalSize += uint64(file.Size())
+			info, err := file.Info()
+			if err != nil {
+				return nil, err
+			}
+			totalSize += uint64(info.Size())
 			continue
 		}
 		dirPath := filepath.Join(cacheDir, file.Name())
@@ -524,4 +535,61 @@ func GetFirstClient(v []keybase1.ClientStatus, typ keybase1.ClientType) *keybase
 		}
 	}
 	return nil
+}
+
+// zipLogs takes a slice of logs and returns `numBytes` worth of the
+// most recent log lines from the sorted set of all lines across all
+// logs.  The lines in each log should already be sorted, and the logs
+// should be sortable alphabetically between each other (e.g., each
+// line in every log should start with a timestamp in the same
+// format).
+func zipLogs(numBytes int, logs ...string) (res string) {
+	scanners := make([]*bufio.Scanner, len(logs))
+	for i, log := range logs {
+		scanners[i] = bufio.NewScanner(strings.NewReader(log))
+	}
+
+	// nextLines is the next chronological line in each log.  It's
+	// empty if we need to get another line from the log.
+	nextLines := make([]string, len(logs))
+	var buf bytes.Buffer
+	for {
+		// Fill in the next line.
+		minLine := 0
+		for i, currLine := range nextLines {
+			if currLine == "" {
+				for scanners[i].Scan() {
+					nextLines[i] = scanners[i].Text()
+					if nextLines[i] != "" {
+						break
+					}
+				}
+			}
+
+			// If we still don't have a line, just skip this log.
+			if nextLines[i] == "" {
+				continue
+			}
+
+			if minLine != i && nextLines[i] < nextLines[minLine] {
+				minLine = i
+			}
+		}
+
+		line := nextLines[minLine]
+		if line == "" {
+			// We're done!
+			break
+		}
+
+		buf.WriteString(line + "\n")
+		nextLines[minLine] = ""
+	}
+
+	if buf.Len() > numBytes {
+		b := buf.Bytes()[buf.Len()-numBytes:]
+		return string(findFirstNewline(b))
+	}
+
+	return buf.String()
 }

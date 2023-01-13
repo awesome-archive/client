@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 
+//go:build windows
 // +build windows
 
 package libdokan
@@ -407,8 +408,9 @@ func TestReaddirMyFolderWithFiles(t *testing.T) {
 	defer cancelFn()
 
 	files := map[string]fileInfoCheck{
-		"one": nil,
-		"two": nil,
+		"one":       nil,
+		"two":       nil,
+		"foo‰5cbar": nil,
 	}
 	for filename, check := range files {
 		if check != nil {
@@ -423,6 +425,50 @@ func TestReaddirMyFolderWithFiles(t *testing.T) {
 		syncFilename(t, p)
 	}
 	checkDir(t, filepath.Join(mnt.Dir, PrivateName, "jdoe"), files)
+}
+
+func TestReaddirMyFolderWithSpecialCharactersInFileName(t *testing.T) {
+	ctx := libcontext.BackgroundContextWithCancellationDelayer()
+	defer testCleanupDelayer(ctx, t)
+	config := libkbfs.MakeTestConfigOrBust(t, "jdoe")
+	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
+	mnt, _, cancelFn := makeFS(ctx, t, config)
+	defer mnt.Close()
+	defer cancelFn()
+
+	windowsFilename := "foo‰5cbar"
+	kbfsFilename := `foo\bar`
+
+	// Create through dokan and check through dokan.
+	{
+		files := map[string]fileInfoCheck{
+			windowsFilename: nil,
+		}
+		for filename, check := range files {
+			if check != nil {
+				// only set up the files
+				continue
+			}
+			p := filepath.Join(mnt.Dir, PrivateName, "jdoe", filename)
+			if err := ioutil.WriteFile(
+				p, []byte("data for "+filename), 0644); err != nil {
+				t.Fatal(err)
+			}
+			syncFilename(t, p)
+		}
+		checkDir(t, filepath.Join(mnt.Dir, PrivateName, "jdoe"), files)
+	}
+
+	// Check through KBFSOps
+	{
+		jdoe := libkbfs.GetRootNodeOrBust(ctx,
+			t, config, "jdoe", tlf.Private)
+		ops := config.KBFSOps()
+		_, _, err := ops.Lookup(ctx, jdoe, jdoe.ChildName(kbfsFilename))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func testOneCreateThenRead(t *testing.T, p string) {
@@ -2158,6 +2204,8 @@ func TestErrorFile(t *testing.T) {
 	defer mnt.Close()
 	defer cancelFn()
 
+	libfs.AddRootWrapper(config)
+
 	// cause an error by stating a non-existent user
 	_, err := ioutil.Lstat(filepath.Join(mnt.Dir, PrivateName, "janedoe"))
 	if err == nil {
@@ -2168,15 +2216,32 @@ func TestErrorFile(t *testing.T) {
 	expectedErr := dokan.ErrObjectNameNotFound
 
 	// test both the root error file and one in a directory
-	testForErrorText(t, filepath.Join(mnt.Dir, libkbfs.ErrorFile),
+	testForErrorText(t, filepath.Join(mnt.Dir, libfs.ErrorFileName),
 		expectedErr, "root")
-	testForErrorText(t, filepath.Join(mnt.Dir, PublicName, libkbfs.ErrorFile),
+	testForErrorText(t, filepath.Join(mnt.Dir, PublicName, libfs.ErrorFileName),
 		expectedErr, "root")
-	testForErrorText(t, filepath.Join(mnt.Dir, PrivateName, libkbfs.ErrorFile),
+	testForErrorText(
+		t, filepath.Join(mnt.Dir, PrivateName, libfs.ErrorFileName),
 		expectedErr, "root")
-	testForErrorText(t, filepath.Join(mnt.Dir, PublicName, "jdoe", libkbfs.ErrorFile),
+
+	// Create public and private jdoe TLFs.
+	const b = "hello world"
+	p := filepath.Join(mnt.Dir, PublicName, "jdoe", "myfile")
+	if err := ioutil.WriteFile(p, []byte(b), 0644); err != nil {
+		t.Fatal(err)
+	}
+	syncFilename(t, p)
+	p = filepath.Join(mnt.Dir, PrivateName, "jdoe", "myfile")
+	if err := ioutil.WriteFile(p, []byte(b), 0644); err != nil {
+		t.Fatal(err)
+	}
+	syncFilename(t, p)
+
+	testForErrorText(
+		t, filepath.Join(mnt.Dir, PublicName, "jdoe", libfs.ErrorFileName),
 		expectedErr, "dir")
-	testForErrorText(t, filepath.Join(mnt.Dir, PrivateName, "jdoe", libkbfs.ErrorFile),
+	testForErrorText(
+		t, filepath.Join(mnt.Dir, PrivateName, "jdoe", libfs.ErrorFileName),
 		expectedErr, "dir")
 }
 
@@ -3154,4 +3219,59 @@ func TestKbfsFileInfo(t *testing.T) {
 	if dst.LastWriterUnverified != kbname.NormalizedUsername("user1") {
 		t.Fatalf("Expected user1, %v raw %X", dst, bs)
 	}
+}
+
+func TestUpdateHistoryFile(t *testing.T) {
+	ctx := libcontext.BackgroundContextWithCancellationDelayer()
+	defer testCleanupDelayer(ctx, t)
+	config := libkbfs.MakeTestConfigOrBust(t, "jdoe")
+	mnt, _, cancelFn := makeFS(ctx, t, config)
+	defer mnt.Close()
+	defer cancelFn()
+	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
+
+	libfs.AddRootWrapper(config)
+
+	t.Log("Make several revisions")
+	p := filepath.Join(mnt.Dir, PrivateName, "jdoe")
+	for i := 0; i < 10; i++ {
+		file := filepath.Join(p, fmt.Sprintf("foo-%d", i))
+		f, err := os.Create(file)
+		require.NoError(t, err)
+		syncAndClose(t, f)
+	}
+
+	t.Log("Read a revision range")
+	histPrefix := filepath.Join(p, libfs.UpdateHistoryFileName)
+	fRange, err := os.Open(histPrefix + ".3-5")
+	require.NoError(t, err)
+	defer fRange.Close()
+	b, err := ioutil.ReadAll(fRange)
+	require.NoError(t, err)
+	var histRange libkbfs.TLFUpdateHistory
+	err = json.Unmarshal(b, &histRange)
+	require.NoError(t, err)
+	require.Len(t, histRange.Updates, 3)
+
+	t.Log("Read a single revision")
+	fSingle, err := os.Open(histPrefix + ".7")
+	require.NoError(t, err)
+	defer fSingle.Close()
+	b, err = ioutil.ReadAll(fSingle)
+	require.NoError(t, err)
+	var histSingle libkbfs.TLFUpdateHistory
+	err = json.Unmarshal(b, &histSingle)
+	require.NoError(t, err)
+	require.Len(t, histSingle.Updates, 1)
+
+	t.Log("Read the entire history")
+	fAll, err := os.Open(histPrefix)
+	require.NoError(t, err)
+	defer fAll.Close()
+	b, err = ioutil.ReadAll(fAll)
+	require.NoError(t, err)
+	var histAll libkbfs.TLFUpdateHistory
+	err = json.Unmarshal(b, &histAll)
+	require.NoError(t, err)
+	require.Len(t, histAll.Updates, 11)
 }

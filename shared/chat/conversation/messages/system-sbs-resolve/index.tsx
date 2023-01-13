@@ -1,57 +1,38 @@
-import * as React from 'react'
-import * as Types from '../../../../constants/types/chat2'
+import type * as Types from '../../../../constants/types/chat2'
+import type {ServiceIdWithContact} from '../../../../constants/types/team-building'
 import * as Kb from '../../../../common-adapters'
-import {formatTimeForChat} from '../../../../util/timestamp'
+import {e164ToDisplay} from '../../../../util/phone-numbers'
+import {serviceIdToPrettyName} from '../../../../constants/team-building'
+import UserNotice from '../user-notice'
 
 type Props = {
   message: Types.MessageSystemSBSResolved
   you: string
 }
 
-const connectedUsernamesProps = {
-  colorFollowing: true,
-  inline: true,
-  onUsernameClicked: 'profile',
-  type: 'BodySmallSemibold',
-  underline: true,
-} as const
-
-const formatAssertion = (serviceUser: string, service: string, isYou: boolean): string => {
-  if (isYou) {
-    return formatAssertionYou(serviceUser, service)
-  }
+const formatAssertion = (serviceUser: string, service: ServiceIdWithContact, isYou: boolean): string => {
   switch (service) {
     case 'phone':
-      return `verified their phone number ${serviceUser}`
+      return `verified ${isYou ? 'your' : 'their'} phone number ${e164ToDisplay('+' + serviceUser)}`
     case 'email':
-      return `verified their email address ${serviceUser}`
+      return `verified ${isYou ? 'your' : 'their'} email address ${serviceUser}`
     default:
-      return `proved that they are ${serviceUser} on ${service}`
-  }
-}
-const formatAssertionYou = (serviceUser: string, service: string): string => {
-  switch (service) {
-    case 'phone':
-      return `your phone number ${serviceUser}`
-    case 'email':
-      return `your email address ${serviceUser}`
-    default:
-      return `that you are ${serviceUser} on ${service}`
+      return `proved ${isYou ? 'you' : 'they'} are ${serviceUser} on ${
+        serviceIdToPrettyName(service) || service
+      }`
   }
 }
 
 const SBSProvedNotice = (props: Props) => {
-  const {timestamp, prover, assertionUsername, assertionService} = props.message
-  const isYou = props.you === props.message.prover
+  const {prover, assertionUsername, assertionService} = props.message
+  const isYou = props.you === prover
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true}>
-      <Kb.Text type="BodyTiny">{formatTimeForChat(timestamp)}</Kb.Text>
+    <UserNotice>
       <Kb.Text type="BodySmall">
-        {isYou ? 'You' : <Kb.ConnectedUsernames {...connectedUsernamesProps} usernames={[prover]} />}{' '}
-        {formatAssertion(assertionUsername, assertionService, isYou)}, so now {isYou ? 'you' : 'they'} can see
-        this chat.
+        {isYou && 'You '}can read this chat now because {isYou ? 'you' : 'they'}{' '}
+        {assertionService && formatAssertion(assertionUsername, assertionService, isYou)}.
       </Kb.Text>
-    </Kb.Box2>
+    </UserNotice>
   )
 }
 

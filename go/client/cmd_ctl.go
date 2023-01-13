@@ -18,8 +18,8 @@ func NewCmdCtl(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {
 		NewCmdCtlRestart(cl, g),
 		NewCmdCtlLogRotate(cl, g),
 		NewCmdWatchdog(cl, g),
-		NewCmdWatchdog2(cl, g),
 		NewCmdCtlAppExit(cl, g),
+		NewCmdWait(cl, g),
 	}
 
 	commands = append(commands, platformSpecificCtlCommands(cl, g)...)

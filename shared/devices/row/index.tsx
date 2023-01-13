@@ -1,39 +1,18 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
+import type * as Types from '../../constants/types/devices'
+import DeviceIcon from '../device-icon'
+import {formatTimeRelativeToNow} from '../../util/timestamp'
 
 export type Props = {
+  device: Types.Device
   firstItem: boolean
-  iconNumber: number
   isCurrentDevice: boolean
   isNew: boolean
   isRevoked: boolean
   name: string
   showExistingDevicePage: () => void
   type: 'desktop' | 'backup' | 'mobile'
-}
-
-const typeToIcon = (type: Props['type'], backgroundNumber: number, isCurrentDevice: boolean) => {
-  let res = 'icon-computer-32'
-  switch (type) {
-    case 'backup':
-      res = 'icon-paper-key-32'
-      break
-    case 'desktop':
-      res = isCurrentDevice
-        ? `icon-computer-success-background-${backgroundNumber}-32`
-        : `icon-computer-background-${backgroundNumber}-32`
-      break
-    case 'mobile':
-      res = isCurrentDevice
-        ? `icon-phone-success-background-${backgroundNumber}-32`
-        : `icon-phone-background-${backgroundNumber}-32`
-      break
-  }
-  if (Kb.isValidIconType(res)) {
-    return res
-  }
-  return 'icon-computer-32'
 }
 
 const DeviceRow = (props: Props) => {
@@ -43,20 +22,30 @@ const DeviceRow = (props: Props) => {
       firstItem={props.firstItem}
       onClick={props.showExistingDevicePage}
       icon={
-        <Kb.Icon
-          type={typeToIcon(props.type, props.iconNumber, props.isCurrentDevice)}
-          style={Kb.iconCastPlatformStyles(props.isRevoked ? styles.icon : null)}
+        <DeviceIcon
+          current={props.device.currentDevice}
+          device={props.device}
+          size={32}
+          style={props.isRevoked ? styles.icon : null}
         />
       }
       body={
         <Kb.Box2 direction="vertical" fullWidth={true} style={{justifyContent: 'center'}}>
-          <Kb.Text style={props.isRevoked ? styles.text : undefined} type="BodySemibold">
-            {props.name}
+          <Kb.Box2 direction="horizontal" fullWidth={true}>
+            <Kb.Text lineClamp={1} style={props.isRevoked ? styles.text : undefined} type="BodySemibold">
+              {props.name} {props.isCurrentDevice && <Kb.Text type="BodySmall">(Current device)</Kb.Text>}
+            </Kb.Text>
+            {props.isNew && !props.isCurrentDevice && (
+              <Kb.Meta title="new" style={styles.meta} backgroundColor={Styles.globalColors.orange} />
+            )}
+          </Kb.Box2>
+          <Kb.Text type="BodySmall">
+            {props.isRevoked
+              ? `Revoked ${
+                  props.device.revokedAt ? formatTimeRelativeToNow(props.device.revokedAt) : 'device'
+                }`
+              : `Last used ${formatTimeRelativeToNow(props.device.lastUsed)}`}
           </Kb.Text>
-          {props.isCurrentDevice && <Kb.Text type="BodySmall">Current device</Kb.Text>}
-          {props.isNew && !props.isCurrentDevice && (
-            <Kb.Meta title="new" style={styles.meta} backgroundColor={Styles.globalColors.orange} />
-          )}
         </Kb.Box2>
       }
     />
@@ -66,10 +55,19 @@ const styles = Styles.styleSheetCreate(
   () =>
     ({
       icon: {opacity: 0.3},
-      meta: {alignSelf: 'flex-start'},
+      meta: Styles.platformStyles({
+        common: {
+          alignSelf: 'center',
+        },
+        isElectron: {
+          marginLeft: Styles.globalMargins.xtiny,
+        },
+        isMobile: {
+          marginLeft: Styles.globalMargins.xxtiny,
+        },
+      }),
       text: {
         color: Styles.globalColors.black_20,
-        flex: 0,
         textDecorationLine: 'line-through' as const,
         textDecorationStyle: 'solid' as const,
       },

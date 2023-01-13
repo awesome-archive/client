@@ -120,6 +120,10 @@ func CheckProof(m libkb.MetaContext, pvlS string, service keybase1.ProofType, in
 func checkProofInner(m metaContext, pvlS string, service keybase1.ProofType, info ProofInfo) libkb.ProofError {
 	pvl, err := parse(pvlS)
 	if err != nil {
+		if strings.Contains(err.Error(), "cannot unmarshal string into Go struct") && strings.Contains(pvlS, "from iced tests") {
+			return libkb.NewProofError(keybase1.ProofStatus_INVALID_PVL,
+				"Corrupted pvl in merkle tree from iced tests. To fix see test/merkle_pvl.iced. : %v", err)
+		}
 		return libkb.NewProofError(keybase1.ProofStatus_INVALID_PVL,
 			"Could not parse pvl: %v", err)
 	}
@@ -128,7 +132,7 @@ func checkProofInner(m metaContext, pvlS string, service keybase1.ProofType, inf
 		return perr
 	}
 
-	sigBody, sigID, err := libkb.OpenSig(info.ArmoredSig)
+	sigBody, sigIDBase, err := libkb.OpenSig(info.ArmoredSig)
 	if err != nil {
 		return libkb.NewProofError(keybase1.ProofStatus_BAD_SIGNATURE,
 			"Bad signature: %v", err)
@@ -156,6 +160,8 @@ func checkProofInner(m metaContext, pvlS string, service keybase1.ProofType, inf
 				"Bad protocol in sig: %s", info.Protocol)
 		}
 	}
+
+	sigID := sigIDBase.ToSigIDLegacy()
 
 	mknewstate := func(i int) (scriptState, libkb.ProofError) {
 		state := scriptState{
@@ -469,7 +475,8 @@ func runDNSTXTQuery(m metaContext, domain string) (res []string, err error) {
 			fetchedSrvs[i] = formatDNSServer(fetchedSrvs[i])
 		}
 	}
-	servers := append(fetchedSrvs, publicServers...)
+	servers := fetchedSrvs
+	servers = append(servers, publicServers...)
 
 	var r *dns.Msg
 	c := dns.Client{}
@@ -692,7 +699,7 @@ func stepAssertCompare(m metaContext, ins assertCompareT, state scriptState) (sc
 		same = libkb.Cicmp(a, b)
 	case "stripdots-then-cicmp":
 		norm := func(s string) string {
-			return strings.ToLower(strings.Replace(s, ".", "", -1))
+			return strings.ToLower(strings.ReplaceAll(s, ".", ""))
 		}
 		same = libkb.Cicmp(norm(a), norm(b))
 	default:
@@ -767,7 +774,7 @@ func stepReplaceAll(m metaContext, ins replaceAllT, state scriptState) (scriptSt
 		return state, err
 	}
 
-	replaced := strings.Replace(from, ins.Old, ins.New, -1)
+	replaced := strings.ReplaceAll(from, ins.Old, ins.New)
 	if err = state.Regs.Set(ins.Into, replaced); err != nil {
 		return state, err
 	}

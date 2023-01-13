@@ -90,7 +90,7 @@ func (wbr *writersByRevision) Pop() interface{} {
 //
 // There will be two users of a TlfHistory instance:
 //
-//   * One user (likely something outside of the kbfsedits package,
+//   - One user (likely something outside of the kbfsedits package,
 //     e.g. libkbfs.folderBranchOps) will read notifications from the
 //     corresponding TLF and add them to this history.  After adding a
 //     batch or several batches of messages, it should call
@@ -98,7 +98,7 @@ func (wbr *writersByRevision) Pop() interface{} {
 //     it should fetch more notifications for the indicated writer and
 //     repeat.
 //
-//   * The other user (within the kbfsedits package) will collate the
+//   - The other user (within the kbfsedits package) will collate the
 //     histories from multiple TlfHistory instances together using
 //     `getHistory()` from each one.  It may also construct pretty
 //     versions of individual edit histories for a particular TLF.
@@ -236,6 +236,7 @@ func (th *TlfHistory) ClearAllUnflushed() {
 type fileEvent struct {
 	delete  bool
 	newName string
+	rev     kbfsmd.Revision
 }
 
 type recomputer struct {
@@ -341,6 +342,7 @@ func (r *recomputer) processNotification(
 		// See if any of the parent directories were renamed, checking
 		// backwards until we get to the TLF name.
 		prefix := filename
+		latestRenameRev := notification.Revision
 		suffix := ""
 		for strings.Count(prefix, "/") > 4 {
 			var finalElem string
@@ -348,8 +350,12 @@ func (r *recomputer) processNotification(
 			prefix = strings.TrimSuffix(prefix, "/")
 			suffix = path.Clean(path.Join(finalElem, suffix))
 			event, hasEvent := r.fileEvents[prefix]
-			if hasEvent && event.newName != "" {
+			// Ignore any rename events that happen at or before the
+			// last revision we considered, to avoid weird rename
+			// loops (see HOTPOT-856).
+			if hasEvent && event.newName != "" && latestRenameRev < event.rev {
 				prefix = event.newName
+				latestRenameRev = event.rev
 			}
 		}
 		filename = path.Clean(path.Join(prefix, suffix))
@@ -382,7 +388,10 @@ func (r *recomputer) processNotification(
 			delete(r.fileEvents, eventFilename)
 		} else {
 			r.fileEvents[notification.Params.OldFilename] =
-				fileEvent{newName: eventFilename}
+				fileEvent{
+					newName: eventFilename,
+					rev:     notification.Revision,
+				}
 		}
 
 		// If renaming a directory, check whether there are any events
@@ -393,8 +402,8 @@ func (r *recomputer) processNotification(
 		if notification.FileType == EntryTypeDir {
 			for f, event := range r.fileEvents {
 				if strings.HasPrefix(f, eventFilename) {
-					oldF := strings.Replace(
-						f, eventFilename, notification.Params.OldFilename, -1)
+					oldF := strings.ReplaceAll(
+						f, eventFilename, notification.Params.OldFilename)
 					r.fileEvents[oldF] = event
 					delete(r.fileEvents, f)
 				}
@@ -403,9 +412,15 @@ func (r *recomputer) processNotification(
 
 		// The renamed file overwrote any existing file with the new
 		// name.
-		r.fileEvents[eventFilename] = fileEvent{delete: true}
+		r.fileEvents[eventFilename] = fileEvent{
+			delete: true,
+			rev:    notification.Revision,
+		}
 	case NotificationDelete:
-		r.fileEvents[eventFilename] = fileEvent{delete: true}
+		r.fileEvents[eventFilename] = fileEvent{
+			delete: true,
+			rev:    notification.Revision,
+		}
 
 		// We only care about files, so skip dir and sym creates.
 		if notification.FileType != EntryTypeFile {
@@ -607,7 +622,7 @@ func (th *TlfHistory) getHistory(loggedInUser string) writersByRevision {
 	th.lock.Lock()
 	defer th.lock.Unlock()
 	if th.computed {
-		// Maybe another goroutine got the lock and recomuted the
+		// Maybe another goroutine got the lock and recomputed the
 		// history since we checked above.
 		return th.cachedHistory
 	}

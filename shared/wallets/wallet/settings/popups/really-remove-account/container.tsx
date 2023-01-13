@@ -7,13 +7,12 @@ import * as Types from '../../../../../constants/types/wallets'
 import {anyWaiting} from '../../../../../constants/waiting'
 import ReallyRemoveAccountPopup from '.'
 
-type OwnProps = Container.RouteProps<{accountID: Types.AccountID}>
+type OwnProps = Container.RouteProps<'reallyRemoveAccount'>
 
-export default Container.namedConnect(
+export default Container.connect(
   (state, ownProps: OwnProps) => {
-    const accountID = Container.getRouteProps(ownProps, 'accountID', Types.noAccountID)
+    const accountID = ownProps.route.params?.accountID ?? Types.noAccountID
     const secretKey = Constants.getSecretKey(state, accountID).stringValue()
-
     return {
       accountID,
       name: Constants.getAccount(state, accountID).name,
@@ -39,6 +38,5 @@ export default Container.namedConnect(
     onCopyKey: () => dispatchProps._onCopyKey(stateProps.secretKey),
     onFinish: () => dispatchProps._onFinish(stateProps.accountID),
     waiting: stateProps.waiting,
-  }),
-  'ReallyRemoveAccountPopup'
+  })
 )(ReallyRemoveAccountPopup)

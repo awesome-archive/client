@@ -2,8 +2,7 @@ import * as React from 'react'
 import * as Styles from '../styles'
 import Text from './text'
 import {Box2} from './box'
-import {BarCodeScanner} from 'expo-barcode-scanner'
-import * as Permissions from 'expo-permissions'
+import * as Scanner from 'expo-barcode-scanner'
 
 const Kb = {
   Box2,
@@ -16,16 +15,18 @@ type Props = {
   style: Styles.StylesCrossPlatform
 }
 
-const QRScanner = (p: Props): React.ReactElement<any> | null => {
+const QRScanner = (p: Props): React.ReactElement | null => {
   const [hasCameraPermission, setHasCameraPermission] = React.useState<boolean | undefined>(undefined)
   const [scanned, setScanned] = React.useState<boolean>(false)
 
   React.useEffect(() => {
     const getPermissionsGranted = async () => {
-      const {status} = await Permissions.askAsync(Permissions.CAMERA)
-      setHasCameraPermission(status === 'granted')
+      const {status} = await Scanner.requestPermissionsAsync()
+      setHasCameraPermission(status === Scanner.PermissionStatus.GRANTED)
     }
     getPermissionsGranted()
+      .then(() => {})
+      .catch(() => {})
   }, [])
 
   if (hasCameraPermission === undefined) {
@@ -33,12 +34,12 @@ const QRScanner = (p: Props): React.ReactElement<any> | null => {
       <Kb.Box2 direction="vertical" style={Styles.collapseStyles([p.style, styles.gettingPermissions])} />
     )
   }
-  if (hasCameraPermission === false) {
+  if (!hasCameraPermission) {
     return p.notAuthorizedView || null
   }
 
   return (
-    <BarCodeScanner
+    <Scanner.BarCodeScanner
       onBarCodeScanned={
         scanned
           ? () => {}

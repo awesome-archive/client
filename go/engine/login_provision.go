@@ -42,7 +42,7 @@ type gpgInterface interface {
 }
 
 type loginProvisionArg struct {
-	DeviceType string // desktop or mobile
+	DeviceType keybase1.DeviceTypeV2 // desktop or mobile
 	ClientType keybase1.ClientType
 	User       *libkb.User
 
@@ -151,7 +151,7 @@ func (e *loginProvision) saveToSecretStore(m libkb.MetaContext) {
 func (e *loginProvision) saveToSecretStoreWithLKS(m libkb.MetaContext, lks *libkb.LKSec) {
 	nun := e.arg.User.GetNormalizedName()
 	var err error
-	defer m.Trace(fmt.Sprintf("loginProvision.saveToSecretStoreWithLKS(%s)", nun), func() error { return err })()
+	defer m.Trace(fmt.Sprintf("loginProvision.saveToSecretStoreWithLKS(%s)", nun), &err)()
 	options := libkb.LoadAdvisorySecretStoreOptionsFromRemote(m)
 	err = libkb.StoreSecretAfterLoginWithLKSWithOptions(m, nun, lks, &options)
 }
@@ -159,7 +159,7 @@ func (e *loginProvision) saveToSecretStoreWithLKS(m libkb.MetaContext, lks *libk
 // deviceWithType provisions this device with an existing device using the
 // kex2 protocol.  provisionerType is the existing device type.
 func (e *loginProvision) deviceWithType(m libkb.MetaContext, provisionerType keybase1.DeviceType) (err error) {
-	defer m.Trace("loginProvision#deviceWithType", func() error { return err })()
+	defer m.Trace("loginProvision#deviceWithType", &err)()
 
 	// make a new device:
 	deviceID, err := libkb.NewDeviceID()
@@ -182,11 +182,11 @@ func (e *loginProvision) deviceWithType(m libkb.MetaContext, provisionerType key
 	m.Debug("deviceWithType: got device name: %q", name)
 
 	// make a new secret:
-	uid := m.CurrentUID()
+	uid := e.arg.User.GetUID()
 
 	// Continue to generate legacy Kex2 secret types
 	kex2SecretTyp := libkb.Kex2SecretTypeV1Desktop
-	if e.arg.DeviceType == libkb.DeviceTypeMobile || provisionerType == keybase1.DeviceType_MOBILE {
+	if e.arg.DeviceType == keybase1.DeviceTypeV2_MOBILE || provisionerType == keybase1.DeviceType_MOBILE {
 		kex2SecretTyp = libkb.Kex2SecretTypeV1Mobile
 	}
 	m.Debug("Generating Kex2 secret for uid=%s, typ=%d", uid, kex2SecretTyp)
@@ -201,7 +201,7 @@ func (e *loginProvision) deviceWithType(m libkb.MetaContext, provisionerType key
 		m.Debug("Failed to get salt")
 		return err
 	}
-	provisionee := NewKex2Provisionee(m.G(), device, secret.Secret(), e.arg.User.GetUID(), salt)
+	provisionee := NewKex2Provisionee(m.G(), device, secret.Secret(), uid, salt)
 
 	var canceler func()
 
@@ -277,7 +277,7 @@ func (e *loginProvision) deviceWithType(m libkb.MetaContext, provisionerType key
 	}
 
 	// Load me again so that keys will be up to date.
-	loadArg := libkb.NewLoadUserArgWithMetaContext(m).WithSelf(true).WithUID(e.arg.User.GetUID())
+	loadArg := libkb.NewLoadUserArgWithMetaContext(m).WithSelf(true).WithUID(uid)
 	e.arg.User, err = libkb.LoadUser(loadArg)
 	if err != nil {
 		return err
@@ -298,8 +298,8 @@ func (e *loginProvision) deviceWithType(m libkb.MetaContext, provisionerType key
 }
 
 // paper attempts to provision the device via a paper key.
-func (e *loginProvision) paper(m libkb.MetaContext, device *libkb.Device, keys *libkb.DeviceWithKeys) (err error) {
-	defer m.Trace("loginProvision#paper", func() error { return err })()
+func (e *loginProvision) paper(m libkb.MetaContext, device *libkb.DeviceWithDeviceNumber, keys *libkb.DeviceWithKeys) (err error) {
+	defer m.Trace("loginProvision#paper", &err)()
 
 	// get the paper key from the user if we're in the interactive flow
 	if keys == nil {
@@ -350,7 +350,7 @@ var paperKeyNotFound = libkb.NotFoundError{
 }
 
 func (e *loginProvision) getValidPaperKey(m libkb.MetaContext, expectedPrefix *string) (keys *libkb.DeviceWithKeys, err error) {
-	defer m.Trace("loginProvision#getValidPaperKey", func() error { return err })()
+	defer m.Trace("loginProvision#getValidPaperKey", &err)()
 
 	for i := 0; i < 10; i++ {
 		keys, err = e.getValidPaperKeyOnce(m, i, err, expectedPrefix)
@@ -366,7 +366,7 @@ func (e *loginProvision) getValidPaperKey(m libkb.MetaContext, expectedPrefix *s
 }
 
 func (e *loginProvision) getValidPaperKeyOnce(m libkb.MetaContext, i int, lastErr error, expectedPrefix *string) (keys *libkb.DeviceWithKeys, err error) {
-	defer m.Trace("loginProvision#getValidPaperKeyOnce", func() error { return err })()
+	defer m.Trace("loginProvision#getValidPaperKeyOnce", &err)()
 
 	// get the paper key from the user
 	var prefix string
@@ -405,7 +405,7 @@ func (e *loginProvision) getValidPaperKeyOnce(m libkb.MetaContext, i int, lastEr
 // pgpProvision attempts to provision with a synced pgp key.  It
 // needs to get a session first to look for a synced pgp key.
 func (e *loginProvision) pgpProvision(m libkb.MetaContext) (err error) {
-	defer m.Trace("loginProvision#pgpProvision", func() error { return err })()
+	defer m.Trace("loginProvision#pgpProvision", &err)()
 
 	err = e.passphraseLogin(m)
 	if err != nil {
@@ -488,8 +488,8 @@ func (e *loginProvision) ensureLKSec(m libkb.MetaContext) error {
 func (e *loginProvision) recoverAfterFailedSignup(mctx libkb.MetaContext) (ret *libkb.PassphraseStream, err error) {
 	mctx = mctx.WithLogTag("RSGNUP")
 	user := e.arg.User
-	defer mctx.TraceTimed(fmt.Sprintf("recoverAfterFailedSignup(%q)", user.GetNormalizedName()),
-		func() error { return err })()
+	defer mctx.Trace(fmt.Sprintf("recoverAfterFailedSignup(%q)", user.GetNormalizedName()),
+		&err)()
 
 	if !user.GetCurrentEldestSeqno().Eq(keybase1.Seqno(0)) {
 		return nil, errors.New("user has live sigchain, cannot do recover-after-signup login")
@@ -516,7 +516,7 @@ func (e *loginProvision) recoverAfterFailedSignup(mctx libkb.MetaContext) (ret *
 // ppStream gets the passphrase stream, either cached or via
 // SecretUI.
 func (e *loginProvision) ppStream(m libkb.MetaContext) (ret *libkb.PassphraseStream, err error) {
-	defer m.Trace("loginProvision#ppStream", func() error { return err })()
+	defer m.Trace("loginProvision#ppStream", &err)()
 	if ret = m.PassphraseStream(); ret != nil {
 		return ret, nil
 	}
@@ -530,7 +530,7 @@ func (e *loginProvision) ppStream(m libkb.MetaContext) (ret *libkb.PassphraseStr
 }
 
 func (e *loginProvision) passphraseLogin(m libkb.MetaContext) (err error) {
-	defer m.Trace("loginProvision#passphraseLogin", func() error { return err })()
+	defer m.Trace("loginProvision#passphraseLogin", &err)()
 
 	if m.LoginContext() != nil {
 		ok, _ := m.LoginContext().LoggedInLoad()
@@ -639,7 +639,7 @@ func (e *loginProvision) makeDeviceKeys(m libkb.MetaContext, args *DeviceWrapArg
 // syncedPGPKey looks for a synced pgp key for e.user.  If found,
 // it unlocks it.
 func (e *loginProvision) syncedPGPKey(m libkb.MetaContext) (ret libkb.GenericKey, err error) {
-	defer m.Trace("loginProvision#syncedPGPKey", func() error { return err })()
+	defer m.Trace("loginProvision#syncedPGPKey", &err)()
 
 	key, err := e.arg.User.SyncedSecretKey(m)
 	if err != nil {
@@ -681,7 +681,7 @@ func (e *loginProvision) gpgPrivateIndex(m libkb.MetaContext) (*libkb.GpgKeyInde
 
 // gpgClient returns a gpg client.
 func (e *loginProvision) gpgClient(m libkb.MetaContext) (gpgInterface, error) {
-	if e.arg.DeviceType == libkb.DeviceTypeMobile {
+	if e.arg.DeviceType == keybase1.DeviceTypeV2_MOBILE {
 		return nil, libkb.GPGUnavailableError{}
 	}
 	if e.gpgCli != nil {
@@ -703,8 +703,8 @@ func (e *loginProvision) gpgClient(m libkb.MetaContext) (gpgInterface, error) {
 // checkArg checks loginProvisionArg for sane arguments.
 func (e *loginProvision) checkArg() error {
 	// check we have a good device type:
-	if e.arg.DeviceType != libkb.DeviceTypeDesktop && e.arg.DeviceType != libkb.DeviceTypeMobile {
-		return libkb.InvalidArgumentError{Msg: fmt.Sprintf("device type must be %q or %q, not %q", libkb.DeviceTypeDesktop, libkb.DeviceTypeMobile, e.arg.DeviceType)}
+	if e.arg.DeviceType != keybase1.DeviceTypeV2_DESKTOP && e.arg.DeviceType != keybase1.DeviceTypeV2_MOBILE {
+		return libkb.InvalidArgumentError{Msg: fmt.Sprintf("device type must be %q or %q, not %q", keybase1.DeviceTypeV2_DESKTOP, keybase1.DeviceTypeV2_MOBILE, e.arg.DeviceType)}
 	}
 
 	if e.arg.User == nil {
@@ -716,7 +716,7 @@ func (e *loginProvision) checkArg() error {
 
 func (e *loginProvision) route(m libkb.MetaContext) (err error) {
 
-	defer m.Trace("loginProvision#route", func() error { return err })()
+	defer m.Trace("loginProvision#route", &err)()
 
 	// check if User has any pgp keys, active devices
 	ckf := e.arg.User.GetComputedKeyFamily()
@@ -748,9 +748,11 @@ func (e *loginProvision) route(m libkb.MetaContext) (err error) {
 }
 
 func (e *loginProvision) chooseDevice(m libkb.MetaContext, pgp bool) (err error) {
-	defer m.Trace("loginProvision#chooseDevice", func() error { return err })()
+	defer m.Trace("loginProvision#chooseDevice", &err)()
 
 	ckf := e.arg.User.GetComputedKeyFamily()
+	// TODO: switch this to getting all devices
+	// Then insert the number data and then filter out the incorrect devices
 	devices := partitionDeviceList(ckf.GetAllActiveDevices())
 	sort.Sort(devices)
 
@@ -760,13 +762,11 @@ func (e *loginProvision) chooseDevice(m libkb.MetaContext, pgp bool) (err error)
 	}
 
 	expDevices := make([]keybase1.Device, len(devices))
-	idMap := make(map[keybase1.DeviceID]*libkb.Device)
+	idMap := make(map[keybase1.DeviceID]libkb.DeviceWithDeviceNumber)
 	for i, d := range devices {
-		expDevices[i] = *d.ProtExport()
+		expDevices[i] = *d.ProtExportWithDeviceNum()
 		idMap[d.ID] = d
 	}
-
-	autoresetEnabled := m.G().Env.GetFeatureFlags().HasFeature(libkb.EnvironmentFeatureAutoresetPipeline)
 
 	// check to see if they have a PUK, in which case they must select a device
 	hasPUK, err := e.hasPerUserKey(m)
@@ -776,7 +776,7 @@ func (e *loginProvision) chooseDevice(m libkb.MetaContext, pgp bool) (err error)
 
 	arg := keybase1.ChooseDeviceArg{
 		Devices:           expDevices,
-		CanSelectNoDevice: (pgp && !hasPUK) || autoresetEnabled,
+		CanSelectNoDevice: true,
 	}
 	id, err := m.UIs().ProvisionUI.ChooseDevice(m.Ctx(), arg)
 	if err != nil {
@@ -795,38 +795,28 @@ func (e *loginProvision) chooseDevice(m libkb.MetaContext, pgp bool) (err error)
 				return nil
 			}
 
-			// If autoreset is enabled, an error here should passthrough into
-			// autoreset.
-			if autoresetEnabled {
-				m.Warning("Unable to log in with a PGP signature: %s", err.Error())
-			} else {
-				return err
-			}
-		}
-
-		// Error differs depending on the input.
-		if !autoresetEnabled {
-			if pgp && hasPUK {
-				return libkb.ProvisionViaDeviceRequiredError{}
-			}
-			return libkb.ProvisionUnavailableError{}
+			// Error here passes through into autoreset.
+			m.Warning("Unable to log in with a PGP signature: %s", err.Error())
 		}
 
 		// Prompt the user whether they'd like to enter the reset flow.
 		// We will ask them for a password in AccountReset.
 		enterReset, err := m.UIs().LoginUI.PromptResetAccount(m.Ctx(), keybase1.PromptResetAccountArg{
-			Kind: keybase1.ResetPromptType_ENTER_NO_DEVICES,
+			Prompt: keybase1.NewResetPromptDefault(keybase1.ResetPromptType_ENTER_NO_DEVICES),
 		})
 		if err != nil {
 			return err
 		}
 
-		if !enterReset {
+		if enterReset != keybase1.ResetPromptResponse_CONFIRM_RESET {
 			m.Debug("User decided not to enter the reset pipeline")
 			// User had to explicitly decline entering the pipeline so in order to prevent
 			// confusion prevent further prompts by completing a noop login flow.
 			e.skippedLogin = true
-			return nil
+			if pgp && hasPUK {
+				return libkb.ProvisionViaDeviceRequiredError{}
+			}
+			return libkb.ProvisionUnavailableError{}
 		}
 
 		// go into the reset flow
@@ -849,18 +839,18 @@ func (e *loginProvision) chooseDevice(m libkb.MetaContext, pgp bool) (err error)
 	m.Debug("device details: %+v", selected)
 
 	switch selected.Type {
-	case libkb.DeviceTypePaper:
-		return e.paper(m, selected, nil)
-	case libkb.DeviceTypeDesktop:
+	case keybase1.DeviceTypeV2_PAPER:
+		return e.paper(m, &selected, nil)
+	case keybase1.DeviceTypeV2_DESKTOP:
 		return e.deviceWithType(m, keybase1.DeviceType_DESKTOP)
-	case libkb.DeviceTypeMobile:
+	case keybase1.DeviceTypeV2_MOBILE:
 		return e.deviceWithType(m, keybase1.DeviceType_MOBILE)
 	default:
 		return fmt.Errorf("unknown device type: %v", selected.Type)
 	}
 }
 
-func (e *loginProvision) preloadedPaperKey(m libkb.MetaContext, devices []*libkb.Device, paperKey string) error {
+func (e *loginProvision) preloadedPaperKey(m libkb.MetaContext, devices []libkb.DeviceWithDeviceNumber, paperKey string) error {
 	// User has requested non-interactive provisioning - first parse their key
 	keys, prefix, err := getPaperKeyFromString(m, e.arg.PaperKey)
 	if err != nil {
@@ -868,16 +858,16 @@ func (e *loginProvision) preloadedPaperKey(m libkb.MetaContext, devices []*libkb
 	}
 
 	// ... then match it to the paper keys that can be used with this account
-	var matchedDevice *libkb.Device
+	var matchedDevice *libkb.DeviceWithDeviceNumber
 	for _, d := range devices {
-		if d.Type != libkb.DeviceTypePaper {
+		if d.Type != keybase1.DeviceTypeV2_PAPER {
 			continue
 		}
 		if prefix != *d.Description {
 			continue
 		}
 
-		matchedDevice = d
+		matchedDevice = &d
 		break
 	}
 
@@ -906,7 +896,7 @@ func (e *loginProvision) preloadedPaperKey(m libkb.MetaContext, devices []*libkb
 }
 
 func (e *loginProvision) tryPGP(m libkb.MetaContext) (err error) {
-	defer m.Trace("loginProvision#tryPGP", func() error { return err })()
+	defer m.Trace("loginProvision#tryPGP", &err)()
 
 	err = e.pgpProvision(m)
 	if err == nil {
@@ -924,7 +914,7 @@ func (e *loginProvision) tryPGP(m libkb.MetaContext) (err error) {
 }
 
 func (e *loginProvision) tryGPG(m libkb.MetaContext) (err error) {
-	defer m.Trace("loginProvision#tryGPG", func() error { return err })()
+	defer m.Trace("loginProvision#tryGPG", &err)()
 	key, method, err := e.chooseGPGKeyAndMethod(m)
 	if err != nil {
 		return err
@@ -1226,13 +1216,14 @@ func (e *loginProvision) displaySuccess(m libkb.MetaContext) error {
 func (e *loginProvision) LoggedIn() bool {
 	return !e.skippedLogin
 }
+
 func (e *loginProvision) AccountReset() bool {
 	return e.resetComplete
 }
 
-var devtypeSortOrder = map[string]int{libkb.DeviceTypeMobile: 0, libkb.DeviceTypeDesktop: 1, libkb.DeviceTypePaper: 2}
+var devtypeSortOrder = map[keybase1.DeviceTypeV2]int{keybase1.DeviceTypeV2_MOBILE: 0, keybase1.DeviceTypeV2_DESKTOP: 1, keybase1.DeviceTypeV2_PAPER: 2}
 
-type partitionDeviceList []*libkb.Device
+type partitionDeviceList []libkb.DeviceWithDeviceNumber
 
 func (p partitionDeviceList) Len() int {
 	return len(p)

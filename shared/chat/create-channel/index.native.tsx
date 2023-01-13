@@ -1,8 +1,7 @@
-import * as React from 'react'
 import * as Constants from '../../constants/teams'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import {Props} from './index'
+import type {Props} from './index'
 
 const CreateChannel = (props: Props) => (
   <Kb.Box>
@@ -12,16 +11,14 @@ const CreateChannel = (props: Props) => (
       </Kb.Banner>
     )}
     <Kb.Box style={styles.box}>
-      <Kb.Box style={styles.input}>
-        <Kb.Input
+      <Kb.Box2 direction="vertical" fullWidth={true} gap="small">
+        <Kb.LabeledInput
           autoFocus={true}
-          hintText="Channel name"
+          placeholder="Channel name"
           value={props.channelname}
           onChangeText={channelname => props.onChannelnameChange(channelname)}
         />
-      </Kb.Box>
-      <Kb.Box style={styles.input}>
-        <Kb.Input
+        <Kb.LabeledInput
           autoCorrect={true}
           autoFocus={false}
           autoCapitalize="sentences"
@@ -30,14 +27,14 @@ const CreateChannel = (props: Props) => (
           rowsMax={2}
           // From go/chat/msgchecker/constants.go#HeadlineMaxLength
           maxLength={280}
-          hintText="Description or topic (optional)"
+          placeholder="Add a description or topic..."
           value={props.description}
           onChangeText={description => props.onDescriptionChange(description)}
         />
-      </Kb.Box>
-      <Kb.ButtonBar>
+      </Kb.Box2>
+      <Kb.ButtonBar fullWidth={true} style={styles.buttonBar}>
         <Kb.WaitingButton
-          waitingKey={Constants.createChannelWaitingKey(props.teamname)}
+          waitingKey={Constants.createChannelWaitingKey(props.teamID)}
           onClick={props.onSubmit}
           label="Save"
         />
@@ -49,15 +46,15 @@ const CreateChannel = (props: Props) => (
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      box: {
-        padding: 16,
-      },
-      input: {
-        marginTop: Styles.globalMargins.large,
-      },
+      box: {padding: 16},
+      buttonBar: {alignItems: 'center'},
     } as const)
 )
 
-const Wrapper = (props: Props) => <CreateChannel {...props} onBack={undefined} />
+const Wrapper = (props: Props) => (
+  <Kb.HeaderHocWrapper onBack={props.onBack}>
+    <CreateChannel {...props} onBack={undefined} />
+  </Kb.HeaderHocWrapper>
+)
 
-export default Kb.HeaderHoc(Wrapper)
+export default Wrapper

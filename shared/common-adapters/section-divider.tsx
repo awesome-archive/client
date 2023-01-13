@@ -22,7 +22,7 @@ type Props = {
 }
 
 const SectionDivider = (props: Props) => {
-  const collapsible = Object.prototype.hasOwnProperty.call(props, 'collapsed')
+  const collapsible = props.collapsed === true || props.collapsed === false
   const children = (
     <Kb.Box2 direction="horizontal" gap="xtiny" alignItems="center" fullWidth={true} style={styles.container}>
       {typeof props.label === 'string' ? (
@@ -31,7 +31,11 @@ const SectionDivider = (props: Props) => {
         props.label
       )}
       {collapsible && (
-        <Kb.Icon sizeType="Tiny" type={props.collapsed ? 'iconfont-caret-right' : 'iconfont-caret-down'} />
+        <Kb.Icon
+          sizeType="Tiny"
+          style={styles.caret}
+          type={props.collapsed ? 'iconfont-caret-right' : 'iconfont-caret-down'}
+        />
       )}
       {props.showSpinner && <Kb.ProgressIndicator style={styles.progress} />}
     </Kb.Box2>
@@ -48,11 +52,19 @@ const height = Styles.isMobile ? 40 : 32
 SectionDivider.height = height
 
 const styles = Styles.styleSheetCreate(() => ({
-  container: {
-    ...Styles.padding(Styles.globalMargins.xtiny, Styles.globalMargins.tiny),
-    backgroundColor: Styles.globalColors.blueLighter3,
-    height,
+  caret: {
+    marginLeft: Styles.globalMargins.xtiny,
   },
+  container: Styles.platformStyles({
+    common: {
+      ...Styles.padding(Styles.globalMargins.xtiny, Styles.globalMargins.tiny),
+      backgroundColor: Styles.globalColors.blueGrey,
+      height,
+    },
+    isMobile: {
+      ...Styles.padding(Styles.globalMargins.xtiny, Styles.globalMargins.small),
+    },
+  }),
   fullWidth: {
     width: '100%',
   },

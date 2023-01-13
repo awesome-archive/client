@@ -28,6 +28,23 @@ type signupInfo struct {
 	displayedPaperKey string
 }
 
+type teamsUI struct {
+	baseNullUI
+	libkb.Contextified
+}
+
+func (t teamsUI) ConfirmRootTeamDelete(context.Context, keybase1.ConfirmRootTeamDeleteArg) (bool, error) {
+	return true, nil
+}
+
+func (t teamsUI) ConfirmSubteamDelete(context.Context, keybase1.ConfirmSubteamDeleteArg) (bool, error) {
+	return true, nil
+}
+
+func (t teamsUI) ConfirmInviteLinkAccept(context.Context, keybase1.ConfirmInviteLinkAcceptArg) (bool, error) {
+	return true, nil
+}
+
 type signupUI struct {
 	baseNullUI
 	info *signupInfo
@@ -243,11 +260,15 @@ func (h *notifyHandler) UserChanged(_ context.Context, uid keybase1.UID) error {
 	return nil
 }
 
-func (h *notifyHandler) PasswordChanged(_ context.Context) error {
+func (h *notifyHandler) PasswordChanged(_ context.Context, _ keybase1.PassphraseState) error {
 	return nil
 }
 
 func (h *notifyHandler) IdentifyUpdate(_ context.Context, _ keybase1.IdentifyUpdateArg) error {
+	return nil
+}
+
+func (h *notifyHandler) WebOfTrustChanged(_ context.Context, username string) error {
 	return nil
 }
 
@@ -422,13 +443,13 @@ func TestLogoutMulti(t *testing.T) {
 	tt := newTeamTester(t)
 	defer tt.cleanup()
 	user1 := tt.addUser("one")
-	go func() { _ = user1.tc.G.Logout(context.TODO()) }()
-	go func() { _ = user1.tc.G.Logout(context.TODO()) }()
-	go func() { _ = user1.tc.G.Logout(context.TODO()) }()
-	go func() { _ = user1.tc.G.Logout(context.TODO()) }()
-	go func() { _ = user1.tc.G.Logout(context.TODO()) }()
-	go func() { _ = user1.tc.G.Logout(context.TODO()) }()
-	err := user1.tc.G.Logout(context.TODO())
+	go func() { _ = user1.tc.Logout() }()
+	go func() { _ = user1.tc.Logout() }()
+	go func() { _ = user1.tc.Logout() }()
+	go func() { _ = user1.tc.Logout() }()
+	go func() { _ = user1.tc.Logout() }()
+	go func() { _ = user1.tc.Logout() }()
+	err := user1.tc.Logout()
 	require.NoError(t, err)
 }
 
@@ -473,18 +494,16 @@ func TestNoPasswordCliSignup(t *testing.T) {
 	require.Equal(t, expectedPrompts, sui.terminalPrompts)
 
 	ucli := keybase1.UserClient{Cli: user.primaryDevice().rpcClient()}
-	res, err := ucli.LoadHasRandomPw(context.Background(), keybase1.LoadHasRandomPwArg{
-		ForceRepoll: true,
-	})
+	res, err := ucli.LoadPassphraseState(context.Background(), 0)
 	require.NoError(t, err)
-	require.True(t, res)
+	require.Equal(t, res, keybase1.PassphraseState_RANDOM)
 
 	err = G.ConfigureConfig()
 	require.NoError(t, err)
 	logout := client.NewCmdLogoutRunner(G)
 	err = logout.Run()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "Cannot logout")
+	require.Contains(t, err.Error(), "Cannot log out")
 
 	logout = client.NewCmdLogoutRunner(G)
 	logout.Force = true

@@ -72,7 +72,7 @@ func setupJournalManagerTest(t *testing.T) (
 
 	session, err := config.KBPKI().GetCurrentSession(ctx)
 	require.NoError(t, err)
-	quotaUsage = config.getQuotaUsage(session.UID.AsUserOrTeam())
+	quotaUsage = config.GetQuotaUsage(session.UID.AsUserOrTeam())
 
 	setupSucceeded = true
 	return tempdir, ctx, cancel, config, quotaUsage, jManager
@@ -157,7 +157,7 @@ func TestJournalManagerOverQuotaError(t *testing.T) {
 	require.NoError(t, err)
 	AddTeamWriterForTestOrBust(t, config, teamID, session.UID)
 	AddTeamWriterForTestOrBust(t, config, subteamID, session.UID)
-	teamQuotaUsage := config.getQuotaUsage(teamID.AsUserOrTeam())
+	teamQuotaUsage := config.GetQuotaUsage(teamID.AsUserOrTeam())
 
 	qbs := &quotaBlockServer{BlockServer: config.BlockServer()}
 	config.SetBlockServer(qbs)
@@ -330,8 +330,9 @@ func TestJournalManagerOverDiskLimitError(t *testing.T) {
 	require.NoError(t, err)
 	usageBytes, limitBytes, usageFiles, limitFiles :=
 		tj.diskLimiter.getDiskLimitInfo()
+	putCtx := context.Background() // rely on default disk limit timeout
 	err = blockServer.Put(
-		ctx, tlfID1, bID, bCtx, data, serverHalf, DiskBlockAnyCache)
+		putCtx, tlfID1, bID, bCtx, data, serverHalf, DiskBlockAnyCache)
 
 	compare := func(reportable bool, err error) {
 		expectedError := ErrDiskLimitTimeout{
@@ -353,20 +354,20 @@ func TestJournalManagerOverDiskLimitError(t *testing.T) {
 	// Putting it again should encounter a regular deadline exceeded
 	// error.
 	err = blockServer.Put(
-		ctx, tlfID1, bID, bCtx, data, serverHalf, DiskBlockAnyCache)
+		putCtx, tlfID1, bID, bCtx, data, serverHalf, DiskBlockAnyCache)
 	compare(false, err)
 
 	// Advancing the time by overDiskLimitDuration should make it
 	// return another quota error.
 	clock.Add(time.Minute)
 	err = blockServer.Put(
-		ctx, tlfID1, bID, bCtx, data, serverHalf, DiskBlockAnyCache)
+		putCtx, tlfID1, bID, bCtx, data, serverHalf, DiskBlockAnyCache)
 	compare(true, err)
 
 	// Putting it again should encounter a deadline error again.
 	clock.Add(30 * time.Second)
 	err = blockServer.Put(
-		ctx, tlfID1, bID, bCtx, data, serverHalf, DiskBlockAnyCache)
+		putCtx, tlfID1, bID, bCtx, data, serverHalf, DiskBlockAnyCache)
 	compare(false, err)
 }
 
@@ -423,7 +424,8 @@ func TestJournalManagerRestart(t *testing.T) {
 	jManager = makeJournalManager(
 		config, jManager.log, tempdir, jManager.delegateBlockCache,
 		jManager.delegateDirtyBlockCache,
-		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil)
+		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil,
+		TLFJournalBackgroundWorkPaused)
 	err = jManager.EnableExistingJournals(
 		ctx, session.UID, session.VerifyingKey, TLFJournalBackgroundWorkPaused)
 	require.NoError(t, err)
@@ -728,6 +730,9 @@ func TestJournalManagerMultiUser(t *testing.T) {
 }
 
 func TestJournalManagerEnableAuto(t *testing.T) {
+	delegateCtx, delegateCancel := context.WithCancel(context.Background())
+	defer delegateCancel()
+
 	tempdir, ctx, cancel, config, _, jManager := setupJournalManagerTest(t)
 	defer teardownJournalManagerTest(ctx, t, tempdir, cancel, config)
 
@@ -739,6 +744,16 @@ func TestJournalManagerEnableAuto(t *testing.T) {
 	require.Zero(t, status.JournalCount)
 	require.Len(t, tlfIDs, 0)
 
+	delegate := testBWDelegate{
+		t:          t,
+		testCtx:    delegateCtx,
+		stateCh:    make(chan bwState),
+		shutdownCh: make(chan struct{}, 1),
+	}
+	jManager.setDelegateMaker(func(_ tlf.ID) tlfJournalBWDelegate {
+		return delegate
+	})
+
 	blockServer := config.BlockServer()
 	h, err := tlfhandle.ParseHandle(
 		ctx, config.KBPKI(), config.MDOps(), nil, "test_user1", tlf.Private)
@@ -746,7 +761,13 @@ func TestJournalManagerEnableAuto(t *testing.T) {
 	id := h.ResolvedWriters()[0]
 	tlfID := h.TlfID()
 
+	delegate.requireNextState(ctx, bwIdle)
+	delegate.requireNextState(ctx, bwBusy)
+	delegate.requireNextState(ctx, bwIdle)
+
+	t.Log("Pause journal, and wait for it to pause")
 	jManager.PauseBackgroundWork(ctx, tlfID)
+	delegate.requireNextState(ctx, bwPaused)
 
 	bCtx := kbfsblock.MakeFirstContext(id, keybase1.BlockType_DATA)
 	data := []byte{1, 2, 3, 4}
@@ -774,7 +795,8 @@ func TestJournalManagerEnableAuto(t *testing.T) {
 	jManager = makeJournalManager(
 		config, jManager.log, tempdir, jManager.delegateBlockCache,
 		jManager.delegateDirtyBlockCache,
-		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil)
+		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil,
+		TLFJournalBackgroundWorkPaused)
 	session, err := config.KBPKI().GetCurrentSession(ctx)
 	require.NoError(t, err)
 	err = jManager.EnableExistingJournals(
@@ -898,7 +920,8 @@ func TestJournalManagerNukeEmptyJournalsOnRestart(t *testing.T) {
 	jManager = makeJournalManager(
 		config, jManager.log, tempdir, jManager.delegateBlockCache,
 		jManager.delegateDirtyBlockCache,
-		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil)
+		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil,
+		TLFJournalBackgroundWorkPaused)
 	session, err := config.KBPKI().GetCurrentSession(ctx)
 	require.NoError(t, err)
 	err = jManager.EnableExistingJournals(
@@ -967,7 +990,8 @@ func TestJournalManagerTeamTLFWithRestart(t *testing.T) {
 	jManager = makeJournalManager(
 		config, jManager.log, tempdir, jManager.delegateBlockCache,
 		jManager.delegateDirtyBlockCache,
-		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil)
+		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil,
+		TLFJournalBackgroundWorkPaused)
 	err = jManager.EnableExistingJournals(
 		ctx, session.UID, session.VerifyingKey, TLFJournalBackgroundWorkPaused)
 	require.NoError(t, err)
@@ -1085,7 +1109,8 @@ func TestJournalManagerCorruptJournal(t *testing.T) {
 	jManager = makeJournalManager(
 		config, jManager.log, tempdir, jManager.delegateBlockCache,
 		jManager.delegateDirtyBlockCache,
-		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil)
+		jManager.delegateBlockServer, jManager.delegateMDOps, nil, nil,
+		TLFJournalBackgroundWorkPaused)
 	session, err := config.KBPKI().GetCurrentSession(ctx)
 	require.NoError(t, err)
 	err = jManager.EnableExistingJournals(

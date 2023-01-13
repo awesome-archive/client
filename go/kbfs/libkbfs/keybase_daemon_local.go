@@ -13,6 +13,7 @@ import (
 	"github.com/keybase/client/go/kbfs/idutil"
 	"github.com/keybase/client/go/kbfs/kbfscodec"
 	"github.com/keybase/client/go/kbfs/kbfscrypto"
+	"github.com/keybase/client/go/kbfs/ldbutils"
 	kbname "github.com/keybase/client/go/kbun"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -435,12 +436,20 @@ func (k *KeybaseDaemonLocal) PutGitMetadata(
 }
 
 // OnPathChange implements the SubscriptionNotifier interface.
-func (k *KeybaseDaemonLocal) OnPathChange(subscriptionID SubscriptionID, path string, topic keybase1.PathSubscriptionTopic) {
+func (k *KeybaseDaemonLocal) OnPathChange(
+	clientID SubscriptionManagerClientID,
+	subscriptionIDs []SubscriptionID, path string, topics []keybase1.PathSubscriptionTopic) {
 }
 
 // OnNonPathChange implements the SubscriptionNotifier interface.
 func (k *KeybaseDaemonLocal) OnNonPathChange(
-	subscriptionID SubscriptionID, topic keybase1.SubscriptionTopic) {
+	clientID SubscriptionManagerClientID,
+	subscriptionIDs []SubscriptionID, topic keybase1.SubscriptionTopic) {
+}
+
+// GetKVStoreClient implements the KeybaseService interface.
+func (k *KeybaseDaemonLocal) GetKVStoreClient() keybase1.KvstoreInterface {
+	return nil
 }
 
 // Shutdown implements KeybaseDaemon for KeybaseDaemonLocal.
@@ -464,7 +473,7 @@ func newKeybaseDaemonLocal(
 func NewKeybaseDaemonDisk(currentUID keybase1.UID, users []idutil.LocalUser,
 	teams []idutil.TeamInfo, favDBFile string, codec kbfscodec.Codec) (
 	*KeybaseDaemonLocal, error) {
-	favoriteDb, err := leveldb.OpenFile(favDBFile, leveldbOptions)
+	favoriteDb, err := leveldb.OpenFile(favDBFile, ldbutils.LeveldbOptions(nil))
 	if err != nil {
 		return nil, err
 	}

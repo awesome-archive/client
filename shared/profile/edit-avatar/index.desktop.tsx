@@ -1,13 +1,18 @@
 import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import * as fs from 'fs'
-import {clamp} from 'lodash-es'
-import HOCTimers, {PropsWithTimer} from '../../common-adapters/hoc-timers'
-import {EDIT_AVATAR_ZINDEX} from '../../constants/profile'
-import {Props} from '.'
+import clamp from 'lodash/clamp'
+import type {Props} from '.'
+import {ModalTitle} from '../../teams/common'
+import {
+  AVATAR_CONTAINER_SIZE,
+  AVATAR_BORDER_SIZE,
+  AVATAR_SIZE,
+  VIEWPORT_CENTER,
+} from '../../common-adapters/avatar'
+import KB2 from '../../util/electron.desktop'
 
-type _Props = PropsWithTimer<Props>
+const {isDirectory} = KB2.functions
 
 type State = {
   dragStartX: number
@@ -16,6 +21,7 @@ type State = {
   dragStopY: number
   dragging: boolean
   dropping: boolean
+  error: boolean
   hasPreview: boolean
   imageSource: string
   loading: boolean
@@ -31,15 +37,12 @@ type State = {
   viewingCenterY: number
 }
 
-const AVATAR_CONTAINER_SIZE = 175
-const AVATAR_BORDER_SIZE = 4
-const AVATAR_SIZE = AVATAR_CONTAINER_SIZE - AVATAR_BORDER_SIZE * 2
-const VIEWPORT_CENTER = AVATAR_SIZE / 2
+class EditAvatar extends React.Component<Props, State> {
+  private file: HTMLInputElement | null = null
+  private imageRef = React.createRef<Kb.Image>()
+  private timerID?: ReturnType<typeof setTimeout>
 
-class EditAvatar extends React.Component<_Props, State> {
-  _file: HTMLInputElement | null = null
-  _image = React.createRef()
-  constructor(props: _Props) {
+  constructor(props: Props) {
     super(props)
     this.state = {
       dragStartX: 0,
@@ -48,6 +51,7 @@ class EditAvatar extends React.Component<_Props, State> {
       dragStopY: 0,
       dragging: false,
       dropping: false,
+      error: false,
       hasPreview: false,
       imageSource: '',
       loading: false,
@@ -64,23 +68,27 @@ class EditAvatar extends React.Component<_Props, State> {
     }
   }
 
-  _filePickerFiles = () => (this._file && this._file.files) || []
-
-  _filePickerOpen = () => {
-    this._file && this._file.click()
+  componentWillUnmount() {
+    this.timerID && clearTimeout(this.timerID)
   }
 
-  _filePickerSetRef = (r: HTMLInputElement | null) => {
-    this._file = r
+  private filePickerFiles = () => (this.file && this.file.files) || []
+
+  private filePickerOpen = () => {
+    this.file && this.file.click()
   }
 
-  _filePickerSetValue = (value: string) => {
-    if (this._file) this._file.value = value
+  private filePickerSetRef = (r: HTMLInputElement | null) => {
+    this.file = r
   }
 
-  _pickFile = () => {
-    this.setState({loading: true})
-    const fileList = this._filePickerFiles()
+  private filePickerSetValue = (value: string) => {
+    if (this.file) this.file.value = value
+  }
+
+  private pickFile = () => {
+    this.setState({error: false, loading: true})
+    const fileList = this.filePickerFiles()
     const paths: Array<string> = fileList.length
       ? Array.prototype.map
           .call(fileList, (f: File) => {
@@ -92,18 +100,18 @@ class EditAvatar extends React.Component<_Props, State> {
       : ([] as any)
     if (paths) {
       const img = paths.pop()
-      img && this._paintImage(img)
+      img && this.paintImage(img)
     }
-    this._filePickerSetValue('')
+    this.filePickerSetValue('')
   }
 
-  _onDragLeave = () => {
+  private onDragLeave = () => {
     this.setState({dropping: false})
   }
 
-  _onDrop = (e: React.DragEvent<any>) => {
-    this.setState({dropping: false, loading: true})
-    if (!this._validDrag(e)) {
+  private onDrop = async (e: React.DragEvent<any>) => {
+    this.setState({dropping: false, error: false, loading: true})
+    if (!this.validDrag(e)) {
       return
     }
     const fileList = e.dataTransfer.files
@@ -112,14 +120,11 @@ class EditAvatar extends React.Component<_Props, State> {
       : ([] as any)
     if (paths.length) {
       // TODO: Show an error when there's more than one path.
-      for (let path of paths) {
+      for (const path of paths) {
         // Check if any file is a directory and bail out if not
         try {
-          // We do this synchronously
-          // in testing, this is instantaneous
-          // even when dragging many files
-          const stat = fs.lstatSync(path)
-          if (stat.isDirectory()) {
+          const isDir = await (isDirectory?.(path) ?? Promise.resolve(false))
+          if (isDir) {
             // TODO: Show a red error banner on failure: https://zpl.io/2jlkMLm
             return
           }
@@ -128,28 +133,32 @@ class EditAvatar extends React.Component<_Props, State> {
         }
       }
       const img = paths.pop()
-      img && this._paintImage(img)
+      img && this.paintImage(img)
     }
   }
 
-  _validDrag = (e: React.DragEvent<any>) => {
+  private validDrag = (e: React.DragEvent<any>) => {
     return Array.prototype.map.call(e.dataTransfer.types, t => t).includes('Files')
   }
 
-  _onDragOver = (e: React.DragEvent<any>) => {
+  private onDragOver = (e: React.DragEvent<any>) => {
     this.setState({dropping: true})
-    if (this._validDrag(e)) {
+    if (this.validDrag(e)) {
       e.dataTransfer.dropEffect = 'copy'
     } else {
       e.dataTransfer.dropEffect = 'none'
     }
   }
 
-  _paintImage = (path: string) => {
+  private paintImage = (path: string) => {
     this.setState({imageSource: path})
   }
 
-  _onImageLoad = (e: React.SyntheticEvent<any>) => {
+  private onImageError = () => {
+    this.setState({error: true, hasPreview: false, loading: false})
+  }
+
+  private onImageLoad = (e: React.BaseSyntheticEvent) => {
     // TODO: Make RPC to check file size and warn them before they try submitting.
 
     let height = AVATAR_SIZE
@@ -172,7 +181,7 @@ class EditAvatar extends React.Component<_Props, State> {
       viewingCenterY: e.currentTarget.naturalHeight / 2,
     })
 
-    this.props.setTimeout(() => {
+    this.timerID = setTimeout(() => {
       this.setState({
         hasPreview: true,
         loading: false,
@@ -180,14 +189,14 @@ class EditAvatar extends React.Component<_Props, State> {
     }, 1500)
   }
 
-  _onRangeChange = (e: React.FormEvent<any>) => {
+  private onRangeChange = (e: React.FormEvent<any>) => {
     const scale = parseFloat(e.currentTarget.value)
     // likely unsafe to ref this.state but afraid to change this now
     // eslint-disable-next-line
     const scaledImageHeight = this.state.startingImageHeight * scale
     // eslint-disable-next-line
     const scaledImageWidth = this.state.startingImageWidth * scale
-    // eslint-disable-next-line
+
     const ratio = this.state.naturalImageWidth / scaledImageWidth
     const offsetLeft = clamp(
       // eslint-disable-next-line
@@ -211,14 +220,17 @@ class EditAvatar extends React.Component<_Props, State> {
     })
   }
 
-  _onMouseDown = (e: React.MouseEvent) => {
-    if (!this.state.hasPreview || !this._image) return
+  private onMouseDown = (e: React.MouseEvent) => {
+    if (!this.state.hasPreview || !this.imageRef) return
 
-    const img = this._image.current
+    // Grab the values now. The event object will be nullified by the time setState is called.
+    const {pageX, pageY} = e
+
+    const img = this.imageRef.current
 
     this.setState(s => ({
-      dragStartX: e.pageX,
-      dragStartY: e.pageY,
+      dragStartX: pageX,
+      dragStartY: pageY,
       // @ts-ignore codemode issue
       dragStopX: img && img.style.left ? parseInt(img.style.left, 10) : s.dragStopX,
       // @ts-ignore codemode issue
@@ -227,10 +239,10 @@ class EditAvatar extends React.Component<_Props, State> {
     }))
   }
 
-  _onMouseUp = () => {
-    if (!this.state.hasPreview || !this._image) return
+  private onMouseUp = () => {
+    if (!this.state.hasPreview || !this.imageRef) return
 
-    const img = this._image.current
+    const img = this.imageRef.current
 
     this.setState(s => ({
       // @ts-ignore codemode issue
@@ -241,24 +253,27 @@ class EditAvatar extends React.Component<_Props, State> {
     }))
   }
 
-  _onMouseMove = (e: React.MouseEvent) => {
+  private onMouseMove = (e: React.MouseEvent) => {
     if (!this.state.dragging || this.props.submitting) return
+
+    // Grab the values now. The event object will be nullified by the time setState is called.
+    const {pageX, pageY} = e
 
     const offsetLeft = clamp(
       // eslint-disable-next-line
-      this.state.dragStopX + e.pageX - this.state.dragStartX,
+      this.state.dragStopX + pageX - this.state.dragStartX,
       // eslint-disable-next-line
       AVATAR_SIZE - this.state.scaledImageWidth,
       0
     )
     const offsetTop = clamp(
       // eslint-disable-next-line
-      this.state.dragStopY + e.pageY - this.state.dragStartY,
+      this.state.dragStopY + pageY - this.state.dragStartY,
       // eslint-disable-next-line
       AVATAR_SIZE - this.state.scaledImageHeight,
       0
     )
-    // eslint-disable-next-line
+
     const ratio = this.state.naturalImageWidth / this.state.scaledImageWidth
     // eslint-disable-next-line
     const viewingCenterX = (VIEWPORT_CENTER - this.state.offsetLeft) * ratio
@@ -273,7 +288,7 @@ class EditAvatar extends React.Component<_Props, State> {
     })
   }
 
-  _onSave = () => {
+  private onSave = () => {
     const x = this.state.offsetLeft * -1
     const y = this.state.offsetTop * -1
     const ratio =
@@ -284,42 +299,89 @@ class EditAvatar extends React.Component<_Props, State> {
       y0: Math.round(y * ratio),
       y1: Math.round((y + AVATAR_SIZE) * ratio),
     }
+
+    if (this.props.wizard) {
+      return this.props.onSave(
+        this.state.imageSource,
+        crop,
+        this.state.scaledImageWidth,
+        this.state.offsetLeft,
+        this.state.offsetTop
+      )
+    }
+
     this.props.onSave(this.state.imageSource, crop)
   }
 
   render() {
     return (
-      <Kb.MaybePopup
+      <Kb.Modal
+        mode="DefaultFullHeight"
         onClose={this.props.onClose}
-        styleClipContainer={styles.overflowHidden}
-        styleCover={Styles.collapseStyles([
-          styles.cover,
-          {
-            cursor: this.state.dragging ? '-webkit-grabbing' : 'default',
-          },
-        ])}
-        onMouseUp={this._onMouseUp}
-        onMouseDown={this._onMouseDown}
-        onMouseMove={this._onMouseMove}
+        header={{
+          leftButton:
+            this.props.wizard || this.props.showBack ? (
+              <Kb.Icon type="iconfont-arrow-left" onClick={this.props.onBack} />
+            ) : null,
+          rightButton: this.props.wizard ? (
+            <Kb.Button
+              label="Skip"
+              mode="Secondary"
+              onClick={this.props.onSkip}
+              style={styles.skipButton}
+              type="Default"
+            />
+          ) : null,
+          title:
+            this.props.type === 'team' ? (
+              <ModalTitle teamID={this.props.teamID} title="Upload an avatar" />
+            ) : (
+              'Upload an avatar'
+            ),
+        }}
+        allowOverflow={true}
+        footer={{
+          content: (
+            <Kb.WaitingButton
+              fullWidth={true}
+              label={this.props.wizard ? 'Continue' : 'Save'}
+              onClick={this.onSave}
+              disabled={!this.state.hasPreview}
+              waitingKey={null}
+            />
+          ),
+        }}
+        banners={[
+          ...(this.props.error
+            ? [
+                <Kb.Banner color="red" key="propsError">
+                  {this.props.error}
+                </Kb.Banner>,
+              ]
+            : []),
+          ...(this.state.error
+            ? [
+                <Kb.Banner color="red" key="stateError">
+                  The image you uploaded could not be read. Try again with a valid PNG, JPG or GIF.
+                </Kb.Banner>,
+              ]
+            : []),
+        ]}
       >
-        {!!this.props.error && (
-          <Kb.Banner color="red">
-            <Kb.BannerParagraph bannerColor="red" content={this.props.error} />
-          </Kb.Banner>
-        )}
         <Kb.Box
           className={Styles.classNames({dropping: this.state.dropping})}
-          onDragLeave={this._onDragLeave}
-          onDragOver={this._onDragOver}
-          onDrop={this._onDrop}
+          onDragLeave={this.onDragLeave}
+          onDragOver={this.onDragOver}
+          onDrop={this.onDrop}
           style={Styles.collapseStyles([
             styles.container,
-            {
-              paddingTop: this.props.createdTeam ? 0 : Styles.globalMargins.xlarge,
-            },
+            this.props.createdTeam && styles.paddingTopForCreatedTeam,
           ])}
+          onMouseUp={this.onMouseUp}
+          onMouseDown={this.onMouseDown}
+          onMouseMove={this.onMouseMove}
         >
-          {this.props.createdTeam && (
+          {this.props.type === 'team' && this.props.createdTeam && !this.props.wizard && (
             <Kb.Box style={styles.createdBanner}>
               <Kb.Text type="BodySmallSemibold" negative={true}>
                 Hoorah! Your team {this.props.teamname} was created.
@@ -327,34 +389,34 @@ class EditAvatar extends React.Component<_Props, State> {
             </Kb.Box>
           )}
           <Kb.Text center={true} type="Body" style={styles.instructions}>
-            Drag and drop a {this.props.teamname ? 'team' : 'profile'} avatar or{' '}
-            <Kb.Text type="BodyPrimaryLink" className="hover-underline" onClick={this._filePickerOpen}>
-              browse your computer for one
-            </Kb.Text>
-            .
+            Drag and drop a {this.props.type} avatar or{' '}
+            <Kb.Text type="BodyPrimaryLink" className="hover-underline" onClick={this.filePickerOpen}>
+              browse your computer
+            </Kb.Text>{' '}
+            for one.
           </Kb.Text>
           <HoverBox
             className={Styles.classNames({filled: this.state.hasPreview})}
-            onClick={this.state.hasPreview ? null : this._filePickerOpen}
+            onClick={this.state.hasPreview ? null : this.filePickerOpen}
             style={{
-              borderRadius: this.props.teamname ? 32 : AVATAR_CONTAINER_SIZE,
+              borderRadius: this.props.type === 'team' ? 32 : AVATAR_CONTAINER_SIZE,
             }}
           >
             <input
-              accept="image/*"
+              accept="image/gif,image/jpeg,image/png"
               multiple={false}
-              onChange={this._pickFile}
-              ref={this._filePickerSetRef}
+              onChange={this.pickFile}
+              ref={this.filePickerSetRef}
               style={styles.hidden}
               type="file"
             />
             {this.state.loading && (
               <Kb.Box2 direction="vertical" fullHeight={true} style={styles.spinnerContainer}>
-                <Kb.ProgressIndicator type="Large" style={Kb.iconCastPlatformStyles(styles.spinner)} />
+                <Kb.ProgressIndicator type="Large" style={styles.spinner} />
               </Kb.Box2>
             )}
-            <Kb.OrientedImage
-              forwardedRef={this._image}
+            <Kb.Image
+              ref={this.imageRef}
               src={this.state.imageSource}
               style={Styles.platformStyles({
                 isElectron: {
@@ -368,14 +430,15 @@ class EditAvatar extends React.Component<_Props, State> {
                 },
               } as const)}
               onDragStart={e => e.preventDefault()}
-              onLoad={this._onImageLoad}
+              onLoad={this.onImageLoad}
+              onError={this.onImageError}
             />
             {!this.state.loading && !this.state.hasPreview && (
               <Kb.Icon
                 className="icon"
                 color={Styles.globalColors.greyDark}
                 fontSize={48}
-                style={Kb.iconCastPlatformStyles(styles.icon)}
+                style={styles.icon}
                 type="iconfont-camera"
               />
             )}
@@ -385,30 +448,15 @@ class EditAvatar extends React.Component<_Props, State> {
               disabled={!this.state.hasPreview || this.props.submitting}
               min={1}
               max={10}
-              onChange={this._onRangeChange}
+              onChange={this.onRangeChange}
               onMouseMove={e => e.stopPropagation()}
               step="any"
               type="range"
               value={this.state.scale}
             />
           )}
-          <Kb.ButtonBar>
-            <Kb.WaitingButton
-              label={this.props.createdTeam ? 'Later, thanks' : 'Cancel'}
-              onClick={this.props.onClose}
-              type="Dim"
-              waitingKey={this.props.waitingKey}
-              onlyDisable={true}
-            />
-            <Kb.WaitingButton
-              disabled={!this.state.hasPreview}
-              label="Save"
-              onClick={this._onSave}
-              waitingKey={this.props.waitingKey}
-            />
-          </Kb.ButtonBar>
         </Kb.Box>
-      </Kb.MaybePopup>
+      </Kb.Modal>
     )
   }
 }
@@ -421,53 +469,60 @@ const hoverStyles = Styles.styleSheetCreate(
         borderColor: Styles.globalColors.blue_60,
       },
       droppingIcon: {color: Styles.globalColors.blue_60},
-      filled: {
-        backgroundColor: Styles.globalColors.white,
-        borderColor: Styles.globalColors.grey,
-        borderStyle: 'solid',
-        cursor: '-webkit-grab',
-      },
+      filled: Styles.platformStyles({
+        common: {
+          backgroundColor: Styles.globalColors.white,
+          borderColor: Styles.globalColors.grey,
+          borderStyle: 'solid',
+        },
+        isElectron: {cursor: '-webkit-grab'},
+      }),
       filledHover: {
         backgroundColor: Styles.globalColors.white,
         borderColor: Styles.globalColors.grey,
       },
       hover: {borderColor: Styles.globalColors.black_50},
-      hoverContainer: {
-        backgroundColor: Styles.globalColors.grey,
-        borderColor: Styles.globalColors.greyDark,
-        borderStyle: 'dotted',
-        borderWidth: AVATAR_BORDER_SIZE,
-        cursor: 'pointer',
-        height: AVATAR_CONTAINER_SIZE,
-        marginBottom: Styles.globalMargins.small,
-        marginTop: Styles.globalMargins.medium,
-        overflow: 'hidden',
-        position: 'relative',
-        width: AVATAR_CONTAINER_SIZE,
-      },
+      hoverContainer: Styles.platformStyles({
+        common: {
+          backgroundColor: Styles.globalColors.grey,
+          borderColor: Styles.globalColors.greyDark,
+          borderStyle: 'dotted',
+          borderWidth: AVATAR_BORDER_SIZE,
+          height: AVATAR_CONTAINER_SIZE,
+          marginBottom: Styles.globalMargins.small,
+          marginTop: Styles.globalMargins.medium,
+          overflow: 'hidden',
+          position: 'relative',
+          width: AVATAR_CONTAINER_SIZE,
+        },
+        isElectron: {
+          cursor: 'pointer',
+        },
+      }),
       hoverIcon: {color: Styles.globalColors.black_50},
     } as const)
 )
 
-const HoverBox = Styles.styled(Kb.Box)(() => ({
-  '&.filled': hoverStyles.filled,
-  '&.filled:active': {cursor: '-webkit-grabbing'},
-  '&.filled:hover': hoverStyles.filledHover,
-  '&:hover': hoverStyles.hover,
-  '&:hover .icon': hoverStyles.hoverIcon,
-  '.dropping &': hoverStyles.dropping,
-  '.dropping & .icon': hoverStyles.droppingIcon,
-  ...hoverStyles.hoverContainer,
-}))
+const HoverBox = Styles.styled(Kb.Box)(
+  () =>
+    ({
+      '&.filled': hoverStyles.filled,
+      '&.filled:active': {cursor: '-webkit-grabbing'},
+      '&.filled:hover': hoverStyles.filledHover,
+      '&:hover': hoverStyles.hover,
+      '&:hover .icon': hoverStyles.hoverIcon,
+      '.dropping &': hoverStyles.dropping,
+      '.dropping & .icon': hoverStyles.droppingIcon,
+      ...hoverStyles.hoverContainer,
+    } as any)
+)
 
 const styles = Styles.styleSheetCreate(() => ({
   container: {
     ...Styles.globalStyles.flexBoxColumn,
+    ...Styles.padding(Styles.globalMargins.xlarge, 0),
     alignItems: 'center',
-    minWidth: 460,
-    paddingBottom: Styles.globalMargins.xlarge,
   },
-  cover: {zIndex: EDIT_AVATAR_ZINDEX},
   createdBanner: {
     backgroundColor: Styles.globalColors.green,
     borderTopLeftRadius: 4,
@@ -486,17 +541,14 @@ const styles = Styles.styleSheetCreate(() => ({
     position: 'absolute',
     top: '50%',
   },
-  instructions: {
-    maxWidth: 200,
-  },
-  overflowHidden: {overflow: 'hidden'},
-  spinner: {
-    alignSelf: 'center',
-  },
+  instructions: {maxWidth: 200},
+  paddingTopForCreatedTeam: {paddingTop: Styles.globalMargins.xlarge},
+  skipButton: {minWidth: 60},
+  spinner: {alignSelf: 'center'},
   spinnerContainer: {
     backgroundColor: Styles.globalColors.grey,
     justifyContent: 'center',
   },
 }))
 
-export default HOCTimers(EditAvatar)
+export default EditAvatar

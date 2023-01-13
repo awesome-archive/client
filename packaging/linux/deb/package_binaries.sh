@@ -1,16 +1,15 @@
 #! /usr/bin/env bash
 
-# Builds the keybase binary and packages it into two ".deb" files, one for i386
-# and one for amd64. The argument to this script is the output directory of a
-# build_binaries.sh build. The package files are created there, in their
-# respective architecture folders.
+# Builds the keybase binary and packages it into a ".deb" file for amd64. The
+# argument to this script is the output directory of a build_binaries.sh build.
+# The package files are created there, in their respective architecture folders.
 #
 # Usage:
 #   ./package_binaries.sh <build_root>
 
 set -e -u -o pipefail
 
-here="$(dirname "$BASH_SOURCE")"
+here="$(dirname "${BASH_SOURCE[0]}")"
 
 build_root="${1:-}"
 if [ -z "$build_root" ] ; then
@@ -30,12 +29,13 @@ if [ "$mode" = "production" ] ; then
   repo_url="http://dist.keybase.io/linux/deb/repo"
 elif [ "$mode" = "prerelease" ] ; then
   repo_url="http://prerelease.keybase.io/deb"
+  # debian bullseye removed libappindicator1 in favor of libayatana-appindicator1, so allow both.
   # "psmisc" provides "killall", which is used in run_keybase and
   # post_install.sh.
   # lsof used in post_install.sh
   # systemd-container provides machinectl, which is used in post_install.sh
   # 'libasound2, libnss3, libxss1, libxtst6' is required by the GUI (issue #9872 and #17365)
-  dependencies="Depends: libappindicator1, fuse, libgconf-2-4, psmisc, lsof, procps, libasound2, libnss3, libxss1, libxtst6, libgtk-3-0"
+  dependencies="Depends: libappindicator1 | libayatana-appindicator1, fuse, libgconf-2-4, psmisc, lsof, procps, libasound2, libnss3, libxss1, libxtst6, libgtk-3-0"
 elif [ "$mode" = "staging" ] ; then
   # Note: This doesn't exist yet. But we need to be distinct from the
   # production URL, because we're moving to a model where we build a clean repo
@@ -96,7 +96,4 @@ build_one_architecture() {
 }
 
 export debian_arch=amd64
-build_one_architecture
-
-export debian_arch=i386
 build_one_architecture

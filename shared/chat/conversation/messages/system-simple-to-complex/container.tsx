@@ -1,36 +1,31 @@
-import * as Types from '../../../../constants/types/chat2'
+import * as React from 'react'
+import type * as Types from '../../../../constants/types/chat2'
+import * as Constants from '../../../../constants/chat2'
 import * as RouteTreeGen from '../../../../actions/route-tree-gen'
-import {teamsTab} from '../../../../constants/tabs'
+import * as TeamsGen from '../../../../actions/teams-gen'
 import SystemSimpleToComplex from '.'
-import {connect} from '../../../../util/container'
+import * as Container from '../../../../util/container'
 
-type OwnProps = {
-  message: Types.MessageSystemSimpleToComplex
-}
+type OwnProps = {message: Types.MessageSystemSimpleToComplex}
 
-const mapStateToProps = state => ({
-  you: state.config.username,
+const SystemSimpleToComplexContainer = React.memo(function SystemSimpleToComplexContainer(p: OwnProps) {
+  const {message} = p
+  const {conversationIDKey} = message
+  const {teamID} = Container.useSelector(state => Constants.getMeta(state, conversationIDKey))
+  const you = Container.useSelector(state => state.config.username)
+  const dispatch = Container.useDispatch()
+  const onManageChannels = React.useCallback(() => {
+    dispatch(TeamsGen.createManageChatChannels({teamID}))
+  }, [dispatch, teamID])
+  const onViewTeam = React.useCallback(() => {
+    dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {teamID}, selected: 'team'}]}))
+  }, [dispatch, teamID])
+  const props = {
+    message,
+    onManageChannels,
+    onViewTeam,
+    you,
+  }
+  return <SystemSimpleToComplex {...props} />
 })
-
-const mapDispatchToProps = dispatch => ({
-  _onManageChannels: (teamname: string) =>
-    dispatch(
-      RouteTreeGen.createNavigateAppend({path: [{props: {teamname}, selected: 'chatManageChannels'}]})
-    ),
-  onViewTeam: (teamname: string) => {
-    dispatch(RouteTreeGen.createNavigateAppend({path: [teamsTab, {props: {teamname}, selected: 'team'}]}))
-  },
-})
-
-const mergeProps = (stateProps, dispatchProps, ownProps: OwnProps) => ({
-  message: ownProps.message,
-  onManageChannels: () => dispatchProps._onManageChannels(ownProps.message.team),
-  onViewTeam: dispatchProps.onViewTeam,
-  you: stateProps.you,
-})
-
-export default connect(
-  mapStateToProps,
-  mapDispatchToProps,
-  mergeProps
-)(SystemSimpleToComplex)
+export default SystemSimpleToComplexContainer

@@ -1,44 +1,15 @@
 import {featureFlagsOverride} from '../local-debug.desktop'
-import {FeatureFlags} from './feature-flags'
+import type {FeatureFlags} from './feature-flags'
 
-if (process.env['KEYBASE_FEATURES']) {
-  console.error('KEYBASE_FEATURES is no longer supported. Edit the "*.app.debug" json file instead')
-}
-
-let features = (featureFlagsOverride && featureFlagsOverride.split(',')) || []
+const features = (featureFlagsOverride && featureFlagsOverride.split(',')) || []
 
 const featureOn = (key: keyof FeatureFlags) => features.includes(key)
 
 const ff: FeatureFlags = {
   admin: false,
-  airdrop: true,
-  chatIndexProfilingEnabled: false,
-  conflictResolution: false,
-  darkMode: false,
-  dbCleanEnabled: false,
-  fastAccountSwitch: false,
-  foldersInProfileTab: false,
-  kbfsOfflineMode: false,
-  lagRadar: false,
-  moveOrCopy: false,
-  newTeamBuildingForChatAllowMakeTeam: false,
-  outOfDateBanner: false,
-  plansEnabled: false,
-  proofProviders: true,
-  resetPipeline: false,
-  stellarExternalPartners: true,
-  wonderland: false,
 }
 
-const inAdmin: {[K in keyof FeatureFlags]?: boolean} = {
-  chatIndexProfilingEnabled: true,
-  dbCleanEnabled: true,
-  fastAccountSwitch: true,
-  kbfsOfflineMode: true,
-  moveOrCopy: true,
-  outOfDateBanner: true,
-  proofProviders: true,
-}
+const inAdmin: {[K in keyof FeatureFlags]?: boolean} = {}
 
 // load overrides
 Object.keys(ff).forEach(k => {

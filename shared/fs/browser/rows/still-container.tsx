@@ -1,57 +1,43 @@
-import * as React from 'react'
 import * as Types from '../../../constants/types/fs'
 import * as Constants from '../../../constants/fs'
-import {namedConnect} from '../../../util/container'
-import OpenHOC from '../../common/open-hoc'
+import * as Container from '../../../util/container'
+import * as FsGen from '../../../actions/fs-gen'
+import {useOpen} from '../../common/use-open'
 import Still from './still'
 
 type OwnProps = {
   destinationPickerIndex?: number
-  name: string
   path: Types.Path
 }
 
-const mapStateToProps = (state, {path}: OwnProps) => ({
-  _downloads: state.fs.downloads,
-  _pathItem: state.fs.pathItems.get(path, Constants.unknownPathItem),
-  _pathItemActionMenu: state.fs.pathItemActionMenu,
-})
+const StillContainer = (p: OwnProps) => {
+  const {destinationPickerIndex, path} = p
+  const _downloads = Container.useSelector(state => state.fs.downloads)
+  const _pathItem = Container.useSelector(state => Constants.getPathItem(state.fs.pathItems, path))
+  const _pathItemActionMenu = Container.useSelector(state => state.fs.pathItemActionMenu)
+  const _uploads = Container.useSelector(state => state.fs.uploads)
 
-const getDownloadIntent = (
-  path: Types.Path,
-  downloads: Types.Downloads,
-  pathItemActionMenu: Types.PathItemActionMenu
-): Types.DownloadIntent | null => {
-  const downloadID = downloads.info.findKey(info => info.path === path)
-  if (!downloadID) {
-    return null
-  }
-  const dlState = downloads.state.get(downloadID, Constants.emptyDownloadState)
-  if (!Constants.downloadIsOngoing(dlState)) {
-    return null
-  }
-  if (pathItemActionMenu.downloadID === downloadID) {
-    return pathItemActionMenu.downloadIntent
-  }
-  return Types.DownloadIntent.None
-}
+  const dispatch = Container.useDispatch()
 
-const mergeProps = (stateProps, _, {name, path, destinationPickerIndex}: OwnProps) => {
-  const {_downloads, _pathItem, _pathItemActionMenu} = stateProps
-  return {
-    destinationPickerIndex,
-    intentIfDownloading: getDownloadIntent(path, _downloads, _pathItemActionMenu),
+  const dismissUploadError = (uploadID: string) => dispatch(FsGen.createDismissUpload({uploadID}))
+  const writingToJournalUploadState = _uploads.writingToJournal.get(path)
+  const onOpen = useOpen({destinationPickerIndex, path})
+  const np = {
+    destinationPickerIndex, // needed by OpenHOC
+    dismissUploadError: writingToJournalUploadState?.error
+      ? () => dismissUploadError(writingToJournalUploadState.uploadID)
+      : undefined,
+    intentIfDownloading: Constants.getDownloadIntent(path, _downloads, _pathItemActionMenu),
     isEmpty:
       _pathItem.type === Types.PathType.Folder &&
       _pathItem.progress === Types.ProgressType.Loaded &&
-      _pathItem.children.isEmpty(),
-    name,
+      !_pathItem.children.size,
+    onOpen,
     path,
     type: _pathItem.type,
+    uploading: _uploads.syncingPaths.has(path),
+    writingToJournal: !!writingToJournalUploadState,
   }
+  return <Still {...np} />
 }
-
-export default ((ComposedComponent: React.ComponentType<any>) =>
-  namedConnect(mapStateToProps, () => ({}), mergeProps, 'ConnectedStillRow')(OpenHOC(ComposedComponent)))(
-  Still
-)
+export default StillContainer

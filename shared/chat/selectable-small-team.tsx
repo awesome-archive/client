@@ -2,7 +2,9 @@ import * as React from 'react'
 import * as Kb from '../common-adapters'
 import * as Styles from '../styles'
 import {FilteredTopLine} from './top-line'
+import {BottomLine} from './inbox/row/small-team/bottom-line'
 import {Avatars, TeamAvatar} from './avatars'
+import type * as RPCChatTypes from '../constants/types/rpc-chat-gen'
 
 type Props = {
   backgroundColor?: string
@@ -15,6 +17,8 @@ type Props = {
   participants: Array<string>
   showBadge: boolean
   showBold: boolean
+  snippet?: string
+  snippetDecoration: RPCChatTypes.SnippetDecoration
   teamname: string
   usernameColor: string
 }
@@ -33,6 +37,15 @@ class SelectableSmallTeam extends React.PureComponent<Props, State> {
 
   render() {
     const props = this.props
+    if (!props.teamname && props.participants.length === 0) {
+      return (
+        <Kb.ClickableBox onClick={props.onSelectConversation}>
+          <Kb.Box2 direction="vertical" style={styles.container} centerChildren={true}>
+            <Kb.ProgressIndicator style={styles.spinner} type="Small" />
+          </Kb.Box2>
+        </Kb.ClickableBox>
+      )
+    }
     return (
       <Kb.ClickableBox onClick={props.onSelectConversation} style={styles.container}>
         <Kb.Box2
@@ -45,7 +58,7 @@ class SelectableSmallTeam extends React.PureComponent<Props, State> {
           })}
           style={Styles.collapseStyles([
             styles.rowContainer,
-            this.props.isSelected && {backgroundColor: Styles.globalColors.blue},
+            {backgroundColor: this.props.isSelected ? Styles.globalColors.blue : Styles.globalColors.white},
           ])}
           onMouseLeave={this._onMouseLeave}
           onMouseOver={this._onMouseOver}
@@ -64,10 +77,11 @@ class SelectableSmallTeam extends React.PureComponent<Props, State> {
               isMuted={props.isMuted}
               isSelected={props.isSelected}
               isLocked={props.isLocked}
-              participants={props.participants}
+              participantOne={props.participants[0]}
+              participantTwo={props.participants[1]}
             />
           )}
-          <Kb.Box style={styles.conversationRow}>
+          <Kb.Box2 direction="vertical" style={Styles.globalStyles.flexOne}>
             <FilteredTopLine
               isSelected={props.isSelected}
               numSearchHits={props.numSearchHits}
@@ -76,7 +90,10 @@ class SelectableSmallTeam extends React.PureComponent<Props, State> {
               showBold={props.showBold}
               usernameColor={props.usernameColor}
             />
-          </Kb.Box>
+            {!props.numSearchHits && (
+              <BottomLine conversationIDKey="" layoutSnippet={props.snippet} isSelected={props.isSelected} />
+            )}
+          </Kb.Box2>
           {this.props.showBadge && <Kb.Box2 direction="horizontal" style={styles.badge} />}
         </Kb.Box2>
       </Kb.ClickableBox>
@@ -98,19 +115,20 @@ const styles = Styles.styleSheetCreate(() => ({
     flexShrink: 0,
     height: rowHeight,
   },
-  conversationRow: {
-    ...Styles.globalStyles.flexBoxColumn,
-    flexGrow: 1,
-    height: '100%',
-    justifyContent: 'center',
-  },
   rowContainer: Styles.platformStyles({
-    common: {
-      paddingLeft: Styles.globalMargins.xtiny,
-      paddingRight: Styles.globalMargins.xtiny,
+    isElectron: {
+      ...Styles.desktopStyles.clickable,
+      paddingLeft: Styles.globalMargins.xsmall,
+      paddingRight: Styles.globalMargins.xsmall,
     },
-    isElectron: Styles.desktopStyles.clickable,
+    isMobile: {
+      paddingLeft: Styles.globalMargins.small,
+      paddingRight: Styles.globalMargins.small,
+    },
   }),
+  spinner: {
+    alignSelf: 'center',
+  },
 }))
 
 export default SelectableSmallTeam

@@ -31,6 +31,24 @@
   "types": [
     {
       "type": "record",
+      "name": "ConvIDStr",
+      "fields": [],
+      "typedef": "string"
+    },
+    {
+      "type": "record",
+      "name": "TLFIDStr",
+      "fields": [],
+      "typedef": "string"
+    },
+    {
+      "type": "record",
+      "name": "FlipGameIDStr",
+      "fields": [],
+      "typedef": "string"
+    },
+    {
+      "type": "record",
       "name": "RateLimitRes",
       "fields": [
         {
@@ -104,7 +122,7 @@
       "name": "MsgSender",
       "fields": [
         {
-          "type": "string",
+          "type": "keybase1.UID",
           "name": "uid",
           "jsonkey": "uid"
         },
@@ -115,7 +133,7 @@
           "optional": true
         },
         {
-          "type": "string",
+          "type": "keybase1.DeviceID",
           "name": "deviceID",
           "jsonkey": "device_id"
         },
@@ -123,6 +141,23 @@
           "type": "string",
           "name": "deviceName",
           "jsonkey": "device_name",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "MsgBotInfo",
+      "fields": [
+        {
+          "type": "keybase1.UID",
+          "name": "botUID",
+          "jsonkey": "bot_uid"
+        },
+        {
+          "type": "string",
+          "name": "botUsername",
+          "jsonkey": "bot_username",
           "optional": true
         }
       ]
@@ -137,12 +172,12 @@
           "jsonkey": "text"
         },
         {
-          "type": "string",
+          "type": "FlipGameIDStr",
           "name": "gameID",
           "jsonkey": "game_id"
         },
         {
-          "type": "string",
+          "type": "ConvIDStr",
           "name": "flipConvID",
           "jsonkey": "flip_conv_id"
         },
@@ -166,6 +201,93 @@
     },
     {
       "type": "record",
+      "name": "EmojiContent",
+      "fields": [
+        {
+          "type": "string",
+          "name": "alias"
+        },
+        {
+          "type": "boolean",
+          "name": "isCrossTeam"
+        },
+        {
+          "type": [
+            null,
+            "ConvIDStr"
+          ],
+          "name": "convID"
+        },
+        {
+          "type": [
+            null,
+            "MessageID"
+          ],
+          "name": "messageID"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "MsgTextContent",
+      "fields": [
+        {
+          "type": "string",
+          "name": "body"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "TextPayment"
+          },
+          "name": "payments"
+        },
+        {
+          "type": [
+            null,
+            "MessageID"
+          ],
+          "name": "replyTo"
+        },
+        {
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "replyToUID"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "KnownUserMention"
+          },
+          "name": "userMentions"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "KnownTeamMention"
+          },
+          "name": "teamMentions"
+        },
+        {
+          "type": [
+            null,
+            "LiveLocation"
+          ],
+          "name": "liveLocation"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "EmojiContent"
+          },
+          "name": "emojis"
+        }
+      ]
+    },
+    {
+      "type": "record",
       "name": "MsgContent",
       "fields": [
         {
@@ -176,7 +298,7 @@
         {
           "type": [
             null,
-            "MessageText"
+            "MsgTextContent"
           ],
           "name": "text",
           "jsonkey": "text"
@@ -289,7 +411,7 @@
           "jsonkey": "id"
         },
         {
-          "type": "string",
+          "type": "ConvIDStr",
           "name": "convID",
           "jsonkey": "conversation_id"
         },
@@ -370,7 +492,7 @@
         {
           "type": [
             null,
-            "ReactionMap"
+            "UIReactionMap"
           ],
           "name": "reactions",
           "jsonkey": "reactions"
@@ -408,10 +530,10 @@
         {
           "type": [
             null,
-            "string"
+            "MsgBotInfo"
           ],
-          "name": "botUID",
-          "jsonkey": "bot_uid"
+          "name": "botInfo",
+          "jsonkey": "bot_info"
         }
       ]
     },
@@ -488,7 +610,7 @@
       "name": "ConvSummary",
       "fields": [
         {
-          "type": "string",
+          "type": "ConvIDStr",
           "name": "id",
           "jsonkey": "id"
         },
@@ -496,6 +618,11 @@
           "type": "ChatChannel",
           "name": "channel",
           "jsonkey": "channel"
+        },
+        {
+          "type": "boolean",
+          "name": "isDefaultConv",
+          "jsonkey": "is_default_conv"
         },
         {
           "type": "boolean",
@@ -557,6 +684,15 @@
           "name": "error",
           "jsonkey": "error",
           "optional": true
+        },
+        {
+          "type": [
+            null,
+            "ConversationCreatorInfoLocal"
+          ],
+          "name": "creatorInfo",
+          "jsonkey": "creator_info",
+          "optional": true
         }
       ],
       "doc": "A chat conversation. This is essentially a chat channel plus some additional metadata."
@@ -586,14 +722,6 @@
           "name": "identifyFailures",
           "jsonkey": "identify_failures",
           "optional": true
-        },
-        {
-          "type": [
-            null,
-            "Pagination"
-          ],
-          "name": "pagination",
-          "jsonkey": "pagination"
         },
         {
           "type": {
@@ -720,7 +848,7 @@
       "name": "NewConvRes",
       "fields": [
         {
-          "type": "string",
+          "type": "ConvIDStr",
           "name": "id",
           "jsonkey": "id"
         },
@@ -819,6 +947,30 @@
     },
     {
       "type": "record",
+      "name": "ConvNotification",
+      "fields": [
+        {
+          "type": "string",
+          "name": "type"
+        },
+        {
+          "type": [
+            null,
+            "ConvSummary"
+          ],
+          "name": "conv"
+        },
+        {
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "error"
+        }
+      ]
+    },
+    {
+      "type": "record",
       "name": "AdvertiseCommandAPIParam",
       "fields": [
         {
@@ -838,6 +990,35 @@
           "name": "teamName",
           "optional": true,
           "jsonkey": "team_name"
+        },
+        {
+          "type": "ConvIDStr",
+          "name": "convID",
+          "jsonkey": "conv_id",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "ClearCommandAPIParam",
+      "fields": [
+        {
+          "type": "string",
+          "name": "typ",
+          "jsonkey": "type"
+        },
+        {
+          "type": "string",
+          "name": "teamName",
+          "optional": true,
+          "jsonkey": "team_name"
+        },
+        {
+          "type": "ConvIDStr",
+          "name": "convID",
+          "jsonkey": "conv_id",
+          "optional": true
         }
       ]
     },
@@ -846,7 +1027,7 @@
       "name": "ResetConvMemberAPI",
       "fields": [
         {
-          "type": "string",
+          "type": "ConvIDStr",
           "name": "conversationID"
         },
         {
@@ -872,6 +1053,45 @@
             "items": "RateLimitRes"
           },
           "name": "rateLimits"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "DeviceInfo",
+      "fields": [
+        {
+          "type": "keybase1.DeviceID",
+          "name": "deviceID",
+          "jsonkey": "id"
+        },
+        {
+          "type": "string",
+          "name": "deviceDescription",
+          "jsonkey": "description"
+        },
+        {
+          "type": "keybase1.DeviceTypeV2",
+          "name": "deviceType",
+          "jsonkey": "type"
+        },
+        {
+          "type": "int64",
+          "name": "deviceCtime",
+          "jsonkey": "ctime"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "GetDeviceInfoRes",
+      "fields": [
+        {
+          "type": {
+            "type": "array",
+            "items": "DeviceInfo"
+          },
+          "name": "devices"
         }
       ]
     }

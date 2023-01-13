@@ -5,11 +5,10 @@ import * as ProvisionGen from '../../actions/provision-gen'
 import * as Constants from '../../constants/devices'
 import AddDevice from '.'
 
-type OwnProps = Container.RouteProps<{highlight: Array<'computer' | 'phone' | 'paper key'>}>
-
+type OwnProps = Container.RouteProps<'deviceAdd'>
 const noHighlight = []
 
-export default Container.namedConnect(
+export default Container.connect(
   (state: Container.TypedState) => ({iconNumbers: Constants.getNextDeviceIconNumber(state)}),
   dispatch => ({
     onAddComputer: () => dispatch(ProvisionGen.createAddNewDevice({otherDeviceType: 'desktop'})),
@@ -20,7 +19,6 @@ export default Container.namedConnect(
   (s, d, o: OwnProps) => ({
     ...s,
     ...d,
-    highlight: Container.getRouteProps(o, 'highlight', noHighlight),
-  }),
-  'AddDevice'
+    highlight: o.route.params?.highlight ?? noHighlight,
+  })
 )(AddDevice)

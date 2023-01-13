@@ -1,15 +1,16 @@
-import {LogLineWithLevelISOTimestamp} from '../logger/types'
-import {noop} from 'lodash-es'
+import type {LogLineWithLevelISOTimestamp} from '../logger/types'
 import {isMobile} from '../constants/platform'
+import noop from 'lodash/noop'
+import {getEngine} from '../engine/require'
 import * as RPCTypes from '../constants/types/rpc-gen'
 
 type Log = (...args: Array<any>) => void
 
 const {localLog, localWarn, localError} = isMobile
   ? {
-      localError: window.console.error.bind(window.console) as Log,
-      localLog: (__DEV__ ? window.console.log.bind(window.console) : noop) as Log,
-      localWarn: window.console.warn.bind(window.console) as Log,
+      localError: console.error.bind(console) as Log,
+      localLog: (__DEV__ ? console.log.bind(console) : noop) as Log,
+      localWarn: console.warn.bind(console) as Log,
     }
   : {
       localError: console.error.bind(console) as Log,
@@ -17,13 +18,24 @@ const {localLog, localWarn, localError} = isMobile
       localWarn: console.warn.bind(console) as Log,
     }
 
-const writeLogLinesToFile: (lines: Array<LogLineWithLevelISOTimestamp>) => Promise<void> = (
+const writeLogLinesToFile: (lines: Array<LogLineWithLevelISOTimestamp>) => Promise<void> = async (
   lines: Array<LogLineWithLevelISOTimestamp>
-) =>
-  lines.length
+) => {
+  if (!isMobile) {
+    // don't want main node thread making these calls
+    try {
+      if (!getEngine()) {
+        return Promise.resolve()
+      }
+    } catch (_) {
+      return Promise.resolve()
+    }
+  }
+  return lines.length
     ? RPCTypes.configAppendGUILogsRpcPromise({
         content: lines.join('\n') + '\n',
       })
     : Promise.resolve()
+}
 
 export {localLog, localWarn, localError, writeLogLinesToFile}

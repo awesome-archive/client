@@ -1,6 +1,6 @@
 // A utility to convert our log sends to something consumable by chrome://tracing
 import fs from 'fs'
-import moment from 'moment'
+import * as dateFns from 'date-fns'
 
 type Args = {
   counter?: string
@@ -30,7 +30,7 @@ type Event = {
 
 const [, , guiOrCore, logfile, outfile, ..._swimlanes] = process.argv
 // Good params?
-if (['gui', 'core'].indexOf(guiOrCore) === -1 || !logfile || !outfile) {
+if (!['gui', 'core'].includes(guiOrCore) || !logfile || !outfile) {
   console.log('Usage: node log-to-trace (gui|core) logfile outfile [filter1] [filter2]')
   process.exit(1)
 }
@@ -120,17 +120,11 @@ const convertCoreLine = (line: string): Info | undefined => {
   if (_tags) {
     const match = tagsReg.exec(_tags)
     if (match && match[1]) {
-      tags = match[1]
-        .split(',')
-        .sort()
-        .join(',')
+      tags = match[1].split(',').sort().join(',')
     }
   }
 
-  const typeAndMethod = _typeAndMethod
-    .replace(methodResultReg, '')
-    .replace(methodPrefixReg, '')
-    .trim()
+  const typeAndMethod = _typeAndMethod.replace(methodResultReg, '').replace(methodPrefixReg, '').trim()
 
   let type = ''
   const _type = typeAndMethodReg.exec(typeAndMethod)
@@ -175,15 +169,17 @@ const output: {
   unmatched: [],
 }
 
-const buildEvent = (info: Info, ph: 'B' | 'E' | 'i'): Event => ({
-  args: info.args,
-  id: info.id,
-  name: info.name,
-  ph,
-  pid: 0,
-  tid: info.app,
-  ts: moment(info.time).valueOf() * (isGUI ? 1 : 1000),
-})
+const buildEvent = (info: Info, ph: 'B' | 'E' | 'i'): Event => {
+  return {
+    args: info.args,
+    id: info.id,
+    name: info.name,
+    ph,
+    pid: 0,
+    tid: info.app,
+    ts: dateFns.parseISO(info.time).getMilliseconds() * (isGUI ? 1 : 1000),
+  }
+}
 
 const buildGood = (old: Info, info: Info) => {
   const s = buildEvent(old, 'B')
@@ -196,7 +192,7 @@ const buildGood = (old: Info, info: Info) => {
 }
 
 const convertLine = isGUI ? convertGuiLine : convertCoreLine
-let lines = fs.readFileSync(logfile, 'utf8').split('\n')
+const lines = fs.readFileSync(logfile, 'utf8').split('\n')
 // to help debug a single line just override it here
 // lines = [
 // 'Line to debug',

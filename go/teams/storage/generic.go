@@ -73,8 +73,12 @@ func (s *storageGeneric) ClearMem() {
 	s.mem.clear()
 }
 
+func (s *storageGeneric) Shutdown() {
+	s.mem.shutdown()
+}
+
 func (s *storageGeneric) MemSize() int {
-	return s.mem.lru.Len()
+	return s.mem.len()
 }
 
 // --------------------------------------------------
@@ -102,8 +106,7 @@ type diskStorageGeneric struct {
 
 func newDiskStorageGeneric(g *libkb.GlobalContext, version int, dbObjTyp libkb.ObjType, reason libkb.EncryptionReason, gdi func() diskItemGeneric) *diskStorageGeneric {
 	keyFn := func(ctx context.Context) ([32]byte, error) {
-		return encrypteddb.GetSecretBoxKey(ctx, g, encrypteddb.DefaultSecretUI,
-			reason, "encrypt teams storage")
+		return encrypteddb.GetSecretBoxKey(ctx, g, reason, "encrypt teams storage")
 	}
 	dbFn := func(g *libkb.GlobalContext) *libkb.JSONLocalDb {
 		return g.LocalDb
@@ -188,7 +191,8 @@ func (s *diskStorageGeneric) dbKey(mctx libkb.MetaContext, teamID keybase1.TeamI
 
 // Store some TeamSigChainState's in memory. Threadsafe.
 type memoryStorageGeneric struct {
-	lru *lru.Cache
+	sync.Mutex // protects the pointer on lru
+	lru        *lru.Cache
 }
 
 func newMemoryStorageGeneric(size int) *memoryStorageGeneric {
@@ -202,13 +206,19 @@ func newMemoryStorageGeneric(size int) *memoryStorageGeneric {
 	}
 }
 
+func (s *memoryStorageGeneric) getLRU() *lru.Cache {
+	s.Lock()
+	defer s.Unlock()
+	return s.lru
+}
+
 func (s *memoryStorageGeneric) put(mctx libkb.MetaContext, state teamDataGeneric) {
-	s.lru.Add(s.key(state.ID(), state.IsPublic()), state)
+	s.getLRU().Add(s.key(state.ID(), state.IsPublic()), state)
 }
 
 // Can return nil.
 func (s *memoryStorageGeneric) get(mctx libkb.MetaContext, teamID keybase1.TeamID, public bool) teamDataGeneric {
-	untyped, ok := s.lru.Get(s.key(teamID, public))
+	untyped, ok := s.getLRU().Get(s.key(teamID, public))
 	if !ok {
 		return nil
 	}
@@ -220,8 +230,22 @@ func (s *memoryStorageGeneric) get(mctx libkb.MetaContext, teamID keybase1.TeamI
 	return state
 }
 
+func (s *memoryStorageGeneric) shutdown() {
+	s.Lock()
+	defer s.Unlock()
+	var err error
+	s.lru, err = lru.New(1)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (s *memoryStorageGeneric) len() int {
+	return s.getLRU().Len()
+}
+
 func (s *memoryStorageGeneric) clear() {
-	s.lru.Purge()
+	s.getLRU().Purge()
 }
 
 func (s *memoryStorageGeneric) key(teamID keybase1.TeamID, public bool) (key string) {

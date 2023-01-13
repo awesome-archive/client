@@ -3,7 +3,7 @@ import Box from './box'
 import Icon from './icon'
 import {EscapeHandler} from '../util/key-event-handler.desktop'
 import * as Styles from '../styles'
-import {Props} from './popup-dialog'
+import type {Props} from './popup-dialog'
 
 function stopBubbling(ev) {
   ev.stopPropagation()
@@ -52,9 +52,9 @@ export function PopupDialog({
             <Icon
               type="iconfont-close"
               style={Styles.collapseStyles([styles.close, styleClose])}
-              color={Styles.globalColors.whiteOrBlack}
+              color={Styles.globalColors.whiteOrWhite_75}
               onClick={onClose}
-              hoverColor={Styles.globalColors.white_40OrBlack_60}
+              hoverColor={Styles.globalColors.white_40OrWhite_40}
             />
           )}
           <Box
@@ -70,17 +70,19 @@ export function PopupDialog({
 }
 
 const styles = Styles.styleSheetCreate(() => ({
-  clipContainer: Styles.platformStyles({
-    isElectron: {
-      ...Styles.desktopStyles.boxShadow,
-      ...Styles.globalStyles.flexBoxColumn,
-      backgroundColor: Styles.globalColors.white,
-      borderRadius: Styles.borderRadius,
-      flex: 1,
-      maxWidth: '100%',
-      position: 'relative',
-    },
-  }),
+  get clipContainer() {
+    return Styles.platformStyles({
+      isElectron: {
+        ...Styles.desktopStyles.boxShadow,
+        ...Styles.globalStyles.flexBoxColumn,
+        backgroundColor: Styles.globalColors.white,
+        borderRadius: Styles.borderRadius,
+        flex: 1,
+        maxWidth: '100%',
+        position: 'relative',
+      },
+    })
+  },
   close: Styles.platformStyles({
     isElectron: {
       cursor: 'pointer',
@@ -103,11 +105,22 @@ const styles = Styles.styleSheetCreate(() => ({
     ...Styles.globalStyles.flexBoxColumn,
     ...Styles.globalStyles.fillAbsolute,
     alignItems: 'center',
-    backgroundColor: Styles.globalColors.black_50OrWhite_75,
+    backgroundColor: Styles.globalColors.black_50OrBlack_60,
     justifyContent: 'center',
     paddingBottom: Styles.globalMargins.small,
     paddingLeft: Styles.globalMargins.large,
     paddingRight: Styles.globalMargins.large,
+    paddingTop: Styles.globalMargins.large,
+  },
+  coverTabBarShim: {
+    ...Styles.globalStyles.flexBoxRow,
+    ...Styles.globalStyles.fillAbsolute,
+    alignItems: 'center',
+    backgroundColor: Styles.globalColors.black_50OrBlack_60,
+    justifyContent: 'center',
+    paddingBottom: Styles.globalMargins.small,
+    paddingLeft: 0,
+    paddingRight: 0,
     paddingTop: Styles.globalMargins.large,
   },
 }))

@@ -1,6 +1,7 @@
 // Copyright 2018 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 //
+//go:build !production
 // +build !production
 
 package service
@@ -17,19 +18,20 @@ import (
 	chatwallet "github.com/keybase/client/go/chat/wallet"
 	"github.com/keybase/client/go/engine"
 	"github.com/keybase/client/go/libkb"
-	keybase1 "github.com/keybase/client/go/protocol/keybase1"
+	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/protocol/stellar1"
 	"github.com/keybase/client/go/teams"
 	"github.com/keybase/stellarnet"
 	"github.com/stellar/go/build"
+
+	// nolint
 	"github.com/stellar/go/clients/horizon"
 	"golang.org/x/net/context"
 )
 
-func (t *DebuggingHandler) Script(ctx context.Context, arg keybase1.ScriptArg) (res string, err error) {
+func (t *DebuggingHandler) scriptExtras(ctx context.Context, arg keybase1.ScriptArg) (res string, err error) {
 	ctx = libkb.WithLogTag(ctx, "DG")
 	m := libkb.NewMetaContext(ctx, t.G())
-	defer m.TraceTimed(fmt.Sprintf("Script(%s)", arg.Script), func() error { return err })()
 	args := arg.Args
 	log := func(format string, args ...interface{}) {
 		t.G().Log.CInfof(ctx, format, args...)
@@ -88,20 +90,31 @@ func (t *DebuggingHandler) Script(ctx context.Context, arg keybase1.ScriptArg) (
 		if len(args) != 1 {
 			return "", fmt.Errorf("require 1 arg: username")
 		}
+
+		// UPAK
 		upak, _, err := t.G().GetUPAKLoader().LoadV2(libkb.NewLoadUserArgWithMetaContext(m).WithName(args[0]).WithPublicKeyOptional())
 		if err != nil {
 			return "", err
 		}
-		var eldestSeqnos []keybase1.Seqno
+		var upakEldestSeqnos []keybase1.Seqno
 		for _, upak := range upak.AllIncarnations() {
-			eldestSeqnos = append(eldestSeqnos, upak.EldestSeqno)
+			upakEldestSeqnos = append(upakEldestSeqnos, upak.EldestSeqno)
 		}
-		sort.Slice(eldestSeqnos, func(i, j int) bool {
-			return eldestSeqnos[i] < eldestSeqnos[j]
+		sort.Slice(upakEldestSeqnos, func(i, j int) bool {
+			return upakEldestSeqnos[i] < upakEldestSeqnos[j]
 		})
+
+		// Full user
+		them, err := libkb.LoadUser(libkb.NewLoadUserArgWithMetaContext(m).WithName(args[0]).WithPublicKeyOptional())
+		if err != nil {
+			return "", err
+		}
+
 		obj := struct {
-			Seqnos []keybase1.Seqno `json:"seqnos"`
-		}{eldestSeqnos}
+			UPAKEldestSeqno     keybase1.Seqno   `json:"upak_current_eldest"`
+			UPAKEldestSeqnos    []keybase1.Seqno `json:"upak_eldest_seqnos"`
+			FullUserEldestSeqno keybase1.Seqno   `json:"fu_eldest_seqno"`
+		}{upak.ToUserVersion().EldestSeqno, upakEldestSeqnos, them.GetCurrentEldestSeqno()}
 		bs, err := json.Marshal(obj)
 		if err != nil {
 			return "", err

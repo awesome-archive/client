@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Constants from '../../../constants/wallets'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
@@ -24,11 +23,7 @@ const Footer = (props: Props) => {
       fullWidth={true}
       style={styles.button}
       children={
-        <Kb.Icon
-          type="iconfont-stellar-send"
-          style={Kb.iconCastPlatformStyles(styles.icon)}
-          color={Styles.globalColors.white}
-        />
+        <Kb.Icon type="iconfont-stellar-send" style={styles.icon} color={Styles.globalColors.whiteOrWhite} />
       }
     />
   )
@@ -58,7 +53,7 @@ const Footer = (props: Props) => {
             color={Styles.globalColors.black_20}
             hoverColor={Styles.globalColors.black_50}
             fontSize={12}
-            style={Kb.iconCastPlatformStyles(styles.questionIcon)}
+            style={styles.questionIcon}
             onClick={() => {
               TODO
           }/> */}
@@ -77,8 +72,8 @@ const Footer = (props: Props) => {
               children={
                 <Kb.Icon
                   type="iconfont-stellar-request"
-                  style={Kb.iconCastPlatformStyles(styles.icon)}
-                  color={Styles.globalColors.white}
+                  style={styles.icon}
+                  color={Styles.globalColors.whiteOrWhite}
                 />
               }
             />

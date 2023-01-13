@@ -25,9 +25,7 @@ func newBlankConv(ctx context.Context, t *testing.T, tc *kbtest.ChatTestContext,
 
 func localizeConv(ctx context.Context, t *testing.T, tc *kbtest.ChatTestContext,
 	uid gregor1.UID, conv chat1.Conversation) chat1.ConversationLocal {
-	rc := types.RemoteConversation{
-		Conv: conv,
-	}
+	rc := utils.RemoteConv(conv)
 	locals, _, err := tc.Context().InboxSource.Localize(ctx, uid, []types.RemoteConversation{rc},
 		types.ConversationLocalizerBlocking)
 	require.NoError(t, err)
@@ -38,9 +36,11 @@ func localizeConv(ctx context.Context, t *testing.T, tc *kbtest.ChatTestContext,
 func newBlankConvWithMembersType(ctx context.Context, t *testing.T, tc *kbtest.ChatTestContext,
 	uid gregor1.UID, ri chat1.RemoteInterface, sender types.Sender, tlfName string,
 	membersType chat1.ConversationMembersType) chat1.Conversation {
-	res, err := NewConversation(ctx, tc.Context(), uid, tlfName, nil, chat1.TopicType_CHAT, membersType,
-		keybase1.TLFVisibility_PRIVATE, func() chat1.RemoteInterface { return ri }, NewConvFindExistingNormal)
+	res, created, err := NewConversation(ctx, tc.Context(), uid, tlfName, nil, chat1.TopicType_CHAT, membersType,
+		keybase1.TLFVisibility_PRIVATE, nil, func() chat1.RemoteInterface { return ri },
+		NewConvFindExistingNormal)
 	require.NoError(t, err)
+	require.True(t, created)
 	convID := res.GetConvID()
 	ires, err := ri.GetInboxRemote(ctx, chat1.GetInboxRemoteArg{
 		Query: &chat1.GetInboxQuery{
@@ -68,7 +68,7 @@ func newConv(ctx context.Context, t *testing.T, tc *kbtest.ChatTestContext, uid 
 	ib, _, err := tc.Context().InboxSource.Read(ctx, uid, types.ConversationLocalizerBlocking,
 		types.InboxSourceDataSourceAll, nil, &chat1.GetInboxLocalQuery{
 			ConvIDs: []chat1.ConversationID{convID},
-		}, nil)
+		})
 	require.NoError(t, err)
 	require.Equal(t, 1, len(ib.Convs))
 	require.Equal(t, 1, len(ib.ConvsUnverified))
@@ -106,14 +106,14 @@ func TestSyncerConnected(t *testing.T) {
 		t.Logf("index: %d conv: %s", index, conv.GetConvID())
 	}
 	// background loader will pick up all the convs from the creates above
-	convMap := make(map[string]bool)
+	convMap := make(map[chat1.ConvIDStr]bool)
 	for _, c := range convs {
-		convMap[c.GetConvID().String()] = true
+		convMap[c.GetConvID().ConvIDStr()] = true
 	}
 	for i := 0; i < len(convs); i++ {
 		select {
 		case convID := <-list.bgConvLoads:
-			delete(convMap, convID.String())
+			delete(convMap, convID.ConvIDStr())
 		case <-time.After(20 * time.Second):
 			require.Fail(t, "no background conv loaded")
 		}
@@ -153,10 +153,11 @@ func TestSyncerConnected(t *testing.T) {
 
 	t.Logf("test incremental")
 	mconv := convs[1]
-	_, cerr := tc.ChatG.ConvSource.Pull(ctx, mconv.GetConvID(), uid, chat1.GetThreadReason_GENERAL, nil, nil)
+	_, cerr := tc.ChatG.ConvSource.Pull(ctx, mconv.GetConvID(), uid, chat1.GetThreadReason_GENERAL, nil, nil,
+		nil)
 	require.NoError(t, cerr)
 	_, _, serr := tc.ChatG.InboxSource.Read(ctx, uid, types.ConversationLocalizerBlocking,
-		types.InboxSourceDataSourceAll, nil, nil, nil)
+		types.InboxSourceDataSourceAll, nil, nil)
 	require.NoError(t, serr)
 	_, iconvs, err := ibox.ReadAll(ctx, uid, true)
 	require.NoError(t, err)
@@ -177,7 +178,7 @@ func TestSyncerConnected(t *testing.T) {
 		require.Equal(t, chat1.SyncInboxResType_INCREMENTAL, typ)
 		updates := sres.Incremental().Items
 		require.Equal(t, 1, len(updates))
-		require.Equal(t, convs[1].GetConvID().String(), updates[0].Conv.ConvID)
+		require.Equal(t, convs[1].GetConvID().ConvIDStr(), updates[0].Conv.ConvID)
 		require.True(t, updates[0].ShouldUnbox)
 	case <-time.After(20 * time.Second):
 		require.Fail(t, "no threads stale received")
@@ -227,7 +228,7 @@ func TestSyncerConnected(t *testing.T) {
 	require.Error(t, cerr)
 	require.IsType(t, storage.MissError{}, cerr)
 	_, _, serr = tc.Context().InboxSource.Read(ctx, uid, types.ConversationLocalizerBlocking,
-		types.InboxSourceDataSourceAll, nil, nil, nil)
+		types.InboxSourceDataSourceAll, nil, nil)
 	require.NoError(t, serr)
 	_, iconvs, err = ibox.ReadAll(ctx, uid, true)
 	require.NoError(t, err)
@@ -245,95 +246,6 @@ func TestSyncerConnected(t *testing.T) {
 	select {
 	case <-list.inboxStale:
 		require.Fail(t, "no inbox stales")
-	default:
-	}
-}
-
-func TestSyncerAdHocFullReload(t *testing.T) {
-	ctx, world, ri2, _, sender, list := setupTest(t, 1)
-	defer world.Cleanup()
-
-	ri := ri2.(*kbtest.ChatRemoteMock)
-	u := world.GetUsers()[0]
-	uid := u.User.GetUID().ToBytes()
-	tc := world.Tcs[u.Username]
-	syncer := NewSyncer(tc.Context())
-	syncer.isConnected = true
-
-	_, conv := newConv(ctx, t, tc, uid, ri, sender, u.Username)
-	t.Logf("convID: %s", conv.GetConvID())
-	ri.SyncInboxFunc = func(m *kbtest.ChatRemoteMock, ctx context.Context, vers chat1.InboxVers) (chat1.SyncInboxRes, error) {
-		conv.ReaderInfo.Status = chat1.ConversationMemberStatus_LEFT
-		return chat1.NewSyncInboxResWithIncremental(chat1.SyncIncrementalRes{
-			Vers:  100,
-			Convs: []chat1.Conversation{conv},
-		}), nil
-	}
-	doSync(t, syncer, ri, uid)
-	select {
-	case sres := <-list.inboxSynced:
-		typ, err := sres.SyncType()
-		require.NoError(t, err)
-		require.Equal(t, chat1.SyncInboxResType_CLEAR, typ)
-	case <-time.After(20 * time.Second):
-		require.Fail(t, "no inbox synced received")
-	}
-
-	ri.SyncInboxFunc = func(m *kbtest.ChatRemoteMock, ctx context.Context, vers chat1.InboxVers) (chat1.SyncInboxRes, error) {
-		conv.Metadata.TeamType = chat1.TeamType_COMPLEX
-		return chat1.NewSyncInboxResWithIncremental(chat1.SyncIncrementalRes{
-			Vers:  101,
-			Convs: []chat1.Conversation{conv},
-		}), nil
-	}
-	doSync(t, syncer, ri, uid)
-	select {
-	case sres := <-list.inboxSynced:
-		typ, err := sres.SyncType()
-		require.NoError(t, err)
-		require.Equal(t, chat1.SyncInboxResType_CLEAR, typ)
-	case <-time.After(20 * time.Second):
-		require.Fail(t, "no inbox synced received")
-	}
-
-	ri.SyncInboxFunc = func(m *kbtest.ChatRemoteMock, ctx context.Context, vers chat1.InboxVers) (chat1.SyncInboxRes, error) {
-		conv.Metadata.Existence = chat1.ConversationExistence_DELETED
-		return chat1.NewSyncInboxResWithIncremental(chat1.SyncIncrementalRes{
-			Vers:  102,
-			Convs: []chat1.Conversation{conv},
-		}), nil
-	}
-	doSync(t, syncer, ri, uid)
-	select {
-	case sres := <-list.inboxSynced:
-		typ, err := sres.SyncType()
-		require.NoError(t, err)
-		require.Equal(t, chat1.SyncInboxResType_CLEAR, typ)
-	case <-time.After(20 * time.Second):
-		require.Fail(t, "no inbox synced received")
-	}
-
-	ri.SyncInboxFunc = func(m *kbtest.ChatRemoteMock, ctx context.Context, vers chat1.InboxVers) (chat1.SyncInboxRes, error) {
-		conv.Metadata.Existence = chat1.ConversationExistence_ABANDONED
-		return chat1.NewSyncInboxResWithIncremental(chat1.SyncIncrementalRes{
-			Vers:  103,
-			Convs: []chat1.Conversation{conv},
-		}), nil
-	}
-	doSync(t, syncer, ri, uid)
-	select {
-	case sres := <-list.inboxSynced:
-		typ, err := sres.SyncType()
-		require.NoError(t, err)
-		require.Equal(t, chat1.SyncInboxResType_CLEAR, typ)
-	case <-time.After(20 * time.Second):
-		require.Fail(t, "no inbox synced received")
-	}
-
-	// Make sure we don't get inbox stale
-	select {
-	case <-list.inboxStale:
-		require.Fail(t, "no inbox stale")
 	default:
 	}
 }
@@ -416,9 +328,9 @@ func TestSyncerNeverJoined(t *testing.T) {
 			require.Len(t, sres.Incremental().Items, 2)
 			var foundConv, foundChan bool
 			for _, item := range sres.Incremental().Items {
-				if convID.String() == item.Conv.ConvID {
+				if convID.ConvIDStr() == item.Conv.ConvID {
 					foundConv = true
-				} else if chanID.String() == item.Conv.ConvID {
+				} else if chanID.ConvIDStr() == item.Conv.ConvID {
 					foundChan = true
 				}
 				require.Equal(t, chat1.ConversationMemberStatus_ACTIVE, item.Conv.MemberStatus)
@@ -441,20 +353,20 @@ func TestSyncerNeverJoined(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, chat1.SyncInboxResType_INCREMENTAL, typ)
 			require.Len(t, sres.Incremental().Items, 1)
-			require.Equal(t, convID.String(), sres.Incremental().Items[0].Conv.ConvID)
+			require.Equal(t, convID.ConvIDStr(), sres.Incremental().Items[0].Conv.ConvID)
 			require.Equal(t, chat1.ConversationMemberStatus_ACTIVE, sres.Incremental().Items[0].Conv.MemberStatus)
 		case <-time.After(20 * time.Second):
 			require.Fail(t, "no inbox synced received")
 		}
 
-		// New clients get a CLEAR here.
 		ctx = context.TODO()
 		doAuthedSync(ctx, g2, syncer2, ctc2.ri, uid2)
 		select {
 		case sres := <-listener2.inboxSynced:
 			typ, err := sres.SyncType()
 			require.NoError(t, err)
-			require.Equal(t, chat1.SyncInboxResType_CLEAR, typ)
+			require.Equal(t, chat1.SyncInboxResType_INCREMENTAL, typ)
+			require.Len(t, sres.Incremental().Items, 2)
 		case <-time.After(20 * time.Second):
 			require.Fail(t, "no inbox synced received")
 		}
@@ -509,7 +421,7 @@ func TestSyncerMembersTypeChanged(t *testing.T) {
 		typ, err := sres.SyncType()
 		require.NoError(t, err)
 		require.Equal(t, chat1.SyncInboxResType_INCREMENTAL, typ)
-		require.Equal(t, convID.String(), sres.Incremental().Items[0].Conv.ConvID)
+		require.Equal(t, convID.ConvIDStr(), sres.Incremental().Items[0].Conv.ConvID)
 		require.Equal(t, chat1.ConversationMembersType_IMPTEAMUPGRADE,
 			sres.Incremental().Items[0].Conv.MembersType)
 		require.True(t, sres.Incremental().Items[0].ShouldUnbox)
@@ -612,11 +524,12 @@ func TestSyncerRetentionExpunge(t *testing.T) {
 		}),
 	}, 0, nil, nil, nil)
 	require.NoError(t, err)
-	tv, cerr := tc.ChatG.ConvSource.Pull(ctx, mconv.GetConvID(), uid, chat1.GetThreadReason_GENERAL, nil, nil)
+	tv, cerr := tc.ChatG.ConvSource.Pull(ctx, mconv.GetConvID(), uid, chat1.GetThreadReason_GENERAL, nil,
+		nil, nil)
 	require.NoError(t, cerr)
 	require.Equal(t, 2, len(tv.Messages))
 	_, _, serr := tc.ChatG.InboxSource.Read(ctx, uid, types.ConversationLocalizerBlocking,
-		types.InboxSourceDataSourceAll, nil, nil, nil)
+		types.InboxSourceDataSourceAll, nil, nil)
 	require.NoError(t, serr)
 	select {
 	case cid := <-list.bgConvLoads:
@@ -651,7 +564,7 @@ func TestSyncerRetentionExpunge(t *testing.T) {
 		require.Equal(t, chat1.SyncInboxResType_INCREMENTAL, typ)
 		updates := sres.Incremental().Items
 		require.Equal(t, 1, len(updates))
-		require.Equal(t, mconv.GetConvID().String(), updates[0].Conv.ConvID)
+		require.Equal(t, mconv.GetConvID().ConvIDStr(), updates[0].Conv.ConvID)
 	case <-time.After(20 * time.Second):
 		require.Fail(t, "no threads stale received")
 	}
@@ -693,7 +606,7 @@ func TestSyncerTeamFilter(t *testing.T) {
 		chat1.ConversationMembersType_TEAM)
 
 	_, _, err := tc.ChatG.InboxSource.Read(ctx, uid, types.ConversationLocalizerBlocking,
-		types.InboxSourceDataSourceAll, nil, nil, nil)
+		types.InboxSourceDataSourceAll, nil, nil)
 	require.NoError(t, err)
 	_, iconvs, err := ibox.ReadAll(ctx, uid, true)
 	require.NoError(t, err)
@@ -717,14 +630,14 @@ func TestSyncerTeamFilter(t *testing.T) {
 		require.Equal(t, chat1.SyncInboxResType_INCREMENTAL, typ)
 		require.Equal(t, 2, len(res.Incremental().Items))
 		items := res.Incremental().Items
-		if items[0].Conv.ConvID == iconv.GetConvID().String() {
+		if items[0].Conv.ConvID == iconv.GetConvID().ConvIDStr() {
 			require.True(t, items[0].ShouldUnbox)
 			require.False(t, items[1].ShouldUnbox)
-			require.Equal(t, tconv.GetConvID().String(), items[1].Conv.ConvID)
-		} else if items[0].Conv.ConvID == tconv.GetConvID().String() {
+			require.Equal(t, tconv.GetConvID().ConvIDStr(), items[1].Conv.ConvID)
+		} else if items[0].Conv.ConvID == tconv.GetConvID().ConvIDStr() {
 			require.False(t, items[0].ShouldUnbox)
 			require.True(t, items[1].ShouldUnbox)
-			require.Equal(t, iconv.GetConvID().String(), items[1].Conv.ConvID)
+			require.Equal(t, iconv.GetConvID().ConvIDStr(), items[1].Conv.ConvID)
 		} else {
 			require.Fail(t, "unknown conv")
 		}
@@ -979,7 +892,7 @@ func TestSyncerStorageClear(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		require.Fail(t, "no conv load on sync")
 	}
-	tv, err := tc.Context().ConvSource.PullLocalOnly(ctx, conv.GetConvID(), uid, nil, nil, 0)
+	tv, err := tc.Context().ConvSource.PullLocalOnly(ctx, conv.GetConvID(), uid, chat1.GetThreadReason_GENERAL, nil, nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(tv.Messages))
 
@@ -994,7 +907,7 @@ func TestSyncerStorageClear(t *testing.T) {
 	doSync(t, syncer, ri, uid)
 	time.Sleep(400 * time.Millisecond)
 
-	_, err = tc.Context().ConvSource.PullLocalOnly(ctx, conv.GetConvID(), uid, nil, nil, 0)
+	_, err = tc.Context().ConvSource.PullLocalOnly(ctx, conv.GetConvID(), uid, chat1.GetThreadReason_GENERAL, nil, nil, 0)
 	require.Error(t, err)
 	require.IsType(t, storage.MissError{}, err)
 }

@@ -334,7 +334,7 @@ func TestImplicitSBSPukless(t *testing.T) {
 	t.Logf(":: Trying to load %q", impteamName)
 	_, err = ann.lookupImplicitTeam(false /* create */, impteamName, false)
 	require.Error(t, err)
-	//require.Equal(t, teamID, teamID2)
+	// require.Equal(t, teamID, teamID2)
 	t.Logf("Loading %s failed with: %v", impteamName, err)
 
 	// The following load call will not work as well. So this team is
@@ -550,4 +550,31 @@ func TestCreateAndResolveEmailImpTeam(t *testing.T) {
 	teamID2, err := bob.lookupImplicitTeam(false /* create */, impteamName, false /* public */)
 	require.NoError(t, err)
 	require.Equal(t, teamID, teamID2)
+}
+
+func TestCreateImpteamWithoutTOFUResolver(t *testing.T) {
+	tt := newTeamTester(t)
+	defer tt.cleanup()
+
+	ann := tt.addUser("ann")
+	ann.disableTOFUSearch()
+
+	phone := kbtest.GenerateTestPhoneNumber()
+	email := "aa" + ann.userInfo.email
+
+	for _, impteamName := range []string{
+		fmt.Sprintf("%s,%s@phone", ann.username, phone),
+		fmt.Sprintf("%s,[%s]@email", ann.username, email),
+	} {
+		_, err := ann.lookupImplicitTeam(true /* create */, impteamName, false /* public */)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "error 602") // user cannot search for assertions
+	}
+
+	// Make sure no teams got created.
+	res, err := ann.teamsClient.TeamListVerified(context.TODO(), keybase1.TeamListVerifiedArg{
+		IncludeImplicitTeams: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Teams, 0)
 }

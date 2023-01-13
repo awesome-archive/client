@@ -40,7 +40,7 @@ type LiveLocationTracker struct {
 func NewLiveLocationTracker(g *globals.Context) *LiveLocationTracker {
 	return &LiveLocationTracker{
 		Contextified: globals.NewContextified(g),
-		DebugLabeler: utils.NewDebugLabeler(g.GetLog(), "LiveLocationTracker", false),
+		DebugLabeler: utils.NewDebugLabeler(g.ExternalG(), "LiveLocationTracker", false),
 
 		storage:        newTrackStorage(g),
 		trackers:       make(map[types.LiveLocationKey]*locationTrack),
@@ -51,7 +51,7 @@ func NewLiveLocationTracker(g *globals.Context) *LiveLocationTracker {
 }
 
 func (l *LiveLocationTracker) Start(ctx context.Context, uid gregor1.UID) {
-	defer l.Trace(ctx, func() error { return nil }, "Start")()
+	defer l.Trace(ctx, nil, "Start")()
 	l.Lock()
 	defer l.Unlock()
 	l.uid = uid
@@ -62,7 +62,7 @@ func (l *LiveLocationTracker) Start(ctx context.Context, uid gregor1.UID) {
 }
 
 func (l *LiveLocationTracker) Stop(ctx context.Context) chan struct{} {
-	defer l.Trace(ctx, func() error { return nil }, "Stop")()
+	defer l.Trace(ctx, nil, "Stop")()
 	l.Lock()
 	defer l.Unlock()
 	ch := make(chan struct{})
@@ -108,32 +108,18 @@ func (l *LiveLocationTracker) restoreLocked(ctx context.Context) {
 			continue
 		}
 		l.trackers[t.Key()] = t
-		l.eg.Go(func() error { return l.tracker(t) })
+		myT := t
+		l.eg.Go(func() error {
+			return l.tracker(myT)
+		})
 	}
-}
-
-type nullChatUI struct {
-	libkb.ChatUI
-}
-
-func (n nullChatUI) ChatWatchPosition(context.Context, chat1.ConversationID, chat1.UIWatchPositionPerm) (chat1.LocationWatchID, error) {
-	return chat1.LocationWatchID(0), errors.New("no chat UI")
-}
-
-func (n nullChatUI) ChatClearWatch(context.Context, chat1.LocationWatchID) error {
-	return nil
-}
-
-func (n nullChatUI) ChatCommandStatus(context.Context, chat1.ConversationID, string,
-	chat1.UICommandStatusDisplayTyp, []chat1.UICommandStatusActionTyp) error {
-	return nil
 }
 
 func (l *LiveLocationTracker) getChatUI(ctx context.Context) libkb.ChatUI {
 	ui, err := l.G().UIRouter.GetChatUI()
 	if err != nil || ui == nil {
 		l.Debug(ctx, "getChatUI: no chat UI found: err: %s", err)
-		return nullChatUI{}
+		return utils.NullChatUI{}
 	}
 	return ui
 }
@@ -150,7 +136,7 @@ type unfurlNotifyListener struct {
 func newUnfurlNotifyListener(g *globals.Context, outboxID chat1.OutboxID, doneCh chan struct{}) *unfurlNotifyListener {
 	return &unfurlNotifyListener{
 		Contextified: globals.NewContextified(g),
-		DebugLabeler: utils.NewDebugLabeler(g.GetLog(), "maps.unfurlNotifyListener", false),
+		DebugLabeler: utils.NewDebugLabeler(g.ExternalG(), "maps.unfurlNotifyListener", false),
 		outboxID:     outboxID,
 		doneCh:       doneCh,
 	}
@@ -186,7 +172,7 @@ func (n *unfurlNotifyListener) NewChatActivity(uid keybase1.UID, activity chat1.
 
 func (l *LiveLocationTracker) updateMapUnfurl(ctx context.Context, t *locationTrack, done bool) (err error) {
 	ctx = globals.ChatCtx(ctx, l.G(), keybase1.TLFIdentifyBehavior_CHAT_GUI, nil, nil)
-	defer l.Trace(ctx, func() error { return err }, "updateMapUnfurl")()
+	defer l.Trace(ctx, &err, "updateMapUnfurl")()
 	msg, err := l.G().ChatHelper.GetMessage(ctx, l.uid, t.convID, t.msgID, true, nil)
 	if err != nil {
 		return err
@@ -271,6 +257,11 @@ func (l *LiveLocationTracker) tracker(t *locationTrack) error {
 	ctx := context.Background()
 	// check to see if we are being asked to start a tracker that is already expired
 	if t.endTime.Before(l.clock.Now()) {
+		l.Lock()
+		defer l.Unlock()
+		delete(l.trackers, t.Key())
+		l.saveLocked(ctx)
+		l.Debug(ctx, "tracker: old tracker, not running and clearing")
 		return errors.New("tracker from the past")
 	}
 
@@ -353,7 +344,7 @@ func (l *LiveLocationTracker) tracker(t *locationTrack) error {
 
 func (l *LiveLocationTracker) GetCurrentPosition(ctx context.Context, convID chat1.ConversationID,
 	msgID chat1.MessageID) {
-	defer l.Trace(ctx, func() error { return nil }, "GetCurrentPosition")()
+	defer l.Trace(ctx, nil, "GetCurrentPosition")()
 	l.Lock()
 	defer l.Unlock()
 	// start up a live location tracker for a small amount of time to make sure we get a good
@@ -366,7 +357,7 @@ func (l *LiveLocationTracker) GetCurrentPosition(ctx context.Context, convID cha
 
 func (l *LiveLocationTracker) StartTracking(ctx context.Context, convID chat1.ConversationID,
 	msgID chat1.MessageID, endTime time.Time) {
-	defer l.Trace(ctx, func() error { return nil }, "StartTracking")()
+	defer l.Trace(ctx, nil, "StartTracking")()
 	l.Lock()
 	defer l.Unlock()
 	t := newLocationTrack(convID, msgID, endTime, false, l.maxCoords, false)
@@ -376,7 +367,7 @@ func (l *LiveLocationTracker) StartTracking(ctx context.Context, convID chat1.Co
 }
 
 func (l *LiveLocationTracker) LocationUpdate(ctx context.Context, coord chat1.Coordinate) {
-	defer l.Trace(ctx, func() error { return nil }, "LocationUpdate")()
+	defer l.Trace(ctx, nil, "LocationUpdate")()
 	l.Lock()
 	defer l.Unlock()
 	if l.G().IsMobileAppType() {
@@ -403,7 +394,7 @@ func (l *LiveLocationTracker) LocationUpdate(ctx context.Context, coord chat1.Co
 }
 
 func (l *LiveLocationTracker) GetCoordinates(ctx context.Context, key types.LiveLocationKey) (res []chat1.Coordinate) {
-	defer l.Trace(ctx, func() error { return nil }, "GetCoordinates")()
+	defer l.Trace(ctx, nil, "GetCoordinates")()
 	l.Lock()
 	defer l.Unlock()
 	if t, ok := l.trackers[key]; ok {
@@ -416,7 +407,7 @@ func (l *LiveLocationTracker) GetCoordinates(ctx context.Context, key types.Live
 }
 
 func (l *LiveLocationTracker) GetEndTime(ctx context.Context, key types.LiveLocationKey) *time.Time {
-	defer l.Trace(ctx, func() error { return nil }, "GetEndTime")()
+	defer l.Trace(ctx, nil, "GetEndTime")()
 	l.Lock()
 	defer l.Unlock()
 	if t, ok := l.trackers[key]; ok {
@@ -426,7 +417,7 @@ func (l *LiveLocationTracker) GetEndTime(ctx context.Context, key types.LiveLoca
 }
 
 func (l *LiveLocationTracker) StopAllTracking(ctx context.Context) {
-	defer l.Trace(ctx, func() error { return nil }, "StopAllTracking")()
+	defer l.Trace(ctx, nil, "StopAllTracking")()
 	l.Lock()
 	defer l.Unlock()
 	for _, t := range l.trackers {

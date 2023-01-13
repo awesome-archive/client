@@ -7,8 +7,8 @@ import (
 	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
-	"github.com/keybase/xurls"
 	"golang.org/x/net/context"
+	"mvdan.cc/xurls/v2"
 )
 
 type NextMessageOptions struct {
@@ -29,7 +29,7 @@ type Gallery struct {
 func NewGallery(g *globals.Context) *Gallery {
 	return &Gallery{
 		Contextified: globals.NewContextified(g),
-		DebugLabeler: utils.NewDebugLabeler(g.GetLog(), "Attachments.Gallery", false),
+		DebugLabeler: utils.NewDebugLabeler(g.ExternalG(), "Attachments.Gallery", false),
 		NextStride:   5,
 		PrevStride:   50,
 	}
@@ -142,7 +142,7 @@ func (g *Gallery) getUnfurlHost(ctx context.Context, uid gregor1.UID, convID cha
 func (g *Gallery) NextMessages(ctx context.Context, uid gregor1.UID,
 	convID chat1.ConversationID, msgID chat1.MessageID, num int, opts NextMessageOptions,
 	uiCh chan chat1.UIMessage) (res []chat1.MessageUnboxed, last bool, err error) {
-	defer g.Trace(ctx, func() error { return err }, "NextMessages")()
+	defer g.Trace(ctx, &err, "NextMessages")()
 	defer func() {
 		if uiCh != nil {
 			close(uiCh)
@@ -201,7 +201,7 @@ func (g *Gallery) NextMessages(ctx context.Context, uid gregor1.UID,
 		default:
 		}
 		g.Debug(ctx, "NextMessage: starting scan: p: %s pivot: %d", pagination, pivot)
-		tv, err := g.G().ConvSource.Pull(ctx, convID, uid, chat1.GetThreadReason_GENERAL,
+		tv, err := g.G().ConvSource.Pull(ctx, convID, uid, chat1.GetThreadReason_GENERAL, nil,
 			&chat1.GetThreadQuery{
 				MessageTypes: []chat1.MessageType{opts.MessageType},
 			}, pagination)
@@ -226,7 +226,7 @@ func (g *Gallery) NextMessages(ctx context.Context, uid gregor1.UID,
 			}
 		}
 		g.Debug(ctx, "NextMessages: still need more (%d < %d): len: %d", len(res), num, len(tv.Messages))
-		if tv.Pagination.Last {
+		if tv.Pagination == nil || tv.Pagination.Last {
 			g.Debug(ctx, "NextMessages: stopping on last page")
 			break
 		}

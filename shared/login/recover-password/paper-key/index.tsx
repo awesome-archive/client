@@ -1,8 +1,9 @@
 import * as React from 'react'
+import * as Constants from '../../../constants/recover-password'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
 import {SignupScreen, InfoIcon} from '../../../signup/common'
-import {ButtonType} from '../../../common-adapters/button'
+import type {ButtonType} from '../../../common-adapters/button'
 
 export type Props = {
   error: string
@@ -12,7 +13,8 @@ export type Props = {
 
 const PaperKey = (props: Props) => {
   const [paperKey, setPaperKey] = React.useState('')
-  const onSubmit = React.useCallback(() => props.onSubmit(paperKey), [paperKey])
+  const _onSubmit = props.onSubmit
+  const onSubmit = React.useCallback(() => paperKey && _onSubmit(paperKey), [paperKey, _onSubmit])
 
   return (
     <SignupScreen
@@ -22,6 +24,7 @@ const PaperKey = (props: Props) => {
           label: 'Continue',
           onClick: onSubmit,
           type: 'Default' as ButtonType,
+          waitingKey: Constants.waitingKey,
         },
       ]}
       onBack={props.onBack}
@@ -30,19 +33,21 @@ const PaperKey = (props: Props) => {
       <Kb.Box2 alignItems="center" direction="vertical" fullHeight={true} fullWidth={true} gap="small">
         <Kb.Box2
           direction="vertical"
+          fullWidth={true}
           style={styles.contents}
           centerChildren={!Styles.isAndroid /* android keyboardAvoiding doesnt work well */}
           gap={Styles.isMobile ? 'tiny' : 'medium'}
         >
           <Kb.Box2 direction="vertical" gap="tiny" centerChildren={true} gapEnd={true}>
-            <Kb.Icon type="icon-paper-key-48" />
+            <Kb.Icon type="icon-paper-key-96" />
           </Kb.Box2>
-          <Kb.Box2 direction="vertical" style={styles.inputContainer}>
-            <Kb.PlainInput
+          <Kb.Box2 direction="vertical" style={styles.inputContainer} fullWidth={true}>
+            <Kb.LabeledInput
               autoFocus={true}
               multiline={true}
               rowsMax={3}
-              placeholder="Type in your paper key"
+              hoverPlaceholder="Ex: garage blue three..."
+              placeholder="Type your paper key"
               textType="Header"
               style={styles.input}
               onEnterKeyDown={onSubmit}
@@ -60,27 +65,21 @@ const PaperKey = (props: Props) => {
 const styles = Styles.styleSheetCreate(() => ({
   contents: {
     flexGrow: 1,
-    maxWidth: Styles.isMobile ? 300 : 460,
+    maxWidth: Styles.isMobile ? '100%' : 460,
     width: '100%',
   },
   input: {
-    color: Styles.globalColors.black,
     ...Styles.globalStyles.fontTerminal,
+    color: Styles.globalColors.black,
+    marginTop: 10,
+    width: '100%',
   },
   inputContainer: {
-    backgroundColor: Styles.globalColors.white,
-    borderColor: Styles.globalColors.black_10,
-    borderRadius: 4,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    minHeight: 77,
-    padding: Styles.globalMargins.small,
     width: '100%',
   },
 }))
 
 PaperKey.navigationOptions = {
-  header: null,
   headerBottomStyle: {height: undefined},
   headerLeft: null, // no back button
   headerRightActions: () => (

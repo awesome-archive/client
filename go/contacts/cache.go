@@ -31,7 +31,7 @@ func (s *ContactCacheStore) dbKey(uid keybase1.UID) libkb.DbKey {
 // store is used to securely store cached contact resolutions.
 func NewContactCacheStore(g *libkb.GlobalContext) *ContactCacheStore {
 	keyFn := func(ctx context.Context) ([32]byte, error) {
-		return encrypteddb.GetSecretBoxKey(ctx, g, encrypteddb.DefaultSecretUI,
+		return encrypteddb.GetSecretBoxKey(ctx, g,
 			libkb.EncryptionReasonContactsLocalStorage, "encrypting contact resolution cache")
 	}
 	dbFn := func(g *libkb.GlobalContext) *libkb.JSONLocalDb {
@@ -159,15 +159,15 @@ func (s *ContactCacheStore) ClearCache(mctx libkb.MetaContext) error {
 }
 
 func (c *CachedContactsProvider) LookupAllWithToken(mctx libkb.MetaContext, emails []keybase1.EmailAddress,
-	numbers []keybase1.RawPhoneNumber, userRegion keybase1.RegionCode, _ Token) (res ContactLookupResults, err error) {
-	return c.LookupAll(mctx, emails, numbers, userRegion)
+	numbers []keybase1.RawPhoneNumber, _ Token) (res ContactLookupResults, err error) {
+	return c.LookupAll(mctx, emails, numbers)
 }
 
 func (c *CachedContactsProvider) LookupAll(mctx libkb.MetaContext, emails []keybase1.EmailAddress,
-	numbers []keybase1.RawPhoneNumber, userRegion keybase1.RegionCode) (res ContactLookupResults, err error) {
+	numbers []keybase1.RawPhoneNumber) (res ContactLookupResults, err error) {
 
-	defer mctx.TraceTimed(fmt.Sprintf("CachedContactsProvider#LookupAll(len=%d)", len(emails)+len(numbers)),
-		func() error { return nil })()
+	defer mctx.Trace(fmt.Sprintf("CachedContactsProvider#LookupAll(len=%d)", len(emails)+len(numbers)),
+		nil)()
 
 	res = NewContactLookupResults()
 	if len(emails)+len(numbers) == 0 {
@@ -223,7 +223,7 @@ func (c *CachedContactsProvider) LookupAll(mctx libkb.MetaContext, emails []keyb
 	mctx.Debug("After checking cache, %d emails and %d numbers left to be looked up", len(remainingEmails), len(remainingNumbers))
 
 	if len(remainingEmails)+len(remainingNumbers) > 0 {
-		apiRes, err := c.Provider.LookupAllWithToken(mctx, remainingEmails, remainingNumbers, userRegion, conCache.Token)
+		apiRes, err := c.Provider.LookupAllWithToken(mctx, remainingEmails, remainingNumbers, conCache.Token)
 		if err == nil {
 			conCache.Token = apiRes.Token
 

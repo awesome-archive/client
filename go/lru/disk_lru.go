@@ -2,6 +2,7 @@ package lru
 
 import (
 	"container/list"
+	json "encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,10 @@ import (
 	"github.com/keybase/client/go/libkb"
 	context "golang.org/x/net/context"
 )
+
+type Pathable struct {
+	Path string
+}
 
 type DiskLRUEntry struct {
 	Key          string
@@ -433,8 +438,25 @@ func (d *DiskLRU) CleanOutOfSync(mctx libkb.MetaContext, cacheDir string) error 
 	return err
 }
 
+func (d *DiskLRU) getPath(entry DiskLRUEntry) (res string, ok bool) {
+	if res, ok = entry.Value.(string); ok {
+		return res, ok
+	}
+	if _, ok = entry.Value.(map[string]interface{}); ok {
+		var pathable Pathable
+		jstr, _ := json.Marshal(entry.Value)
+		_ = json.Unmarshal(jstr, &pathable)
+		path := pathable.Path
+		if len(path) == 0 {
+			return "", false
+		}
+		return path, true
+	}
+	return "", false
+}
+
 func (d *DiskLRU) cleanOutOfSync(mctx libkb.MetaContext, cacheDir string, batchSize int) (completed bool, err error) {
-	defer mctx.TraceTimed("cleanOutOfSync", func() error { return err })()
+	defer mctx.Trace("cleanOutOfSync", &err)()
 	d.Lock()
 	defer d.Unlock()
 
@@ -448,7 +470,7 @@ func (d *DiskLRU) cleanOutOfSync(mctx libkb.MetaContext, cacheDir string, batchS
 		return false, err
 	}
 	for _, entry := range allVals {
-		path, ok := entry.Value.(string)
+		path, ok := d.getPath(entry)
 		if !ok {
 			continue
 		}
@@ -489,9 +511,14 @@ func (d *DiskLRU) cleanOutOfSync(mctx libkb.MetaContext, cacheDir string, batchS
 func CleanOutOfSyncWithDelay(mctx libkb.MetaContext, d *DiskLRU, cacheDir string, delay time.Duration) {
 
 	mctx.Debug("CleanOutOfSyncWithDelay: cleaning %s in %v", cacheDir, delay)
-	time.Sleep(delay)
+	select {
+	case <-mctx.Ctx().Done():
+		mctx.Debug("CleanOutOfSyncWithDelay: cancelled before initial delay finished")
+		return
+	case <-time.After(delay):
+	}
 
-	defer mctx.TraceTimed("CleanOutOfSyncWithDelay", func() error { return nil })()
+	defer mctx.Trace("CleanOutOfSyncWithDelay", nil)()
 
 	// Batch deletions so we don't hog the lock.
 	batchSize := 1000
@@ -501,6 +528,12 @@ func CleanOutOfSyncWithDelay(mctx libkb.MetaContext, d *DiskLRU, cacheDir string
 		batchDelay = 25 * time.Millisecond
 	}
 	for {
+		select {
+		case <-mctx.Ctx().Done():
+			mctx.Debug("CleanOutOfSyncWithDelay: cancelled")
+			return
+		default:
+		}
 		if completed, err := d.cleanOutOfSync(mctx, cacheDir, batchSize); err != nil {
 			mctx.Debug("unable to run clean: %v", err)
 			break

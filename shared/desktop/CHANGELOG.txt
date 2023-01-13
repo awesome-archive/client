@@ -1,6 +1,1 @@
-Chat:
-• Replies will automatically notify who you're replying to
-
-Misc:
-• Configure a HTTP or SOCKS proxy in advanced settings
-• Support user lookup by phone number
+• Various bug fixes and performance enhancements

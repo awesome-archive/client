@@ -1,10 +1,10 @@
-import React, {Component} from 'react'
+import * as React from 'react'
 import * as Styles from '../../styles'
 import {Box, Button, Icon, Text} from '../../common-adapters'
 
-import {Props} from './index'
+import type {Props} from './index'
 
-class InviteGeneratedRender extends Component<Props> {
+class InviteGeneratedRender extends React.Component<Props> {
   render() {
     return (
       <Box
@@ -45,14 +45,14 @@ class InviteGeneratedRender extends Component<Props> {
 }
 
 const styles = Styles.styleSheetCreate(() => ({
-  icon: Styles.collapseStyles([
-    Styles.desktopStyles.clickable,
-    {
+  icon: Styles.platformStyles({
+    isElectron: {
+      ...Styles.desktopStyles.clickable,
       position: 'absolute',
       right: Styles.globalMargins.small,
       top: Styles.globalMargins.small,
     },
-  ]),
+  }),
   linkContainer: {
     ...Styles.globalStyles.flexBoxRow,
     alignItems: 'center',

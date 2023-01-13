@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 //
+//go:build !windows
 // +build !windows
 
 package libfuse
@@ -34,7 +35,7 @@ func newExternalFile(path string) (*SpecialReadFile, error) { // nolint
 					return
 				}
 				fileTime = info.ModTime()
-				data, err = ioutil.ReadFile(path)
+				data, err = os.ReadFile(path)
 			})
 			return data, fileTime, err
 		},

@@ -1,61 +1,44 @@
+import * as Container from '../util/container'
 import * as React from 'react'
-import * as Constants from '../constants/config'
-import SyncProps from '../desktop/remote/sync-props.desktop'
-import SyncBrowserWindow from '../desktop/remote/sync-browser-window.desktop'
-import {NullComponent, connect, compose} from '../util/container'
-import {serialize} from './remote-serializer.desktop'
-
-type OwnProps = {}
+import * as Styles from '../styles'
+import useBrowserWindow from '../desktop/remote/use-browser-window.desktop'
+import useSerializeProps from '../desktop/remote/use-serialize-props.desktop'
+import {serialize, type ProxyProps} from './remote-serializer.desktop'
 
 const windowOpts = {height: 300, width: 500}
 
-// Actions are handled by remote-container
-const UnlockFolder = compose(
-  connect(
-    state => {
-      const {devices, phase, paperkeyError, waiting} = state.unlockFolders
-      return {
-        devices,
-        paperkeyError,
-        phase,
-        remoteWindowNeedsProps: Constants.getRemoteWindowPropsCount(state.config, 'unlockFolders', ''),
-        waiting,
-        windowComponent: 'unlock-folders',
-        windowOpts,
-        windowParam: '',
-        windowTitle: 'UnlockFolders',
-      }
-    },
-    () => ({}),
-    (stateProps, _, __) => ({
-      devices: stateProps.devices.toJS(), // Never send immutable over the wire
-      paperkeyError: stateProps.paperkeyError,
-      phase: stateProps.phase,
-      remoteWindowNeedsProps: stateProps.remoteWindowNeedsProps,
-      waiting: stateProps.waiting,
-      windowComponent: stateProps.windowComponent,
-      windowOpts: stateProps.windowOpts,
-      windowParam: stateProps.windowParam,
-      windowPositionBottomRight: false,
-      windowTitle: stateProps.windowTitle,
-    })
-  ),
-  SyncBrowserWindow,
-  SyncProps(serialize)
-)(NullComponent)
+const UnlockFolders = (p: ProxyProps) => {
+  const windowComponent = 'unlock-folders'
+  const windowParam = windowComponent
 
-type Props = {
-  show: boolean
+  useBrowserWindow({
+    windowComponent,
+    windowOpts,
+    windowParam,
+    windowTitle: 'UnlockFolders',
+  })
+
+  useSerializeProps(p, serialize, windowComponent, windowParam)
+  return null
 }
 
-class UnlockFolders extends React.PureComponent<Props> {
-  render() {
-    return this.props.show ? <UnlockFolder /> : null
+const UnlockFoldersMemo = React.memo(UnlockFolders)
+
+const UnlockRemoteProxy = () => {
+  const unlockFolders = Container.useSelector(s => s.unlockFolders)
+  const {popupOpen} = unlockFolders
+  if (popupOpen) {
+    const {devices, phase, paperkeyError, waiting} = unlockFolders
+    return (
+      <UnlockFoldersMemo
+        darkMode={Styles.isDarkMode()}
+        devices={devices}
+        paperkeyError={paperkeyError}
+        phase={phase}
+        waiting={waiting}
+      />
+    )
   }
+  return null
 }
-
-export default connect(
-  state => ({show: state.unlockFolders.popupOpen}),
-  () => ({}),
-  (s, d, o: OwnProps) => ({...o, ...s, ...d})
-)(UnlockFolders)
+export default UnlockRemoteProxy

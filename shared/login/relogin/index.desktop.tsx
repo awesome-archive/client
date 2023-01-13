@@ -2,8 +2,9 @@ import * as React from 'react'
 import * as Constants from '../../constants/login'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
+import UserCard from '../user-card'
 import {errorBanner, SignupScreen} from '../../signup/common'
-import {Props} from '.'
+import type {Props} from '.'
 
 type State = {
   open: boolean
@@ -11,11 +12,12 @@ type State = {
 
 const other = 'Someone else...'
 
-const UserRow = ({user}) => (
-  <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.userRow}>
+const UserRow = ({user, hasStoredSecret}) => (
+  <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.userRow} gap="xtiny">
     <Kb.Text type="Header" style={user === other ? styles.other : styles.provisioned}>
       {user}
     </Kb.Text>
+    {hasStoredSecret && <Kb.Text type="BodySmall"> • Signed in</Kb.Text>}
   </Kb.Box2>
 )
 
@@ -46,26 +48,19 @@ class Login extends React.Component<Props, State> {
   render() {
     const userRows = this.props.users
       .concat({hasStoredSecret: false, username: other})
-      .map(u => <UserRow user={u.username} key={u.username} />)
+      .map(u => <UserRow user={u.username} key={u.username} hasStoredSecret={u.hasStoredSecret} />)
 
     const selectedIdx = this.props.users.findIndex(u => u.username === this.props.selectedUser)
-
     return (
       <SignupScreen
         banners={errorBanner(this.props.error)}
         headerStyle={styles.header}
-        rightActionComponent={
-          <Kb.Button
-            type="Default"
-            mode="Secondary"
-            onClick={this.props.onSignup}
-            label="Create an account"
-          />
-        }
+        onRightAction={this.props.onSignup}
+        rightActionLabel="Create an account"
         title="Log in"
       >
         <Kb.Box2 direction="vertical" fullHeight={true} fullWidth={true} style={styles.contentBox}>
-          <Kb.UserCard
+          <UserCard
             username={this.props.selectedUser}
             outerStyle={styles.container}
             style={styles.userContainer}
@@ -78,17 +73,19 @@ class Login extends React.Component<Props, State> {
               position="bottom center"
               style={styles.userDropdown}
             />
-            <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.inputRow}>
-              <Kb.LabeledInput
-                autoFocus={true}
-                placeholder="Password"
-                onChangeText={this.props.passwordChange}
-                onEnterKeyDown={this.props.onSubmit}
-                ref={this._inputRef}
-                type="password"
-                value={this.props.password}
-              />
-            </Kb.Box2>
+            {this.props.needPassword && (
+              <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.inputRow}>
+                <Kb.LabeledInput
+                  autoFocus={true}
+                  placeholder="Password"
+                  onChangeText={this.props.passwordChange}
+                  onEnterKeyDown={this.props.onSubmit}
+                  ref={this._inputRef}
+                  type="password"
+                  value={this.props.password}
+                />
+              </Kb.Box2>
+            )}
             <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.forgotPasswordContainer}>
               <Kb.Text
                 type="BodySmallSecondaryLink"
@@ -105,7 +102,7 @@ class Login extends React.Component<Props, State> {
               style={styles.loginSubmitContainer}
             >
               <Kb.WaitingButton
-                disabled={!this.props.password}
+                disabled={this.props.needPassword && !this.props.password}
                 fullWidth={true}
                 waitingKey={Constants.waitingKey}
                 style={styles.loginSubmitButton}
@@ -113,7 +110,7 @@ class Login extends React.Component<Props, State> {
                 onClick={this.props.onSubmit}
               />
             </Kb.Box2>
-          </Kb.UserCard>
+          </UserCard>
         </Kb.Box2>
       </SignupScreen>
     )
@@ -175,7 +172,8 @@ const styles = Styles.styleSheetCreate(
         width: 348,
       },
       userRow: {
-        ...Styles.globalStyles.flexBoxCenter,
+        alignItems: 'center',
+        marginLeft: Styles.globalMargins.xsmall,
         minHeight: 40,
         width: '100%',
       },

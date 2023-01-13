@@ -1,12 +1,9 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 
 export type Props = {
   code: string
   cannotAccept: boolean
-  depositButtonText: string
-  depositButtonWaitingKey?: string
   expanded: boolean
   firstItem: boolean
   infoUrlText: string
@@ -14,25 +11,21 @@ export type Props = {
   issuerVerifiedDomain: string
   thisDeviceIsLockedOut: boolean
   trusted: boolean // TODO add limit when we support it in GUI
-  withdrawButtonWaitingKey?: string
-  withdrawButtonText: string
 
   onAccept: () => void
   onCollapse: () => void
   onExpand: () => void
   onRemove: () => void
-  onDeposit?: () => void
   onOpenInfoUrl?: () => void
-  onWithdraw?: () => void
 
   waitingKeyAdd: string
   waitingKeyDelete: string
   waitingRefresh: boolean
 }
 
-const stopPropagation = onClick => e => {
+const stopPropagation = (onClick?: () => void) => (e: {stopPropagation: () => void}) => {
   e.stopPropagation()
-  onClick && onClick()
+  onClick?.()
 }
 
 const getCode = (props: Props) => (
@@ -63,27 +56,6 @@ const bodyExpanded = (props: Props) => (
       {props.issuerAccountID}
     </Kb.Text>
     <Kb.ButtonBar direction="row" align="flex-start" small={true}>
-      {!!props.depositButtonText && (
-        <Kb.WaitingButton
-          mode="Secondary"
-          label={props.depositButtonText}
-          onClick={stopPropagation(props.onDeposit)}
-          small={true}
-          type="Wallet"
-          waitingKey={props.depositButtonWaitingKey || null}
-        />
-      )}
-
-      {!!props.withdrawButtonText && (
-        <Kb.WaitingButton
-          mode="Secondary"
-          label={props.withdrawButtonText}
-          onClick={stopPropagation(props.onWithdraw)}
-          small={true}
-          type="Wallet"
-          waitingKey={props.withdrawButtonWaitingKey || null}
-        />
-      )}
       <Kb.Button
         mode="Secondary"
         type="Wallet"

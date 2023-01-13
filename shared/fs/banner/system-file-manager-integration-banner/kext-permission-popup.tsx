@@ -1,4 +1,4 @@
-import React from 'react'
+import * as React from 'react'
 import * as Types from '../../../constants/types/fs'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
@@ -9,11 +9,9 @@ type Props = {
   openSecurityPrefs: () => void
 }
 
-const securityPreferenceIllustration = require('../../../images/illustrations/security-preferences.png')
-
 const Illustration = () => (
   <Kb.Box style={styles.illustrationContainer}>
-    <Kb.Image style={styles.image} resizeMode="contain" src={securityPreferenceIllustration} />
+    <Kb.Icon style={styles.image} type="illustration-security-preferences" />
     <Kb.Box
       style={Styles.collapseStyles([styles.highlight, {bottom: 49, height: 24, left: 36, width: 136}])}
     />
@@ -50,49 +48,51 @@ class CancelWhenEnabled extends React.PureComponent<Props> {
 }
 
 const InstallSecurityPrefs = (props: Props) => (
-  <>
-    <CancelWhenEnabled {...props} />
-    <Kb.Box2 direction="vertical" gap="small" centerChildren={true} style={styles.container}>
-      <Kb.Text type="HeaderBig" style={styles.title}>
-        You need to change your system security preferences.
-      </Kb.Text>
-      <Kb.Text type="Body">Open your macOS Security & Privacy Settings and follow these steps.</Kb.Text>
-      <Kb.Box2 direction="horizontal">
-        <Illustration />
-        <Kb.Box2 direction="vertical" fullHeight={true} style={styles.numberListContainer}>
-          <Kb.Box style={Styles.globalStyles.flexBoxRow}>
-            <Kb.Text type="BodySemibold" style={styles.numberList}>
-              1
-            </Kb.Text>
-            <Kb.Text type="BodySemibold" style={styles.listText}>
-              Click the lock icon then enter your password
-            </Kb.Text>
-          </Kb.Box>
-          <Kb.Box style={Styles.globalStyles.flexBoxRow}>
-            <Kb.Text type="BodySemibold" style={styles.numberList}>
-              2
-            </Kb.Text>
-            <Kb.Text type="BodySemibold" style={styles.listText}>
-              Click "Allow"
-            </Kb.Text>
-          </Kb.Box>
+  <Kb.PopupWrapper onCancel={props.onCancel}>
+    <>
+      <CancelWhenEnabled {...props} />
+      <Kb.Box2 direction="vertical" gap="small" centerChildren={true} style={styles.container}>
+        <Kb.Text type="HeaderBig" style={styles.title}>
+          You need to change your system security preferences.
+        </Kb.Text>
+        <Kb.Text type="Body">Open your macOS Security & Privacy Settings and follow these steps.</Kb.Text>
+        <Kb.Box2 direction="horizontal">
+          <Illustration />
+          <Kb.Box2 direction="vertical" fullHeight={true} style={styles.numberListContainer}>
+            <Kb.Box style={Styles.globalStyles.flexBoxRow}>
+              <Kb.Text type="BodySemibold" style={styles.numberList}>
+                1
+              </Kb.Text>
+              <Kb.Text type="BodySemibold" style={styles.listText}>
+                Click the lock icon then enter your password
+              </Kb.Text>
+            </Kb.Box>
+            <Kb.Box style={Styles.globalStyles.flexBoxRow}>
+              <Kb.Text type="BodySemibold" style={styles.numberList}>
+                2
+              </Kb.Text>
+              <Kb.Text type="BodySemibold" style={styles.listText}>
+                Click "Allow"
+              </Kb.Text>
+            </Kb.Box>
+          </Kb.Box2>
         </Kb.Box2>
+        <Kb.Text type="BodySemiboldLink" onClick={props.openSecurityPrefs}>
+          Open Security & Privacy Settings
+        </Kb.Text>
       </Kb.Box2>
-      <Kb.Text type="BodySemiboldLink" onClick={props.openSecurityPrefs}>
-        Open Security & Privacy Settings
-      </Kb.Text>
-    </Kb.Box2>
-    {props.driverStatus.type === Types.DriverStatusType.Disabled && props.driverStatus.isEnabling && (
-      <Kb.Box style={styles.enablingContainer}>
-        <Kb.Box2 direction="vertical" gap="small" fullWidth={true} fullHeight={true} centerChildren={true}>
-          <Kb.ProgressIndicator white={true} />
-          <Kb.Text type="BodySmall" negative={true}>
-            Checking ...
-          </Kb.Text>
-        </Kb.Box2>
-      </Kb.Box>
-    )}
-  </>
+      {props.driverStatus.type === Types.DriverStatusType.Disabled && props.driverStatus.isEnabling && (
+        <Kb.Box style={styles.enablingContainer}>
+          <Kb.Box2 direction="vertical" gap="small" fullWidth={true} fullHeight={true} centerChildren={true}>
+            <Kb.ProgressIndicator type="Small" white={true} />
+            <Kb.Text type="BodySmall" negative={true}>
+              Checking ...
+            </Kb.Text>
+          </Kb.Box2>
+        </Kb.Box>
+      )}
+    </>
+  </Kb.PopupWrapper>
 )
 
 const styles = Styles.styleSheetCreate(
@@ -156,4 +156,4 @@ const styles = Styles.styleSheetCreate(
     } as const)
 )
 
-export default Kb.HeaderOrPopup(InstallSecurityPrefs)
+export default InstallSecurityPrefs

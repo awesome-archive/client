@@ -1,16 +1,10 @@
 import logger from '../logger'
-import * as I from 'immutable'
-import * as Types from './types/team-building'
-import * as RPCTypes from './types/rpc-gen'
+import type * as Types from './types/team-building'
+import type * as RPCTypes from './types/rpc-gen'
+import {serviceIdFromString} from '../util/platforms'
 
-const searchServices: Array<Types.ServiceId> = [
-  'keybase',
-  'twitter',
-  'facebook',
-  'github',
-  'reddit',
-  'hackernews',
-]
+const searchServices: Array<Types.ServiceId> = ['keybase', 'twitter', 'github', 'reddit', 'hackernews']
+
 // Order here determines order of tabs in team building
 export const allServices: Array<Types.ServiceIdWithContact> = [
   ...searchServices.slice(0, 1),
@@ -18,22 +12,21 @@ export const allServices: Array<Types.ServiceIdWithContact> = [
   'email',
   ...searchServices.slice(1),
 ]
-const searchServicesWithEmail: Array<Types.ServiceIdWithContact> = [
-  ...searchServices.slice(0, 1),
-  'email',
-  ...searchServices.slice(1),
-]
 
-export function servicesForNamespace(namespace: Types.AllowedNamespace): Array<Types.ServiceIdWithContact> {
-  if (namespace === 'teams') {
-    return searchServicesWithEmail
-  }
-  return allServices
+export function serviceIdToPrettyName(serviceId: Types.ServiceId): string {
+  return {
+    facebook: 'Facebook',
+    github: 'GitHub',
+    hackernews: 'Hacker News',
+    keybase: 'Keybase',
+    reddit: 'Reddit',
+    twitter: 'Twitter',
+  }[serviceId]
 }
 
 function isKeybaseUserId(userId: string) {
   // Only keybase user id's do not have
-  return userId.indexOf('@') < 0
+  return !userId.includes('@')
 }
 
 export function followStateHelperWithId(
@@ -51,22 +44,20 @@ export function followStateHelperWithId(
   return 'NoState'
 }
 
-const SubStateFactory = I.Record<Types._TeamBuildingSubState>({
-  teamBuildingFinishedSelectedRole: 'writer',
-  teamBuildingFinishedSendNotification: true,
-  teamBuildingFinishedTeam: I.OrderedSet(),
-  teamBuildingSearchLimit: 11,
-  teamBuildingSearchQuery: '',
-  teamBuildingSearchResults: I.Map(),
-  teamBuildingSelectedRole: 'writer',
-  teamBuildingSelectedService: 'keybase',
-  teamBuildingSendNotification: true,
-  teamBuildingServiceResultCount: I.Map(),
-  teamBuildingTeamSoFar: I.OrderedSet(),
-  teamBuildingUserRecs: null,
+export const makeSubState = (): Types.TeamBuildingSubState => ({
+  error: '',
+  finishedSelectedRole: 'writer',
+  finishedSendNotification: true,
+  finishedTeam: new Set(),
+  searchLimit: 11,
+  searchQuery: '',
+  searchResults: new Map(),
+  selectedRole: 'writer',
+  selectedService: 'keybase',
+  sendNotification: true,
+  serviceResultCount: new Map(),
+  teamSoFar: new Set(),
 })
-
-export const makeSubState = (): Types.TeamBuildingSubState => SubStateFactory()
 
 export const parseRawResultToUser = (
   result: RPCTypes.APIUserSearchResult,
@@ -118,9 +109,7 @@ export const parseRawResultToUser = (
     if (result.service.serviceName !== service) {
       // This shouldn't happen
       logger.error(
-        `Search result's service_name is different than given service name. Expected: ${service} received ${
-          result.service.serviceName
-        }`
+        `Search result's service_name is different than given service name. Expected: ${service} received ${result.service.serviceName}`
       )
       return null
     }
@@ -128,6 +117,8 @@ export const parseRawResultToUser = (
     const kbPrettyName = result.keybase && (result.keybase.fullName || result.keybase.username)
 
     const prettyName = result.service.fullName || kbPrettyName || ''
+
+    const pictureUrl = result.keybase?.pictureUrl || result.service?.pictureUrl
 
     let id = `${result.service.username}@${result.service.serviceName}`
     if (result.keybase) {
@@ -137,6 +128,7 @@ export const parseRawResultToUser = (
 
     return {
       id,
+      pictureUrl,
       prettyName,
       serviceId: service,
       serviceMap,
@@ -155,13 +147,30 @@ export const selfToUser = (you: string): Types.User => ({
   username: you,
 })
 
+type HasServiceMap = {
+  username: string
+  serviceMap: {[key: string]: string}
+}
+
+const pluckServiceMap = (contact: HasServiceMap) =>
+  Object.entries(contact.serviceMap || {})
+    .concat([['keybase', contact.username]])
+    .reduce<Types.ServiceMap>((acc, [service, username]) => {
+      if (serviceIdFromString(service) === service) {
+        // Service can also give us proof values like "https" or "dns" that
+        // we don't want here.
+        acc[service] = username
+      }
+      return acc
+    }, {})
+
 export const contactToUser = (contact: RPCTypes.ProcessedContact): Types.User => ({
   contact: true,
   id: contact.assertion,
   label: contact.displayLabel,
   prettyName: contact.displayName,
   serviceId: contact.component.phoneNumber ? 'phone' : 'email',
-  serviceMap: {keybase: contact.username},
+  serviceMap: pluckServiceMap(contact),
   username: contact.component.email || contact.component.phoneNumber || '',
 })
 
@@ -171,7 +180,7 @@ export const interestingPersonToUser = (person: RPCTypes.InterestingPerson): Typ
     id: username,
     prettyName: fullname,
     serviceId: 'keybase' as const,
-    serviceMap: {keybase: username},
+    serviceMap: pluckServiceMap(person),
     username: username,
   }
 }

@@ -1,9 +1,9 @@
-import * as Types from '../../../constants/types/fs'
+import type * as Types from '../../../constants/types/fs'
 import * as Constants from '../../../constants/fs'
 import * as FsGen from '../../../actions/fs-gen'
 import * as Container from '../../../util/container'
-import Confirm, {Props} from './confirm'
-import {FloatingMenuProps} from './types'
+import Confirm, {type Props} from './confirm'
+import type {FloatingMenuProps} from './types'
 
 type OwnProps = {
   floatingMenuProps: FloatingMenuProps
@@ -12,7 +12,7 @@ type OwnProps = {
 
 const mapStateToProps = (state: Container.TypedState, {path}: OwnProps) => ({
   _pathItemActionMenu: state.fs.pathItemActionMenu,
-  size: state.fs.pathItems.get(path, Constants.unknownPathItem).size,
+  size: Constants.getPathItem(state.fs.pathItems, path).size,
 })
 
 const mapDispatchToProps = (dispatch: Container.TypedDispatch, {path}: OwnProps) => ({
@@ -22,7 +22,7 @@ const mapDispatchToProps = (dispatch: Container.TypedDispatch, {path}: OwnProps)
   },
 })
 
-export default Container.namedConnect(
+export default Container.connect(
   mapStateToProps,
   mapDispatchToProps,
   (stateProps, dispatchProps, ownProps: OwnProps) => ({
@@ -33,6 +33,5 @@ export default Container.namedConnect(
         : ('send-to-other-app' as Props['action']),
     confirm: () => dispatchProps._confirm(stateProps._pathItemActionMenu),
     size: stateProps.size,
-  }),
-  'PathItemActionConfirm'
+  })
 )(Confirm)

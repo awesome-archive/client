@@ -1,4 +1,5 @@
 /* eslint-env jest */
+/*
 import Session from '../session'
 import engineSaga from '../saga'
 
@@ -11,7 +12,6 @@ class FakeEngine {
   rpc() {}
   listenOnConnect() {}
   listenOnDisconnect() {}
-  hasEverConnected() {}
   setIncomingActionCreator() {}
   createSession() {
     return new Session({
@@ -36,3 +36,5 @@ const initEngineSaga = () => {}
 const getEngineSaga = () => engineSaga
 
 export {initEngine, getEngine, makeEngine, initEngineSaga, getEngineSaga}
+ */
+export {}

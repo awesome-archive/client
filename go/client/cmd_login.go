@@ -121,7 +121,7 @@ func (c *CmdLogin) Run() error {
 	err = client.Login(ctx,
 		keybase1.LoginArg{
 			Username:     c.Username,
-			DeviceType:   libkb.DeviceTypeDesktop,
+			DeviceType:   keybase1.DeviceTypeV2_DESKTOP,
 			ClientType:   c.clientType,
 			SessionID:    c.SessionID,
 			DoUserSwitch: c.doUserSwitch,
@@ -178,7 +178,7 @@ func (c *CmdLogin) getOption(ctx *cli.Context, s string) string {
 	if len(v) > 0 {
 		return v
 	}
-	envVarName := fmt.Sprintf("KEYBASE_%s", strings.ToUpper(strings.Replace(s, "-", "_", -1)))
+	envVarName := fmt.Sprintf("KEYBASE_%s", strings.ToUpper(strings.ReplaceAll(s, "-", "_")))
 	v = os.Getenv(envVarName)
 	if len(v) > 0 {
 		return v

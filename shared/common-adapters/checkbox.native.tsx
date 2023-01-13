@@ -1,6 +1,5 @@
-import React from 'react'
-import {Props} from './checkbox'
 import Switch from './switch'
+import type {Props} from './checkbox'
 import * as Styles from '../styles'
 
 const Checkbox = (props: Props) => (
@@ -14,6 +13,7 @@ const Checkbox = (props: Props) => (
       props.onCheck && props.onCheck(!props.checked)
     }}
     style={Styles.collapseStyles([styles.container, props.style])}
+    labelSubtitle={props.labelSubtitle}
   />
 )
 

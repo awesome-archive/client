@@ -1,6 +1,6 @@
 import * as React from 'react'
-import {Position} from '../relative-popup-hoc.types'
-import {StylesCrossPlatform} from '../../styles/css'
+import type {Position} from '../../styles'
+import type {StylesCrossPlatform} from '../../styles/css'
 
 /**
  * Overlay is the generic form of
@@ -25,6 +25,7 @@ export type Props = {
   position?: Position
   positionFallbacks?: Position[]
   propagateOutsideClicks?: boolean
+  remeasureHint?: number
   style?: StylesCrossPlatform
   visible?: boolean
 }

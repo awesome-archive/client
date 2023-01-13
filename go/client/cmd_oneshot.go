@@ -6,9 +6,10 @@ package client
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/net/context"
 	"os"
 	"strings"
+
+	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -30,7 +31,7 @@ func NewCmdOneshot(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Comma
 	}
 	cmd := cli.Command{
 		Name:  "oneshot",
-		Usage: "Establish a oneshot device, as in logging into keybase from a disposable docker",
+		Usage: "Establish a oneshot device, as in logging into keybase from a disposable container",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(NewCmdOneshotRunner(g), "oneshot", c)
 			cl.SetNoStandalone()
@@ -62,7 +63,13 @@ func NewCmdOneshot(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Comma
   other containers), root can be the best option, so you can use "keybase oneshot"
   in concert with the KEYBASE_ALLOW_ROOT=1 environment variable.
 
-  Some features won't work in oneshot mode, like exploding messages.`,
+  Exploding messages work in oneshot mode with the caveat that you cannot run
+  multiple instances of oneshot mode with the same paperkey simulateously. Each
+  instance will each try to create ephemeral keys but require a distinct
+  paperkey to uniquely identify itself as a separate device. In addition,
+  ephemeral keys are *purged entirely* when closing the oneshot session, you
+  will not be able to access any old ephemeral content when starting up
+  again.`,
 	}
 	return cmd
 }

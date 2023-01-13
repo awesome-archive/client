@@ -3,12 +3,13 @@ import * as Types from '../../constants/types/wallets'
 import * as Constants from '../../constants/wallets'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import * as RPCTypes from '../../constants/types/rpc-stellar-gen'
-import {capitalize} from 'lodash-es'
+import type * as RPCTypes from '../../constants/types/rpc-stellar-gen'
+import capitalize from 'lodash/capitalize'
 import {Transaction, TimestampError, TimestampPending} from '../transaction'
 import {SmallAccountID} from '../common'
 import {formatTimeForStellarDetail, formatTimeForStellarTooltip} from '../../util/timestamp'
-import PaymentPath, {Asset} from './payment-path'
+import PaymentPath, {type Asset} from './payment-path'
+import type {AllowedColors} from 'common-adapters/text'
 
 export type NotLoadingProps = {
   amountUser: string
@@ -51,7 +52,6 @@ export type NotLoadingProps = {
   statusDetail: string
   // A null timestamp means the transaction is still pending.
   timestamp: Date | null
-  title: string
   transactionID?: string
   you: string
   yourRole: Types.Role
@@ -67,7 +67,6 @@ export type Props =
       loading: true
       onBack: () => void
       onLoadPaymentDetail: () => void
-      title: string
     }
 
 type PartyAccountProps = {
@@ -146,7 +145,7 @@ const Counterparty = (props: CounterpartyProps) => {
     case 'otherAccount':
       return <PartyAccount accountID={props.accountID} accountName={props.counterparty} />
     default:
-      throw new Error(`unknown counterpartyType: ${props}`)
+      throw new Error(`unknown counterpartyType: ${props.counterpartyType}`)
   }
 }
 
@@ -433,16 +432,18 @@ const TransactionDetails = (props: NotLoadingProps) => {
           </Kb.Box2>
         )}
 
-        {props.operations && props.operations.length && !(props.trustline && props.operations.length <= 1) && (
-          <Kb.Box2 direction="vertical" gap="xxtiny" fullWidth={true}>
-            <Kb.Text type="BodySmallSemibold">Operations:</Kb.Text>
-            {props.operations.map((op, i) => (
-              <Kb.Text key={i} selectable={true} style={styles.operation} type="Body">
-                {i + 1}. {op}
-              </Kb.Text>
-            ))}
-          </Kb.Box2>
-        )}
+        {props.operations &&
+          props.operations.length &&
+          !(props.trustline && props.operations.length <= 1) && (
+            <Kb.Box2 direction="vertical" gap="xxtiny" fullWidth={true}>
+              <Kb.Text type="BodySmallSemibold">Operations:</Kb.Text>
+              {props.operations.map((op, i) => (
+                <Kb.Text key={i} selectable={true} style={styles.operation} type="Body">
+                  {i + 1}. {op}
+                </Kb.Text>
+              ))}
+            </Kb.Box2>
+          )}
 
         <Kb.Box2 direction="vertical" gap="xxtiny" fullWidth={true}>
           <Kb.Text type="BodySmallSemibold">Status:</Kb.Text>
@@ -450,9 +451,7 @@ const TransactionDetails = (props: NotLoadingProps) => {
             containerStyle={styles.statusBox}
             tooltip={
               props.status === 'claimable'
-                ? `${
-                    props.counterparty
-                  } hasn't generated a Stellar account yet. This payment will automatically complete when they create one.`
+                ? `${props.counterparty} hasn't generated a Stellar account yet. This payment will automatically complete when they create one.`
                 : ''
             }
             textStyle={styles.tooltipText}
@@ -461,7 +460,7 @@ const TransactionDetails = (props: NotLoadingProps) => {
             <Kb.Icon
               color={colorForStatus(props.status)}
               sizeType="Small"
-              style={Kb.iconCastPlatformStyles(styles.statusIcon)}
+              style={styles.statusIcon}
               type={
                 ['error', 'canceled'].includes(props.status)
                   ? 'iconfont-remove'
@@ -473,7 +472,10 @@ const TransactionDetails = (props: NotLoadingProps) => {
             <Kb.Text
               style={Styles.collapseStyles([
                 styles.statusText,
-                {color: colorForStatus(props.status), marginLeft: Styles.globalMargins.xtiny},
+                {
+                  color: colorForStatus(props.status) as AllowedColors, // this isn't actually an allowed color. maybe see what's up here
+                  marginLeft: Styles.globalMargins.xtiny,
+                },
               ])}
               type="Body"
             >
@@ -546,7 +548,12 @@ function isNotLoadingProps(props: Props): props is NotLoadingProps {
   return !props.loading
 }
 
-class LoadTransactionDetails extends React.Component<Props> {
+class LoadTransactionDetails extends React.Component<NotLoadingProps /*Props TODO fix*/> {
+  static navigationOptions = {
+    header: undefined,
+    title: 'Transaction details',
+  }
+
   componentDidMount() {
     this.props.onLoadPaymentDetail()
   }

@@ -1,22 +1,29 @@
 import * as React from 'react'
-// eslint-disable-next-line
-import {Draft as _Draft} from 'immer'
-import {TypedActions} from '../actions/typed-actions-gen'
-import {TypedState} from '../constants/reducer'
-import {RouteProps as _RouteProps, GetRouteType} from '../route-tree/render-route'
-import {PropsWithSafeNavigation as _PropsWithSafeNavigation} from './safe-navigation'
+import {type Draft as _Draft, setAutoFreeze} from 'immer'
+import type {TypedActions as _TypedActions} from '../actions/typed-actions-gen'
+import type {ActionHandler as _ActionHandler} from './make-reducer'
+import type {TypedState as _TypedState} from '../constants/reducer'
 import {StatusCode} from '../constants/types/rpc-gen'
 import {anyWaiting, anyErrors} from '../constants/waiting'
-import {useSelector} from 'react-redux'
+import {useDispatch as RRuseDispatch, type TypedUseSelectorHook} from 'react-redux'
+import type {Dispatch as RRDispatch} from 'redux'
+import flowRight from 'lodash/flowRight'
+import typedConnect from './typed-connect'
+import type {Route} from '../constants/types/route-tree'
+import type {NavigationContainerRef} from '@react-navigation/core'
+import type {createListenerMiddleware} from '@reduxjs/toolkit'
+export type ListenerMiddleware = ReturnType<typeof createListenerMiddleware>
+export {type RouteProps, getRouteParams, getRouteParamsFromRoute} from '../router-v2/route-params'
+export {listenAction, type ListenerApi, spawn} from './redux-toolkit'
+export {useDebounce, useDebouncedCallback, useThrottledCallback, type DebouncedState} from 'use-debounce'
+import USH from './use-selector'
 
-// to keep fallback objects static for react
-export const emptyArray: Array<any> = []
-export const emptySet = new Set<any>()
-export const emptyMap = new Map<any, any>()
-export const NullComponent = () => null
-export const actionHasError = <NoError extends {}, HasError extends {error: boolean}>(
-  a: NoError | HasError
-): a is HasError => Object.prototype.hasOwnProperty.call(a, 'error')
+const useSelector = USH.useSelector as TypedUseSelectorHook<RootState>
+
+// don't pay for this in prod builds
+if (!__DEV__) {
+  setAutoFreeze(false)
+}
 
 export const networkErrorCodes = [
   StatusCode.scgenericapierror,
@@ -26,21 +33,15 @@ export const networkErrorCodes = [
 
 export const isNetworkErr = (code: number) => networkErrorCodes.includes(code)
 
-export function getRouteProps<O extends _RouteProps<any>, R extends GetRouteType<O>, K extends keyof R>(
-  ownProps: O,
-  key: K,
-  notSetVal: R[K] // this could go away if we type the routes better and ensure its always passed as a prop
-): R[K] {
-  const val = ownProps.navigation.getParam(key)
-  return val === undefined ? notSetVal : val
-}
+export type RemoteWindowSerializeProps<P> = {[K in keyof P]-?: (val: P[K], old?: P[K]) => any}
 
-export type TypedDispatch = (action: TypedActions) => void
+export type TypedDispatch = (action: _TypedActions) => void
 export type Dispatch = TypedDispatch
 
 export const useAnyWaiting = (...waitingKeys: string[]) =>
   useSelector(state => anyWaiting(state, ...waitingKeys))
 export const useAnyErrors = (...waitingKeys: string[]) => useSelector(state => anyErrors(state, waitingKeys))
+// Deprecated: use usePrevious2
 export function usePrevious<T>(value: T) {
   const ref = React.useRef<T>()
   React.useEffect(() => {
@@ -48,42 +49,109 @@ export function usePrevious<T>(value: T) {
   })
   return ref.current
 }
+export function usePrevious2<T>(value: T) {
+  const ref = React.useRef<T>()
+  React.useEffect(() => {
+    ref.current = value
+  }, [value])
+  return ref.current
+}
 
-export type Route = {
+/** like useSelector but for remote stores **/
+export function useRemoteStore<S>(): S {
+  return useSelector(s => s) as unknown as S
+}
+/**
+      like useEffect but doesn't call on initial mount, only when deps change
+ */
+export function useDepChangeEffect(f: () => void, deps: Array<unknown>) {
+  const mounted = React.useRef(false)
+
+  React.useEffect(() => {
+    if (mounted.current) {
+      f()
+    } else {
+      mounted.current = true
+    }
+    // eslint-disable-next-line
+  }, deps)
+}
+
+export type RouteDef = {
   getScreen: () => React.ComponentType<any>
+  getOptions?: (p: {navigation: NavigationContainerRef<{}>; route: Route}) => Object
   screen?: React.ComponentType
 }
-export type RouteMap = {[K in string]: Route}
+export type RouteMap = {[K in string]: RouteDef}
+
+export async function neverThrowPromiseFunc<T>(f: () => Promise<T>) {
+  try {
+    return await f()
+  } catch {
+    return undefined
+  }
+}
 
 export const assertNever = (_: never) => undefined
 
-export {
-  branch,
-  defaultProps,
-  lifecycle,
-  pure,
-  renderComponent,
-  renderNothing,
-  withHandlers,
-  withStateHandlers,
-  withProps,
-  mapProps,
-  withPropsOnChange,
-  setDisplayName,
-} from 'recompose'
-export {default as connect, namedConnect, connectDEBUG} from './typed-connect'
-export {default as remoteConnect} from './typed-remote-connect'
-export {isMobile, isIOS, isAndroid} from '../constants/platform'
+export const timeoutPromise = async (timeMs: number) =>
+  new Promise<void>(resolve => {
+    setTimeout(() => resolve(), timeMs)
+  })
+
+const connect = typedConnect
+export {connect}
+export {isMobile, isIOS, isAndroid, isPhone, isTablet} from '../constants/platform'
 export {anyWaiting, anyErrors} from '../constants/waiting'
-export {safeSubmit, safeSubmitPerMount} from './safe-submit'
-export {default as withSafeNavigation, useSafeNavigation} from './safe-navigation'
-export type RouteProps<P = {}> = _RouteProps<P>
-export type TypedActions = TypedActions
-export type TypedState = TypedState
-export type PropsWithSafeNavigation<P> = _PropsWithSafeNavigation<P>
-export {useSelector, useDispatch} from 'react-redux'
-export {flowRight as compose} from 'lodash-es'
+export {useSafeSubmit} from './safe-submit'
+export {useSafeNavigation} from './safe-navigation'
+export type TypedActions = _TypedActions
+export type TypedState = _TypedState
+export const compose = flowRight
 export {default as hoistNonReactStatic} from 'hoist-non-react-statics'
-export {produce} from 'immer'
+export {produce, castDraft, castImmutable, current} from 'immer'
 export type Draft<T> = _Draft<T>
 export {default as HiddenString} from './hidden-string'
+export {default as makeReducer} from './make-reducer'
+export type ActionHandler<S, A> = _ActionHandler<S, A>
+export {default as useRPC} from './use-rpc'
+export {default as useSafeCallback} from './use-safe-callback'
+export type RootState = _TypedState
+export const useDispatch = () => RRuseDispatch<RRDispatch<_TypedActions>>()
+export {useSelector}
+
+// BEGIN debugging connect
+// import isEqual from 'lodash/isEqual'
+// const debugMergeProps = __DEV__
+//   ? () => {
+//       let oldsp = {}
+//       let oldop = {}
+//       return (sp, op, mp) => {
+//         Object.keys(oldsp).forEach(key => {
+//           if (oldsp[key] !== sp[key] && isEqual(oldsp[key], sp[key])) {
+//             console.log('DEBUGMERGEPROPS sp: ', key, oldsp[key], sp[key], 'orig: ', mp)
+//           }
+//         })
+//         Object.keys(oldop).forEach(key => {
+//           if (oldop[key] !== op[key] && isEqual(oldop[key], op[key])) {
+//             console.log('DEBUGMERGEPROPS op: ', key, oldop[key], op[key], 'orig: ', mp)
+//           }
+//         })
+//         oldsp = sp || {}
+//         oldop = op || {}
+//       }
+//     }
+//   : () => () => {}
+//
+// const debugConnect: any = (msp, mdp, mp) => {
+//   console.log('DEBUG: using debugMergeProps connect')
+//   const dmp = debugMergeProps()
+//   return typedConnect(msp, mdp, (sp, dp, op) => {
+//     dmp(sp, op, mp)
+//     return mp(sp, dp, op)
+//   })
+// }
+// const connect: typeof typedConnect = __DEV__ ? debugConnect : typedConnect
+// if (__DEV__) {
+//   console.log('\n\n\nDEBUG: debugConnect enabled')
+// }

@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,7 +61,7 @@ func (d *dummyHTTPSrv) Stop() {
 func (d *dummyHTTPSrv) serveAppleTouchIcon(w http.ResponseWriter, r *http.Request) {
 	if d.shouldServeAppleTouchIcon {
 		w.WriteHeader(200)
-		dat, _ := ioutil.ReadFile(filepath.Join("testcases", "github.png"))
+		dat, _ := os.ReadFile(filepath.Join("testcases", "github.png"))
 		_, _ = io.Copy(w, bytes.NewBuffer(dat))
 		return
 	}
@@ -84,7 +84,7 @@ func createTestCaseHTTPSrv(t *testing.T) *dummyHTTPSrv {
 		if len(contentType) > 0 {
 			w.Header().Set("Content-Type", contentType)
 		}
-		dat, err := ioutil.ReadFile(filepath.Join("testcases", name))
+		dat, err := os.ReadFile(filepath.Join("testcases", name))
 		require.NoError(t, err)
 		_, err = io.Copy(w, bytes.NewBuffer(dat))
 		require.NoError(t, err)
@@ -225,6 +225,14 @@ func TestScraper(t *testing.T) {
 		SiteName:    "YouTube",
 		Description: strPtr("https://www.twitch.tv/summoningsalt https://twitter.com/summoningsalt Music List- https://docs.google.com/document/d/1p2qV31ZhtNuP7AAXtRjGNZr2QwMSolzuz2wX6wu..."),
 		ImageUrl:    strPtr("https://i.ytimg.com/vi/mmJ_LT8bUj0/hqdefault.jpg"),
+		FaviconUrl:  strPtr("https://s.ytimg.com/yts/img/favicon-vfl8qSV2F.ico"),
+	}), true, nil, nil)
+	testCase("youtube1.html", chat1.NewUnfurlRawWithGeneric(chat1.UnfurlGenericRaw{
+		Title:       "Pumped to Be Here: Brazil's Game Fans",
+		Url:         "https://www.youtube.com/watch?v=mmJ_LT8bUj0",
+		SiteName:    "YouTube",
+		Description: strPtr("Brazil's games, consoles, and markets may seem strange, but there's plenty that's familiar, too. SUPPORT US ON PATREON! https://patreon.com/clothmap Patrons ..."),
+		ImageUrl:    strPtr("https://i.ytimg.com/vi/6IIQFBb4exU/maxresdefault.jpg"),
 		FaviconUrl:  strPtr("https://s.ytimg.com/yts/img/favicon-vfl8qSV2F.ico"),
 	}), true, nil, nil)
 	testCase("twitter0.html", chat1.NewUnfurlRawWithGeneric(chat1.UnfurlGenericRaw{
@@ -435,5 +443,6 @@ func TestLiveMapScraper(t *testing.T) {
 	typ, err = unfurl.UnfurlType()
 	require.NoError(t, err)
 	require.Equal(t, chat1.UnfurlType_MAPS, typ)
-	require.Equal(t, "Live Location Share (finished)", unfurl.Maps().SiteName)
+	require.Equal(t, "Live Location Share", unfurl.Maps().SiteName)
+	require.Equal(t, "Location share ended", unfurl.Maps().Title)
 }

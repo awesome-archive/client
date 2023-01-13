@@ -21,32 +21,51 @@ type Props = {
   statusIcon?: React.ReactNode
   body: React.ReactNode
   firstItem: boolean
+  fullDivider?: boolean
   action?: React.ReactNode
+  hideHover?: boolean
   // If 'grow' is used, the width of action cannot exceed 64. If larger width
   // is needed, bump the `maxWidth: 64` below to a larger value. Note that if
   // it's too large, the animation would also seem much faster.
   onlyShowActionOnHover?: 'fade' | 'grow' | null
   onClick?: () => void
+  onMouseDown?: (evt: React.BaseSyntheticEvent) => void // desktop only
   height?: number // optional, for non-standard heights
+  style?: Styles.StylesCrossPlatform
+  innerStyle?: Styles.StylesCrossPlatform
+  iconStyleOverride?: Styles.StylesCrossPlatform
+  containerStyleOverride?: Styles.StylesCrossPlatform
 }
 
 const ListItem = (props: Props) => (
   <Kb.ClickableBox
-    onClick={props.onClick}
-    style={props.type === 'Small' ? styles.clickableBoxSmall : styles.clickableBoxLarge}
+    onClick={props.onClick || (props.onMouseDown ? () => {} : undefined)} // make sure clickable box applies click styles if just onMouseDown is given.
+    onMouseDown={props.onMouseDown}
+    style={Styles.collapseStyles([
+      props.type === 'Small' ? styles.clickableBoxSmall : styles.clickableBoxLarge,
+      !!props.height && {minHeight: props.height},
+      props.style,
+    ])}
   >
     <Kb.Box2
-      className="listItem2"
+      className={Styles.classNames({
+        listItem2: !props.hideHover,
+      })}
       direction="horizontal"
-      style={props.type === 'Small' ? styles.rowSmall : styles.rowLarge}
+      style={Styles.collapseStyles([
+        props.type === 'Small' ? styles.rowSmall : styles.rowLarge,
+        !!props.height && {minHeight: props.height},
+        props.innerStyle,
+      ])}
       fullWidth={true}
     >
+      {!props.firstItem && !!props.fullDivider && <Divider style={styles.divider} />}
       {props.statusIcon && (
         <Kb.Box2
           direction="vertical"
           style={getStatusIconStyle(props)}
           alignSelf="flex-start"
-          alignItems="flex-end"
+          alignItems="center"
         >
           {props.statusIcon}
         </Kb.Box2>
@@ -61,16 +80,8 @@ const ListItem = (props: Props) => (
           {props.icon}
         </Kb.Box2>
       )}
-      <Kb.Box2
-        direction="horizontal"
-        style={
-          // If this becomes a problem, memoize different heights we use.
-          props.height
-            ? Styles.collapseStyles([getContainerStyles(props), {minHeight: props.height}])
-            : getContainerStyles(props)
-        }
-      >
-        {!props.firstItem && <Divider style={styles.divider} />}
+      <Kb.Box2 direction="horizontal" style={getContainerStyles(props)}>
+        {!props.firstItem && !props.fullDivider && <Divider style={styles.divider} />}
         <Kb.BoxGrow>
           <Kb.Box2 fullHeight={true} direction="horizontal" style={styles.bodyContainer}>
             {props.body}
@@ -94,9 +105,10 @@ const ListItem = (props: Props) => (
 
 export const smallHeight = Styles.isMobile ? 56 : 48
 export const largeHeight = Styles.isMobile ? 64 : 56
-const smallIconWidth = Styles.isMobile ? 56 : 56
+const smallIconWidth = Styles.isMobile ? 64 : 64
 const largeIconWidth = Styles.isMobile ? 72 : 72
-const statusIconWidth = Styles.isMobile ? 32 : 32
+const statusIconWidth = Styles.isMobile ? 48 : 44
+const afterStatusIconItemLeftDistance = statusIconWidth - (Styles.isMobile ? 10 : 14)
 
 const styles = Styles.styleSheetCreate(() => {
   const _styles = {
@@ -151,11 +163,11 @@ const styles = Styles.styleSheetCreate(() => {
     } as const,
     iconLarge: {
       minHeight: largeHeight,
-      width: Styles.isMobile ? 75 : 72,
+      width: largeIconWidth,
     } as const,
     iconSmall: {
       minHeight: smallHeight,
-      width: Styles.isMobile ? 60 : 56,
+      width: smallIconWidth,
     } as const,
     rowLarge: {
       alignItems: 'center',
@@ -193,7 +205,7 @@ const styles = Styles.styleSheetCreate(() => {
     iconLargeWithStatusIcon: {
       ..._styles.icon,
       ..._styles.iconLarge,
-      left: statusIconWidth,
+      left: afterStatusIconItemLeftDistance,
     },
     iconSmallWithNoStatusIcon: {
       ..._styles.icon,
@@ -202,7 +214,7 @@ const styles = Styles.styleSheetCreate(() => {
     iconSmallWithStatusIcon: {
       ..._styles.icon,
       ..._styles.iconSmall,
-      left: statusIconWidth,
+      left: afterStatusIconItemLeftDistance,
     },
   }
 
@@ -222,12 +234,12 @@ const styles = Styles.styleSheetCreate(() => {
     containerLargeWithStatusIconNoIcon: {
       ..._styles.contentContainer,
       ..._styles.heightLarge,
-      marginLeft: statusIconWidth,
+      marginLeft: afterStatusIconItemLeftDistance,
     },
     containerLargeWithStatusIconWithIcon: {
       ..._styles.contentContainer,
       ..._styles.heightLarge,
-      marginLeft: largeIconWidth + statusIconWidth,
+      marginLeft: largeIconWidth + afterStatusIconItemLeftDistance,
     },
     containerSmallNoStatusIconNoIcon: {
       ..._styles.contentContainer,
@@ -242,12 +254,12 @@ const styles = Styles.styleSheetCreate(() => {
     containerSmallWithStatusIconNoIcon: {
       ..._styles.contentContainer,
       ..._styles.heightSmall,
-      marginLeft: statusIconWidth,
+      marginLeft: afterStatusIconItemLeftDistance,
     },
     containerSmallWithStatusIconWithIcon: {
       ..._styles.contentContainer,
       ..._styles.heightSmall,
-      marginLeft: smallIconWidth + statusIconWidth,
+      marginLeft: smallIconWidth + afterStatusIconItemLeftDistance,
     },
   }
 
@@ -284,38 +296,47 @@ const getStatusIconStyle = (props: Props) =>
   props.type === 'Small' ? styles.statusIconSmall : styles.statusIconLarge
 
 const getIconStyle = (props: Props) =>
-  props.type === 'Small'
+  props.iconStyleOverride ??
+  (props.type === 'Small'
     ? props.statusIcon
       ? styles.iconSmallWithStatusIcon
       : styles.iconSmallWithNoStatusIcon
     : props.statusIcon
     ? styles.iconLargeWithStatusIcon
-    : styles.iconLargeWithNoStatusIcon
+    : styles.iconLargeWithNoStatusIcon)
 
 const getContainerStyles = (props: Props) =>
-  props.type === 'Small'
-    ? props.statusIcon
+  Styles.collapseStyles([
+    props.type === 'Small'
+      ? props.statusIcon
+        ? props.icon
+          ? styles.containerSmallWithStatusIconWithIcon
+          : styles.containerSmallWithStatusIconNoIcon
+        : props.icon
+        ? styles.containerSmallNoStatusIconWithIcon
+        : styles.containerSmallNoStatusIconNoIcon
+      : props.statusIcon
       ? props.icon
-        ? styles.containerSmallWithStatusIconWithIcon
-        : styles.containerSmallWithStatusIconNoIcon
+        ? styles.containerLargeWithStatusIconWithIcon
+        : styles.containerLargeWithStatusIconNoIcon
       : props.icon
-      ? styles.containerSmallNoStatusIconWithIcon
-      : styles.containerSmallNoStatusIconNoIcon
-    : props.statusIcon
-    ? props.icon
-      ? styles.containerLargeWithStatusIconWithIcon
-      : styles.containerLargeWithStatusIconNoIcon
-    : props.icon
-    ? styles.containerLargeNoStatusIconWithIcon
-    : styles.containerLargeNoStatusIconNoIcon
+      ? styles.containerLargeNoStatusIconWithIcon
+      : styles.containerLargeNoStatusIconNoIcon,
+    // If this becomes a problem, memoize different heights we use.
+    !!props.height && {minHeight: props.height},
+    props.containerStyleOverride,
+  ])
 
 const getActionStyle = (props: Props) =>
-  props.type === 'Small'
-    ? props.onlyShowActionOnHover
-      ? styles.actionSmallIsGrowOnHover
-      : styles.actionSmallNotGrowOnHover
-    : props.onlyShowActionOnHover
-    ? styles.actionLargeIsGrowOnHover
-    : styles.actionLargeNotGrowOnHover
+  Styles.collapseStyles([
+    props.type === 'Small'
+      ? props.onlyShowActionOnHover
+        ? styles.actionSmallIsGrowOnHover
+        : styles.actionSmallNotGrowOnHover
+      : props.onlyShowActionOnHover
+      ? styles.actionLargeIsGrowOnHover
+      : styles.actionLargeNotGrowOnHover,
+    !!props.height && {minHeight: props.height},
+  ])
 
 export default ListItem

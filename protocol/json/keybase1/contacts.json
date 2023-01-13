@@ -105,6 +105,26 @@
           "name": "displayLabel"
         }
       ]
+    },
+    {
+      "type": "record",
+      "name": "ContactListResolutionResult",
+      "fields": [
+        {
+          "type": {
+            "type": "array",
+            "items": "ProcessedContact"
+          },
+          "name": "newlyResolved"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "ProcessedContact"
+          },
+          "name": "resolved"
+        }
+      ]
     }
   ],
   "messages": {
@@ -120,10 +140,6 @@
             "type": "array",
             "items": "Contact"
           }
-        },
-        {
-          "name": "userRegionCode",
-          "type": "RegionCode"
         }
       ],
       "response": {
@@ -145,10 +161,7 @@
           }
         }
       ],
-      "response": {
-        "type": "array",
-        "items": "ProcessedContact"
-      }
+      "response": "ContactListResolutionResult"
     },
     "lookupSavedContactsList": {
       "request": [

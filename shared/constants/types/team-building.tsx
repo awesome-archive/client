@@ -1,15 +1,16 @@
-import * as I from 'immutable'
-import {TeamRoleType} from './teams'
-import {ServiceId} from '../../util/platforms'
+import type {TeamRoleType} from './teams'
+import type {ServiceId as _ServiceId} from '../../util/platforms'
 
-export type AllowedNamespace = 'chat2' | 'teams'
+export const allowedNamespace = ['chat2', 'crypto', 'teams', 'people', 'wallets'] as const
+export type AllowedNamespace = typeof allowedNamespace[number]
 export type FollowingState = 'Following' | 'NotFollowing' | 'NoState' | 'You'
-export type ServiceId = ServiceId
+export type ServiceId = _ServiceId
 
+export type GoButtonLabel = 'Start' | 'Add'
 export type ContactServiceId = 'email' | 'phone'
 // These are the possible tabs in team building, and also consts that can be
 // passed as `service` to search RPC (`userSearch.UserSearch`).
-export type ServiceIdWithContact = ServiceId | ContactServiceId
+export type ServiceIdWithContact = _ServiceId | ContactServiceId
 
 export const isContactServiceId = (id: string): id is ContactServiceId => id === 'email' || id === 'phone'
 
@@ -24,37 +25,36 @@ export type User = {
   username: string // username on service (or keybase username if service is keybase)
   serviceId: ServiceIdWithContact
   prettyName: string
+  pictureUrl?: string
   label?: string
   contact?: boolean // not a keybase user, a phone / email from our contacts
 }
 
 // Treating this as a tuple
-export type SearchKey = I.List<SearchString | ServiceIdWithContact>
+export type SearchKey = Array<SearchString | ServiceIdWithContact>
 
 // This is what should be kept in the reducer
 // Keyed so that we never get results that don't match the user's input (e.g. outdated results)
 type Query = string
 
-export type SearchResults = I.Map<Query, I.Map<ServiceIdWithContact, Array<User>>>
-export type ServiceResultCount = I.Map<SearchString, I.Map<ServiceIdWithContact, number>>
+export type SearchResults = Map<Query, Map<ServiceIdWithContact, Array<User>>>
+export type ServiceResultCount = Map<SearchString, Map<ServiceIdWithContact, number>>
 
-// TODO remove teamBuilding prefix
-export type _TeamBuildingSubState = {
-  teamBuildingTeamSoFar: I.OrderedSet<User>
-  teamBuildingSearchResults: SearchResults
-  teamBuildingServiceResultCount: ServiceResultCount
-  teamBuildingFinishedTeam: I.OrderedSet<User>
-  teamBuildingFinishedSelectedRole: TeamRoleType
-  teamBuildingFinishedSendNotification: boolean
-  teamBuildingSearchQuery: Query
-  teamBuildingSelectedService: ServiceIdWithContact
-  teamBuildingSearchLimit: number
-  teamBuildingUserRecs: Array<User> | null
-  teamBuildingSelectedRole: TeamRoleType
-  teamBuildingSendNotification: boolean
+export type TeamBuildingSubState = {
+  readonly error: string
+  readonly teamSoFar: Set<User>
+  readonly searchResults: SearchResults
+  readonly serviceResultCount: ServiceResultCount
+  readonly finishedTeam: Set<User>
+  readonly finishedSelectedRole: TeamRoleType
+  readonly finishedSendNotification: boolean
+  readonly searchQuery: Query
+  readonly selectedService: ServiceIdWithContact
+  readonly searchLimit: number
+  readonly userRecs?: Array<User>
+  readonly selectedRole: TeamRoleType
+  readonly sendNotification: boolean
 }
-
-export type TeamBuildingSubState = I.RecordOf<_TeamBuildingSubState>
 
 export type SelectedUser = {
   userId: string

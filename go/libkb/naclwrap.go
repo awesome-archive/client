@@ -92,6 +92,10 @@ func importNaclKid(bkid []byte, typ byte, bodyLen int) (ret []byte, err error) {
 	return
 }
 
+func BinaryKIDToRawNaCl(k keybase1.BinaryKID) (ret []byte, err error) {
+	return importNaclKid([]byte(k), byte(kbcrypto.KIDNaclDH), NaclDHKeysize)
+}
+
 func ImportNaclSigningKeyPairFromBytes(pub []byte, priv []byte) (ret NaclSigningKeyPair, err error) {
 	var body []byte
 	if body, err = importNaclKid(pub, byte(kbcrypto.KIDNaclEddsa), ed25519.PublicKeySize); err != nil {
@@ -199,7 +203,8 @@ func (k NaclDHKeyPublic) GetBinaryKID() keybase1.BinaryKID {
 		byte(kbcrypto.KIDNaclDH),
 	}
 	suffix := byte(kbcrypto.IDSuffixKID)
-	out := append(prefix, k[:]...)
+	out := prefix
+	out = append(out, k[:]...)
 	out = append(out, suffix)
 	return keybase1.BinaryKID(out)
 }
@@ -311,11 +316,11 @@ func (k NaclSigningKeyPair) SignV2(msg []byte, prefix kbcrypto.SignaturePrefix) 
 	return k.Private.SignInfoV2(msg, k.Public, prefix)
 }
 
-func (k NaclSigningKeyPair) SignToString(msg []byte) (string, keybase1.SigID, error) {
+func (k NaclSigningKeyPair) SignToString(msg []byte) (string, keybase1.SigIDBase, error) {
 	return k.Private.SignToStringV0(msg, k.Public)
 }
 
-func (k NaclSigningKeyPair) VerifyStringAndExtract(ctx VerifyContext, sig string) (msg []byte, id keybase1.SigID, err error) {
+func (k NaclSigningKeyPair) VerifyStringAndExtract(ctx VerifyContext, sig string) (msg []byte, id keybase1.SigIDBase, err error) {
 	var keyInSignature *kbcrypto.NaclSigningKeyPublic
 	var fullSigBody []byte
 	keyInSignature, msg, fullSigBody, err = kbcrypto.NaclVerifyAndExtract(sig)
@@ -334,7 +339,7 @@ func (k NaclSigningKeyPair) VerifyStringAndExtract(ctx VerifyContext, sig string
 	return msg, id, nil
 }
 
-func (k NaclSigningKeyPair) VerifyString(ctx VerifyContext, sig string, msg []byte) (id keybase1.SigID, err error) {
+func (k NaclSigningKeyPair) VerifyString(ctx VerifyContext, sig string, msg []byte) (id keybase1.SigIDBase, err error) {
 	var keyInSignature *kbcrypto.NaclSigningKeyPublic
 	var fullSigBody []byte
 	keyInSignature, fullSigBody, err = kbcrypto.NaclVerifyWithPayload(sig, msg)
@@ -352,17 +357,17 @@ func (k NaclSigningKeyPair) VerifyString(ctx VerifyContext, sig string, msg []by
 	return id, nil
 }
 
-func (k NaclDHKeyPair) SignToString(msg []byte) (sig string, id keybase1.SigID, err error) {
+func (k NaclDHKeyPair) SignToString(msg []byte) (sig string, id keybase1.SigIDBase, err error) {
 	err = KeyCannotSignError{}
 	return
 }
 
-func (k NaclDHKeyPair) VerifyStringAndExtract(ctx VerifyContext, sig string) (msg []byte, id keybase1.SigID, err error) {
+func (k NaclDHKeyPair) VerifyStringAndExtract(ctx VerifyContext, sig string) (msg []byte, id keybase1.SigIDBase, err error) {
 	err = KeyCannotVerifyError{}
 	return
 }
 
-func (k NaclDHKeyPair) VerifyString(ctx VerifyContext, sig string, msg []byte) (id keybase1.SigID, err error) {
+func (k NaclDHKeyPair) VerifyString(ctx VerifyContext, sig string, msg []byte) (id keybase1.SigIDBase, err error) {
 	err = KeyCannotVerifyError{}
 	return
 }
@@ -484,7 +489,7 @@ func KbOpenSig(armored string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(armored)
 }
 
-func SigExtractKbPayloadAndKID(armored string) (payload []byte, kid keybase1.KID, sigID keybase1.SigID, err error) {
+func SigExtractKbPayloadAndKID(armored string) (payload []byte, kid keybase1.KID, sigID keybase1.SigIDBase, err error) {
 	var byt []byte
 	var sig kbcrypto.NaclSigInfo
 
@@ -501,9 +506,9 @@ func SigExtractKbPayloadAndKID(armored string) (payload []byte, kid keybase1.KID
 	return payload, kid, sigID, nil
 }
 
-func SigAssertKbPayload(armored string, expected []byte) (sigID keybase1.SigID, err error) {
+func SigAssertKbPayload(armored string, expected []byte) (sigID keybase1.SigIDBase, err error) {
 	var payload []byte
-	nilSigID := keybase1.SigID("")
+	nilSigID := keybase1.SigIDBase("")
 	payload, _, sigID, err = SigExtractKbPayloadAndKID(armored)
 	if err != nil {
 		return nilSigID, err

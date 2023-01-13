@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -46,7 +45,9 @@ type Preprocess struct {
 	PreviewContentType string
 	BaseDim            *Dimension
 	BaseDurationMs     int
+	BaseIsAudio        bool
 	PreviewDim         *Dimension
+	PreviewAudioAmps   []float64
 	PreviewDurationMs  int
 }
 
@@ -59,6 +60,7 @@ func (p *Preprocess) BaseMetadata() chat1.AssetMetadata {
 			Width:      p.BaseDim.Width,
 			Height:     p.BaseDim.Height,
 			DurationMs: p.BaseDurationMs,
+			IsAudio:    p.BaseIsAudio,
 		})
 	}
 	return chat1.NewAssetMetadataWithImage(chat1.AssetMetadataImage{
@@ -79,8 +81,9 @@ func (p *Preprocess) PreviewMetadata() chat1.AssetMetadata {
 		})
 	}
 	return chat1.NewAssetMetadataWithImage(chat1.AssetMetadataImage{
-		Width:  p.PreviewDim.Width,
-		Height: p.PreviewDim.Height,
+		Width:     p.PreviewDim.Width,
+		Height:    p.PreviewDim.Height,
+		AudioAmps: p.PreviewAudioAmps,
 	})
 }
 
@@ -120,16 +123,16 @@ func processCallerPreview(ctx context.Context, g *globals.Context, callerPreview
 			return p, err
 		}
 		defer f.Close()
-		if p.Preview, err = ioutil.ReadAll(f); err != nil {
+		if p.Preview, err = io.ReadAll(f); err != nil {
 			return p, err
 		}
 	case chat1.PreviewLocationTyp_URL:
-		resp, err := libkb.ProxyHTTPGet(g.Env, callerPreview.Location.Url())
+		resp, err := libkb.ProxyHTTPGet(g.ExternalG(), g.Env, callerPreview.Location.Url(), "PreviewLocation")
 		if err != nil {
 			return p, err
 		}
 		defer resp.Body.Close()
-		if p.Preview, err = ioutil.ReadAll(resp.Body); err != nil {
+		if p.Preview, err = io.ReadAll(resp.Body); err != nil {
 			return p, err
 		}
 	default:
@@ -150,14 +153,13 @@ func processCallerPreview(ctx context.Context, g *globals.Context, callerPreview
 				Width:  callerPreview.Metadata.Image().Width,
 				Height: callerPreview.Metadata.Image().Height,
 			}
+			p.PreviewAudioAmps = callerPreview.Metadata.Image().AudioAmps
 		case chat1.AssetMetadataType_VIDEO:
 			p.PreviewDurationMs = callerPreview.Metadata.Video().DurationMs
 			p.PreviewDim = &Dimension{
 				Width:  callerPreview.Metadata.Video().Width,
 				Height: callerPreview.Metadata.Video().Height,
 			}
-		case chat1.AssetMetadataType_AUDIO:
-			p.PreviewDurationMs = callerPreview.Metadata.Audio().DurationMs
 		}
 	}
 	if callerPreview.BaseMetadata != nil {
@@ -173,12 +175,11 @@ func processCallerPreview(ctx context.Context, g *globals.Context, callerPreview
 			}
 		case chat1.AssetMetadataType_VIDEO:
 			p.BaseDurationMs = callerPreview.BaseMetadata.Video().DurationMs
+			p.BaseIsAudio = callerPreview.BaseMetadata.Video().IsAudio
 			p.BaseDim = &Dimension{
 				Width:  callerPreview.BaseMetadata.Video().Width,
 				Height: callerPreview.BaseMetadata.Video().Height,
 			}
-		case chat1.AssetMetadataType_AUDIO:
-			p.BaseDurationMs = callerPreview.BaseMetadata.Audio().DurationMs
 		}
 	}
 	return p, nil
@@ -187,7 +188,11 @@ func processCallerPreview(ctx context.Context, g *globals.Context, callerPreview
 func DetectMIMEType(ctx context.Context, src ReadResetter, filename string) (res string, err error) {
 	head := make([]byte, 512)
 	_, err = io.ReadFull(src, head)
-	if err != nil && err != io.ErrUnexpectedEOF {
+	switch err {
+	case nil:
+	case io.EOF, io.ErrUnexpectedEOF:
+		return "", nil
+	default:
 		return res, err
 	}
 

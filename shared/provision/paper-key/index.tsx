@@ -14,7 +14,6 @@ type Props = {
 
 class PaperKey extends React.Component<Props, {paperKey: string}> {
   static navigationOptions = {
-    header: null,
     headerBottomStyle: {height: undefined},
     headerLeft: null, // no back button
   }
@@ -48,18 +47,16 @@ class PaperKey extends React.Component<Props, {paperKey: string}> {
           gap={Styles.isMobile ? 'tiny' : 'medium'}
         >
           <Kb.Box2 direction="vertical" gap="tiny" centerChildren={true} gapEnd={true}>
-            <Kb.Icon type="icon-paper-key-48" />
-            <Kb.Text type="Header" style={styles.hint}>
-              {props.hint}
-            </Kb.Text>
+            <Kb.Icon type="icon-paper-key-64" />
+            <Kb.Text type="Header">{props.hint}</Kb.Text>
           </Kb.Box2>
           <Kb.Box2 direction="vertical" style={styles.inputContainer}>
             <Kb.PlainInput
               autoFocus={true}
               multiline={true}
               rowsMax={3}
-              placeholder="Type in your paper key"
-              textType="Header"
+              placeholder="Type in your entire paper key"
+              textType="Body"
               style={styles.input}
               onEnterKeyDown={this._onSubmit}
               onChangeText={paperKey => this.setState({paperKey})}
@@ -85,14 +82,15 @@ const styles = Styles.styleSheetCreate(
           marginTop: 0,
         },
       }),
-      contents: {
-        flexGrow: 1,
-        maxWidth: Styles.isMobile ? 300 : 460,
-        width: '100%',
-      },
-      hint: {
-        ...Styles.globalStyles.italic,
-      },
+      contents: Styles.platformStyles({
+        common: {
+          flexGrow: 1,
+          width: '100%',
+        },
+        isElectron: {maxWidth: 460},
+        isMobile: {maxWidth: 300},
+        isTablet: {maxWidth: 460},
+      }),
       input: {
         color: Styles.globalColors.black,
         ...Styles.globalStyles.fontTerminal,

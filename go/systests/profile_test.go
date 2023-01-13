@@ -2,7 +2,8 @@ package systests
 
 import (
 	"context"
-	"io/ioutil"
+
+	"io"
 	"net/http"
 	"testing"
 
@@ -90,8 +91,12 @@ func TestProofSuggestions(t *testing.T) {
 		}}}
 	require.Equal(t, expected.ShowMore, res.ShowMore)
 	require.True(t, len(res.Suggestions) >= len(expected.Suggestions), "should be at least as many results as expected")
+	iconExempt := map[string]struct{}{
+		"gubble-with-dashes.dot": {},
+		"mastodon.local":         {},
+	}
 	for _, b := range res.Suggestions {
-		if b.Key == "theqrl.org" {
+		if _, exempt := iconExempt[b.Key]; exempt {
 			// Skip checking for logos for this one.
 			continue
 		}
@@ -99,7 +104,16 @@ func TestProofSuggestions(t *testing.T) {
 		for _, icon := range b.ProfileIcon {
 			checkIcon(t, icon)
 		}
+		require.Len(t, b.ProfileIconDarkmode, 2)
+		for _, icon := range b.ProfileIconDarkmode {
+			checkIcon(t, icon)
+		}
+		require.Len(t, b.ProfileIcon, 2)
 		for _, icon := range b.PickerIcon {
+			checkIcon(t, icon)
+		}
+		require.Len(t, b.PickerIconDarkmode, 2)
+		for _, icon := range b.PickerIconDarkmode {
 			checkIcon(t, icon)
 		}
 
@@ -136,9 +150,9 @@ func checkIcon(t testing.TB, icon keybase1.SizedImage) {
 		require.True(t, len(icon.Path) > 8)
 	} else {
 		resp, err := http.Get(icon.Path)
-		require.Equal(t, 200, resp.StatusCode, "icon file should be reachable")
+		require.Equal(t, 200, resp.StatusCode, "icon file should be reachable: %v", icon.Path)
 		require.NoError(t, err)
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		if len(body) < 150 {
 			t.Fatalf("unreasonable icon payload size")

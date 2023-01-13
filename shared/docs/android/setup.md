@@ -1,8 +1,29 @@
+# Quick Start
+
+1. `adb devices` (should list _exactly_ one device)
+1. `yarn rn-gobuild-android`
+1. `yarn react-native run-android`
+
 ## Prereqs
 
 Follow instructions for "Building Projects with Native Code" at
 https://facebook.github.io/react-native/docs/getting-started.html to
 install and configure Android.
+
+### Installing an NDK version
+
+Additionally an `NDK` version needs to be installed for `yarn rn-gobuild-android` to work.
+
+**With Android Studio**
+You will already have the `sdkmanager` command line tool installed. So run:
+
+`sdkmanager --install "ndk-bundle"` which should write to `$HOME/Library/Android/sdk/ndk-bundle` on macOS.
+
+**Without Android Studio**
+You will need the Android Studio Command Line Tools to use `sdkmanager` without Android Studio.
+[Download Command Line Tools](https://developer.android.com/studio/index.html#command-tools) here.
+
+Then run `sdkmanager --install "ndk-bundle"` which should write to `$HOME/Library/Android/sdk/ndk-bundle` on macOS.
 
 ## Emulator Setup
 
@@ -101,19 +122,11 @@ react-native packager running (`yarn rn-start android`).
 Then run
 
 ```sh
-# Build the apk.
-yarn rn-build-android
-
-# Or with gradle (inside android)
-# You can also use the gradle wrapper `./gradlew` in android
-gradle installDebug
-
+yarn react-native run-android # --variant 'debug'
 
 # for storybook
-gradle installStorybook
+yarn react-native run-android --variant 'storybook'
 
-# gradle tasks shows all the things you can do with gradle
-gradle tasks
 ```
 
 Unless you're modifying the Java files or you're modifying Go files
@@ -181,25 +194,96 @@ adb reverse tcp:8081 tcp:8081
 To recap, you should have run:
 
 1. `adb devices` (should list _exactly_ one device)
-1. `yarn rn-gobuild-android`,
-1. `yarn rn-start android`
-1. `yarn rn-build-android` (or `gradle installDebug` inside android),
-1. `yarn rn-push-android` (To install the apk on the device. NOTE: `gradle installDebug` does this automatically)
+1. `yarn rn-gobuild-android`
+1. `yarn react-native run-android`
 
-and have an emulator or android device connected. (i.e. `adb devices` should list _exactly_ one device)
-
-Then you can run
-
-```sh
-yarn rn-push-android
-```
-
-to push the debug APK to your emulator or device, and it should
-connect to the react-native packager instance on your machine. Happy
-developing!
+Happy developing!
 
 ### Troubleshooting
 
 Occasionally you might get a white screen that doesn't go away, even
 after the bundler has finished bundling. Stopping the app and
 restarting it seems to fix it.
+
+## Can't reach packager (could not connect to development server)
+
+can you see the packager in your computer's browser if you go to localhost:8081?
+
+no -> You aren't runnning the packager, run `yarn rn-start android`
+
+yes:
+can you see the packager in android's browser if you go to localhost:8081?
+
+no -> You didn't port forward 8081 run `adb reverse tcp:8081 tcp:8081`
+
+yes:
+Did you set debug server host & port to localhost:8081?
+
+no:
+
+1. Dismiss redbox
+1. Press volume up. A popup should appear (We're trying to get to the [react native debug menu](https://facebook.github.io/react-native/docs/debugging.html#accessing-the-in-app-developer-menu)
+   )
+1. Click dev settings
+1. Click Debug server host & port
+1. set it to `localhost:8081` (See [#could-not-connect-to-development-server-error](running.md#could-not-connect-to-development-server-error) for more info)
+
+yes:
+You're in uncharted territories. Try using the java debugger in android studio and setting a break point in react-native's BundleDownloader and reading the actual error since it might be more informative than rn's generic handler. After you fix it, come back and update this page!
+
+## Can't find variable: Promise
+
+Same as below.
+
+## React Native version mismatch
+
+`yarn rn-build-clean-android`
+
+## `$HOME/.../Android/sdk/ndk-bundle` Does not point to an Android NDK
+
+### macOS
+
+If you're hitting this issue, it is because you either do not have an NDK installed or installed an NDK with an older version of Android Studio that created an old directory path.
+
+Android Studio 3.5.0 and later seem to install ndk versions at the following path: `~/Library/Android/sdk/ndk/{version}`
+
+To resolve this issue, use the `sdkmanager` to re-install `ndk-bundle` at the correct directory path.
+
+[Instuctions can be found here](./setup.md)
+
+## Hot reloading / File Watching
+
+### Linux
+
+[Here](../linux-dev.md#troubleshooting)
+
+## Could not connect to development server error
+
+On Android 28 and above HTTP traffic is disabled by default which can block
+Metro Bundler from running properly. We have manually allowed `127.0.0.1` to
+have HTTP traffic, so if you see an error about connecting to the bundler
+server you should manually change the dev server URL and then kill and restart
+the app:
+
+```sh
+# Enable loopback
+adb reverse tcp:8081 tcp:8081
+# Additionally, if running storybook
+adb reverse tcp:7007 tcp:7007
+```
+
+## Remote Debugging with React Dev Tools
+
+1. Open the [react native debug menu](https://facebook.github.io/react-native/docs/debugging.html#accessing-the-in-app-developer-menu) and select **Enabled Remote Debugging**
+2. Next, in the react native debug menu, select **Dev Settings** and set **Debug server host & port for device** to `127.0.0.1:8081`
+3. Open launch the standalone [react-devtools](https://facebook.github.io/react-native/docs/debugging.html#react-developer-tools) electron application
+4. Loopback which ever port `react-devtools` is running on:
+
+```sh
+# React devtools standalone port
+adb reverse tcp:8097 tcp:8097
+```
+
+## Also see general react-native troubleshooting
+
+[Here](../react-native/troubleshooting.md)

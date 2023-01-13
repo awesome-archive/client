@@ -1,16 +1,13 @@
-import Settings from '.'
-import * as Container from '../../../util/container'
-import {anyWaiting} from '../../../constants/waiting'
-import * as I from 'immutable'
+import * as React from 'react'
 import * as Constants from '../../../constants/wallets'
-import {IconType} from '../../../common-adapters/icon.constants-gen'
+import * as Container from '../../../util/container'
 import * as IconUtils from '../../../common-adapters/icon.shared'
-import * as Types from '../../../constants/types/wallets'
-import * as WalletsGen from '../../../actions/wallets-gen'
 import * as RouteTreeGen from '../../../actions/route-tree-gen'
-import flags from '../../../util/feature-flags'
-
-type OwnProps = Container.RouteProps
+import * as WalletsGen from '../../../actions/wallets-gen'
+import Settings from '.'
+import type * as Types from '../../../constants/types/wallets'
+import type {IconType} from '../../../common-adapters/icon.constants-gen'
+import {anyWaiting} from '../../../constants/waiting'
 
 // Note: `props.user` is only the Keybase username if this is the primary
 // account. Non-primary accounts are not associated with usernames.
@@ -27,129 +24,124 @@ const toIconType = (iconFilename: string): IconType => {
 }
 
 const prepareExternalPartners = (
-  externalPartners: I.List<Types.PartnerUrl>,
+  externalPartners: Array<Types.PartnerUrl>,
   accountID: string,
   username: string
 ): Array<Types.PartnerUrl & {showDivider: boolean}> =>
-  externalPartners
-    .map((partner, index) => ({
-      adminOnly: partner.adminOnly,
-      description: partner.description,
-      extra: partner.extra,
-      iconFilename: toIconType(partner.iconFilename),
-      showDivider: index > 0,
-      title: partner.title,
-      url: transformUrl(accountID, partner.url, username),
-    }))
-    .toArray()
+  externalPartners.map((partner, index) => ({
+    adminOnly: partner.adminOnly,
+    canPurchase: partner.canPurchase,
+    description: partner.description,
+    extra: partner.extra,
+    iconFilename: toIconType(partner.iconFilename),
+    showDivider: index > 0,
+    title: partner.title,
+    url: transformUrl(accountID, partner.url, username),
+  }))
 
-const mapStateToProps = (state: Container.TypedState) => {
-  const accountID = Constants.getSelectedAccount(state)
-  const account = Constants.getAccount(state, accountID)
+const SettingsContainer = () => {
+  const accountID = Container.useSelector(state => Constants.getSelectedAccount(state))
+  const account = Container.useSelector(state => Constants.getAccount(state, accountID))
   const name = account.name
   const mobileOnlyEditable = account.mobileOnlyEditable
-  const me = state.config.username || ''
-  const user = account.isDefault ? me : ''
-  const currencies = Constants.getDisplayCurrencies(state)
-  const currency = Constants.getDisplayCurrency(state, accountID)
-  const currencyWaiting = anyWaiting(
-    state,
-    Constants.changeDisplayCurrencyWaitingKey,
-    Constants.getDisplayCurrencyWaitingKey(accountID)
+  const me = Container.useSelector(state => state.config.username || '')
+  // External partner URLs include the keybase username even for non-primary accounts.
+  const externalPartners = Container.useSelector(state =>
+    prepareExternalPartners(Constants.getExternalPartners(state), accountID, me)
   )
-  const saveCurrencyWaiting = anyWaiting(state, Constants.changeDisplayCurrencyWaitingKey)
+  const user = account.isDefault ? me : ''
+  const currencies = Container.useSelector(state => Constants.getDisplayCurrencies(state))
+  const currency = Container.useSelector(state => Constants.getDisplayCurrency(state, accountID))
+  const currencyWaiting = Container.useSelector(state =>
+    anyWaiting(
+      state,
+      Constants.changeDisplayCurrencyWaitingKey,
+      Constants.getDisplayCurrencyWaitingKey(accountID)
+    )
+  )
+  const saveCurrencyWaiting = Container.useSelector(state =>
+    anyWaiting(state, Constants.changeDisplayCurrencyWaitingKey)
+  )
   const thisDeviceIsLockedOut = account.deviceReadOnly
-  const secretKey = !thisDeviceIsLockedOut ? Constants.getSecretKey(state, accountID).stringValue() : ''
-  const mobileOnlyMode = state.wallets.mobileOnlyMap.get(accountID, false)
-  const mobileOnlyWaiting = anyWaiting(state, Constants.setAccountMobileOnlyWaitingKey(accountID))
+  const secretKey = Container.useSelector(state =>
+    !thisDeviceIsLockedOut ? Constants.getSecretKey(state, accountID).stringValue() : ''
+  )
+  const mobileOnlyMode = Container.useSelector(state => state.wallets.mobileOnlyMap.get(accountID) ?? false)
+  const mobileOnlyWaiting = Container.useSelector(state =>
+    anyWaiting(state, Constants.setAccountMobileOnlyWaitingKey(accountID))
+  )
   const canSubmitTx = account.canSubmitTx
-  const inflationDest = Constants.getInflationDestination(state, accountID)
-  const externalPartners = Constants.getExternalPartners(state)
-  return {
-    accountID,
-    canSubmitTx,
-    currencies,
-    currency,
-    currencyWaiting,
-    externalPartners,
-    inflationDestination:
-      inflationDest === Constants.noAccountInflationDestination
-        ? ''
-        : inflationDest.name || inflationDest.accountID,
-    isDefault: account.isDefault,
-    mobileOnlyEditable,
-    mobileOnlyMode,
-    mobileOnlyWaiting,
-    name,
-    saveCurrencyWaiting,
-    secretKey,
-    showExternalPartners: flags.stellarExternalPartners,
-    thisDeviceIsLockedOut,
-    user,
-  }
-}
+  const isDefault = account.isDefault
+  const showExternalPartners = true
 
-const mapDispatchToProps = (dispatch: Container.TypedDispatch) => ({
-  _onBack: (accountID: Types.AccountID) => {
+  const dispatch = Container.useDispatch()
+  const onBack = React.useCallback(() => {
     dispatch(RouteTreeGen.createNavigateUp())
     dispatch(WalletsGen.createLoadPayments({accountID}))
-  },
-  _onChangeMobileOnlyMode: (accountID: Types.AccountID, enabled: boolean) =>
-    dispatch(WalletsGen.createChangeMobileOnlyMode({accountID, enabled})),
-  _onDelete: (accountID: Types.AccountID) =>
-    dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {accountID}, selected: 'removeAccount'}]})),
-  _onEditName: (accountID: Types.AccountID) =>
-    dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {accountID}, selected: 'renameAccount'}]})),
-  _onLoadSecretKey: (accountID: Types.AccountID) => dispatch(WalletsGen.createExportSecretKey({accountID})),
-  _onSecretKeySeen: (accountID: Types.AccountID) => dispatch(WalletsGen.createSecretKeySeen({accountID})),
-  _onSetDefault: (accountID: Types.AccountID) =>
-    dispatch(
-      RouteTreeGen.createNavigateAppend({path: [{props: {accountID}, selected: 'setDefaultAccount'}]})
-    ),
-  _onSetDisplayCurrency: (accountID: Types.AccountID, code: Types.CurrencyCode) =>
-    dispatch(WalletsGen.createChangeDisplayCurrency({accountID, code})),
-  _onSetupInflation: (accountID: Types.AccountID) =>
-    dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {accountID}, selected: 'setInflation'}]})),
-  _refresh: (accountID: Types.AccountID) => {
+  }, [dispatch, accountID])
+  const onMobileOnlyModeChange = React.useCallback(
+    (enabled: boolean) => {
+      dispatch(WalletsGen.createChangeMobileOnlyMode({accountID, enabled}))
+    },
+    [dispatch, accountID]
+  )
+  const onDelete = React.useCallback(() => {
+    dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {accountID}, selected: 'removeAccount'}]}))
+  }, [dispatch, accountID])
+  const onEditName = React.useCallback(() => {
+    dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {accountID}, selected: 'renameAccount'}]}))
+  }, [dispatch, accountID])
+  const onLoadSecretKey = React.useCallback(() => {
+    dispatch(WalletsGen.createExportSecretKey({accountID}))
+  }, [dispatch, accountID])
+  const onSecretKeySeen = React.useCallback(() => {
+    dispatch(WalletsGen.createSecretKeySeen({accountID}))
+  }, [dispatch, accountID])
+  const onSetDefault = React.useCallback(() => {
+    dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {accountID}, selected: 'setDefaultAccount'}]}))
+  }, [dispatch, accountID])
+  const _onCurrencyChange = React.useCallback(
+    (code: Types.CurrencyCode) => {
+      dispatch(WalletsGen.createChangeDisplayCurrency({accountID, code}))
+    },
+    [dispatch, accountID]
+  )
+  const onCurrencyChange = Container.useSafeSubmit(_onCurrencyChange, !currencyWaiting)
+  const refresh = React.useCallback(() => {
     dispatch(WalletsGen.createLoadDisplayCurrencies())
-    dispatch(WalletsGen.createLoadInflationDestination({accountID}))
     dispatch(WalletsGen.createLoadDisplayCurrency({accountID}))
     dispatch(WalletsGen.createLoadMobileOnlyMode({accountID}))
     dispatch(WalletsGen.createLoadExternalPartners())
-  },
-})
+  }, [dispatch, accountID])
 
-// TODO remove compose
-export default Container.compose(
-  Container.namedConnect(
-    mapStateToProps,
-    mapDispatchToProps,
-    (stateProps, dispatchProps, _: OwnProps) => ({
-      ...stateProps,
-      externalPartners: prepareExternalPartners(
-        stateProps.externalPartners,
-        stateProps.accountID,
-        stateProps.user
-      ),
-      onBack: () => dispatchProps._onBack(stateProps.accountID),
-      onCurrencyChange: (code: Types.CurrencyCode) =>
-        dispatchProps._onSetDisplayCurrency(stateProps.accountID, code),
-      onDelete: () => dispatchProps._onDelete(stateProps.accountID),
-      onEditName: () => dispatchProps._onEditName(stateProps.accountID),
-      onLoadSecretKey: !stateProps.thisDeviceIsLockedOut
-        ? () => dispatchProps._onLoadSecretKey(stateProps.accountID)
-        : undefined,
-      onMobileOnlyModeChange: (enabled: boolean) =>
-        dispatchProps._onChangeMobileOnlyMode(stateProps.accountID, enabled),
-      onSecretKeySeen: !stateProps.thisDeviceIsLockedOut
-        ? () => dispatchProps._onSecretKeySeen(stateProps.accountID)
-        : undefined,
-      onSetDefault: () => dispatchProps._onSetDefault(stateProps.accountID),
-      onSetupInflation: () => dispatchProps._onSetupInflation(stateProps.accountID),
-      refresh: () => dispatchProps._refresh(stateProps.accountID),
-    }),
-
-    'Settings'
-  ),
-  Container.safeSubmit(['onCurrencyChange'], ['currencyWaiting'])
-)(Settings)
+  return (
+    <Settings
+      accountID={accountID}
+      canSubmitTx={canSubmitTx}
+      currencies={currencies}
+      currency={currency}
+      currencyWaiting={currencyWaiting}
+      externalPartners={externalPartners}
+      isDefault={isDefault}
+      mobileOnlyEditable={mobileOnlyEditable}
+      mobileOnlyMode={mobileOnlyMode}
+      mobileOnlyWaiting={mobileOnlyWaiting}
+      name={name}
+      onBack={onBack}
+      onCurrencyChange={onCurrencyChange}
+      onDelete={onDelete}
+      onEditName={onEditName}
+      onLoadSecretKey={thisDeviceIsLockedOut ? undefined : onLoadSecretKey}
+      onMobileOnlyModeChange={onMobileOnlyModeChange}
+      onSecretKeySeen={thisDeviceIsLockedOut ? undefined : onSecretKeySeen}
+      onSetDefault={onSetDefault}
+      refresh={refresh}
+      saveCurrencyWaiting={saveCurrencyWaiting}
+      secretKey={secretKey}
+      showExternalPartners={showExternalPartners}
+      thisDeviceIsLockedOut={thisDeviceIsLockedOut}
+      user={user}
+    />
+  )
+}
+export default SettingsContainer

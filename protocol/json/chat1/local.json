@@ -209,6 +209,14 @@
             "LiveLocation"
           ],
           "name": "liveLocation"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "HarvestedEmoji",
+            "keys": "string"
+          },
+          "name": "emojis"
         }
       ]
     },
@@ -247,6 +255,14 @@
             "items": "KnownTeamMention"
           },
           "name": "teamMentions"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "HarvestedEmoji",
+            "keys": "string"
+          },
+          "name": "emojis"
         }
       ]
     },
@@ -270,6 +286,14 @@
         {
           "type": "string",
           "name": "headline"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "HarvestedEmoji",
+            "keys": "string"
+          },
+          "name": "emojis"
         }
       ]
     },
@@ -327,7 +351,8 @@
         "CHANGEAVATAR_5",
         "CHANGERETENTION_6",
         "BULKADDTOCONV_7",
-        "SBSRESOLVE_8"
+        "SBSRESOLVE_8",
+        "NEWCHANNEL_9"
       ]
     },
     {
@@ -347,46 +372,15 @@
           "name": "addee"
         },
         {
-          "type": {
-            "type": "array",
-            "items": "string"
-          },
-          "name": "owners"
+          "type": "keybase1.TeamRole",
+          "name": "role"
         },
         {
           "type": {
             "type": "array",
             "items": "string"
           },
-          "name": "admins"
-        },
-        {
-          "type": {
-            "type": "array",
-            "items": "string"
-          },
-          "name": "writers"
-        },
-        {
-          "type": {
-            "type": "array",
-            "items": "string"
-          },
-          "name": "readers"
-        },
-        {
-          "type": {
-            "type": "array",
-            "items": "string"
-          },
-          "name": "bots"
-        },
-        {
-          "type": {
-            "type": "array",
-            "items": "string"
-          },
-          "name": "restrictedBots"
+          "name": "bulkAdds"
         }
       ]
     },
@@ -413,6 +407,10 @@
         {
           "type": "keybase1.TeamInviteCategory",
           "name": "inviteType"
+        },
+        {
+          "type": "keybase1.TeamRole",
+          "name": "role"
         }
       ]
     },
@@ -549,6 +547,31 @@
       ]
     },
     {
+      "type": "record",
+      "name": "MessageSystemNewChannel",
+      "fields": [
+        {
+          "type": "string",
+          "name": "creator"
+        },
+        {
+          "type": "string",
+          "name": "nameAtCreation"
+        },
+        {
+          "type": "ConversationID",
+          "name": "convID"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "ConversationID"
+          },
+          "name": "convIDs"
+        }
+      ]
+    },
+    {
       "type": "variant",
       "name": "MessageSystem",
       "switch": {
@@ -618,6 +641,13 @@
             "def": false
           },
           "body": "MessageSystemSbsResolve"
+        },
+        {
+          "label": {
+            "name": "NEWCHANNEL",
+            "def": false
+          },
+          "body": "MessageSystemNewChannel"
         }
       ]
     },
@@ -660,6 +690,28 @@
         {
           "type": "boolean",
           "name": "uploaded"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "KnownUserMention"
+          },
+          "name": "userMentions"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "KnownTeamMention"
+          },
+          "name": "teamMentions"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "HarvestedEmoji",
+            "keys": "string"
+          },
+          "name": "emojis"
         }
       ]
     },
@@ -728,6 +780,25 @@
           "name": "body",
           "mpackkey": "b",
           "jsonkey": "b"
+        },
+        {
+          "type": [
+            null,
+            "gregor1.UID"
+          ],
+          "name": "targetUID",
+          "mpackkey": "t",
+          "jsonkey": "t"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "HarvestedEmoji",
+            "keys": "string"
+          },
+          "name": "emojis",
+          "mpackkey": "e",
+          "jsonkey": "e"
         }
       ]
     },
@@ -949,7 +1020,8 @@
         "TOOMANYATTEMPTS_6",
         "ALREADY_DELETED_7",
         "UPLOADFAILED_8",
-        "RESTRICTEDBOT_9"
+        "RESTRICTEDBOT_9",
+        "MINWRITER_10"
       ]
     },
     {
@@ -1421,6 +1493,13 @@
             "OutboxID"
           ],
           "name": "supersedesOutboxID"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "HarvestedEmoji"
+          },
+          "name": "emojis"
         }
       ]
     },
@@ -1449,7 +1528,7 @@
           "name": "senderDeviceName"
         },
         {
-          "type": "string",
+          "type": "keybase1.DeviceTypeV2",
           "name": "senderDeviceType"
         },
         {
@@ -1526,11 +1605,22 @@
           "name": "unfurls"
         },
         {
+          "type": {
+            "type": "array",
+            "items": "HarvestedEmoji"
+          },
+          "name": "emojis"
+        },
+        {
           "type": [
             null,
             "MessageUnboxed"
           ],
           "name": "replyTo"
+        },
+        {
+          "type": "string",
+          "name": "botUsername"
         }
       ]
     },
@@ -1583,7 +1673,7 @@
           "name": "senderDeviceName"
         },
         {
-          "type": "string",
+          "type": "keybase1.DeviceTypeV2",
           "name": "senderDeviceType"
         },
         {
@@ -1603,12 +1693,19 @@
           "name": "isEphemeral"
         },
         {
-          "type": "boolean",
-          "name": "isEphemeralExpired"
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "explodedBy"
         },
         {
           "type": "gregor1.Time",
           "name": "etime"
+        },
+        {
+          "type": "string",
+          "name": "botUsername"
         }
       ]
     },
@@ -1623,6 +1720,46 @@
         {
           "type": "boolean",
           "name": "hidden"
+        }
+      ]
+    },
+    {
+      "type": "enum",
+      "name": "JourneycardType",
+      "symbols": [
+        "WELCOME_0",
+        "POPULAR_CHANNELS_1",
+        "ADD_PEOPLE_2",
+        "CREATE_CHANNELS_3",
+        "MSG_ATTENTION_4",
+        "UNUSED_5",
+        "CHANNEL_INACTIVE_6",
+        "MSG_NO_ANSWER_7"
+      ]
+    },
+    {
+      "type": "record",
+      "name": "MessageUnboxedJourneycard",
+      "fields": [
+        {
+          "type": "MessageID",
+          "name": "prevID"
+        },
+        {
+          "type": "int",
+          "name": "ordinal"
+        },
+        {
+          "type": "JourneycardType",
+          "name": "cardType"
+        },
+        {
+          "type": "MessageID",
+          "name": "highlightMsgID"
+        },
+        {
+          "type": "boolean",
+          "name": "openTeam"
         }
       ]
     },
@@ -1661,6 +1798,13 @@
             "def": false
           },
           "body": "MessageUnboxedPlaceholder"
+        },
+        {
+          "label": {
+            "name": "JOURNEYCARD",
+            "def": false
+          },
+          "body": "MessageUnboxedJourneycard"
         }
       ]
     },
@@ -1692,6 +1836,10 @@
         {
           "type": "string",
           "name": "username"
+        },
+        {
+          "type": "boolean",
+          "name": "inConvName"
         },
         {
           "type": [
@@ -1748,6 +1896,13 @@
           "name": "headline"
         },
         {
+          "type": {
+            "type": "array",
+            "items": "HarvestedEmoji"
+          },
+          "name": "headlineEmojis"
+        },
+        {
           "type": [
             null,
             "MessageUnboxed"
@@ -1771,6 +1926,10 @@
         {
           "type": "keybase1.TLFVisibility",
           "name": "visibility"
+        },
+        {
+          "type": "boolean",
+          "name": "isDefaultConv"
         },
         {
           "type": "ConversationStatus",
@@ -2028,6 +2187,14 @@
         {
           "type": "ConversationCommandGroups",
           "name": "botCommands"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "string",
+            "keys": "string"
+          },
+          "name": "botAliases"
         }
       ]
     },
@@ -2352,13 +2519,6 @@
           "name": "conversations"
         },
         {
-          "type": [
-            null,
-            "Pagination"
-          ],
-          "name": "pagination"
-        },
-        {
           "type": "boolean",
           "name": "offline"
         },
@@ -2390,13 +2550,6 @@
           "name": "conversations"
         },
         {
-          "type": [
-            null,
-            "Pagination"
-          ],
-          "name": "pagination"
-        },
-        {
           "type": "boolean",
           "name": "offline"
         },
@@ -2414,6 +2567,14 @@
           },
           "name": "identifyFailures"
         }
+      ]
+    },
+    {
+      "type": "enum",
+      "name": "InboxLayoutReselectMode",
+      "symbols": [
+        "DEFAULT_0",
+        "FORCE_1"
       ]
     },
     {
@@ -2501,6 +2662,82 @@
             "items": "keybase1.TLFIdentifyFailure"
           },
           "name": "identifyFailures"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "NewConversationsLocalRes",
+      "fields": [
+        {
+          "type": {
+            "type": "array",
+            "items": "NewConversationsLocalResult"
+          },
+          "name": "results"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "RateLimit"
+          },
+          "name": "rateLimits"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "keybase1.TLFIdentifyFailure"
+          },
+          "name": "identifyFailures"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "NewConversationsLocalResult",
+      "fields": [
+        {
+          "type": [
+            null,
+            "NewConversationLocalRes"
+          ],
+          "name": "result"
+        },
+        {
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "err"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "NewConversationLocalArgument",
+      "fields": [
+        {
+          "type": "string",
+          "name": "tlfName"
+        },
+        {
+          "type": "TopicType",
+          "name": "topicType"
+        },
+        {
+          "type": "keybase1.TLFVisibility",
+          "name": "tlfVisibility"
+        },
+        {
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "topicName"
+        },
+        {
+          "type": "ConversationMembersType",
+          "name": "membersType"
         }
       ]
     },
@@ -2810,7 +3047,7 @@
       "fields": [
         {
           "type": "string",
-          "name": "filename"
+          "name": "filePath"
         },
         {
           "type": {
@@ -2925,6 +3162,23 @@
     },
     {
       "type": "record",
+      "name": "MarkTLFAsReadLocalRes",
+      "fields": [
+        {
+          "type": "boolean",
+          "name": "offline"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "RateLimit"
+          },
+          "name": "rateLimits"
+        }
+      ]
+    },
+    {
+      "type": "record",
       "name": "FindConversationsLocalRes",
       "fields": [
         {
@@ -3018,6 +3272,19 @@
     },
     {
       "type": "record",
+      "name": "RemoveFromConversationLocalRes",
+      "fields": [
+        {
+          "type": {
+            "type": "array",
+            "items": "RateLimit"
+          },
+          "name": "rateLimits"
+        }
+      ]
+    },
+    {
+      "type": "record",
       "name": "GetTLFConversationsLocalRes",
       "fields": [
         {
@@ -3026,6 +3293,54 @@
             "items": "InboxUIItem"
           },
           "name": "convs"
+        },
+        {
+          "type": "boolean",
+          "name": "offline"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "RateLimit"
+          },
+          "name": "rateLimits"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "GetChannelMembershipsLocalRes",
+      "fields": [
+        {
+          "type": {
+            "type": "array",
+            "items": "ChannelNameMention"
+          },
+          "name": "channels"
+        },
+        {
+          "type": "boolean",
+          "name": "offline"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "RateLimit"
+          },
+          "name": "rateLimits"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "GetMutualTeamsLocalRes",
+      "fields": [
+        {
+          "type": {
+            "type": "array",
+            "items": "keybase1.TeamID"
+          },
+          "name": "teamIDs"
         },
         {
           "type": "boolean",
@@ -3172,6 +3487,35 @@
             "items": "keybase1.TLFIdentifyFailure"
           },
           "name": "identifyFailures"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "SimpleSearchInboxConvNamesHit",
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "ConversationID",
+          "name": "convID"
+        },
+        {
+          "type": "boolean",
+          "name": "isTeam"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "string"
+          },
+          "name": "parts"
+        },
+        {
+          "type": "string",
+          "name": "tlfName"
         }
       ]
     },
@@ -3475,6 +3819,13 @@
             "string"
           ],
           "name": "teamName"
+        },
+        {
+          "type": [
+            null,
+            "ConversationID"
+          ],
+          "name": "convID"
         }
       ]
     },
@@ -3513,6 +3864,30 @@
     },
     {
       "type": "record",
+      "name": "ClearBotCommandsFilter",
+      "fields": [
+        {
+          "type": "BotCommandsAdvertisementTyp",
+          "name": "typ"
+        },
+        {
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "teamName"
+        },
+        {
+          "type": [
+            null,
+            "ConversationID"
+          ],
+          "name": "convID"
+        }
+      ]
+    },
+    {
+      "type": "record",
       "name": "ClearBotCommandsLocalRes",
       "fields": [
         {
@@ -3536,6 +3911,302 @@
           "name": "rateLimits"
         }
       ]
+    },
+    {
+      "type": "record",
+      "name": "ConvSearchHit",
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "ConversationID",
+          "name": "convID"
+        },
+        {
+          "type": "boolean",
+          "name": "isTeam"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "string"
+          },
+          "name": "parts"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "LocalMtimeUpdate",
+      "fields": [
+        {
+          "type": "ConversationID",
+          "name": "convID"
+        },
+        {
+          "type": "gregor1.Time",
+          "name": "mtime"
+        }
+      ]
+    },
+    {
+      "type": "enum",
+      "name": "SnippetDecoration",
+      "symbols": [
+        "NONE_0",
+        "PENDING_MESSAGE_1",
+        "FAILED_PENDING_MESSAGE_2",
+        "EXPLODING_MESSAGE_3",
+        "EXPLODED_MESSAGE_4",
+        "AUDIO_ATTACHMENT_5",
+        "VIDEO_ATTACHMENT_6",
+        "PHOTO_ATTACHMENT_7",
+        "FILE_ATTACHMENT_8",
+        "STELLAR_RECEIVED_9",
+        "STELLAR_SENT_10",
+        "PINNED_MESSAGE_11"
+      ]
+    },
+    {
+      "type": "record",
+      "name": "WelcomeMessageDisplay",
+      "fields": [
+        {
+          "type": "boolean",
+          "name": "set"
+        },
+        {
+          "type": "string",
+          "name": "display"
+        },
+        {
+          "type": "string",
+          "name": "raw"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "WelcomeMessage",
+      "fields": [
+        {
+          "type": "boolean",
+          "name": "set"
+        },
+        {
+          "type": "string",
+          "name": "raw"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "GetDefaultTeamChannelsLocalRes",
+      "fields": [
+        {
+          "type": {
+            "type": "array",
+            "items": "InboxUIItem"
+          },
+          "name": "convs"
+        },
+        {
+          "type": [
+            null,
+            "RateLimit"
+          ],
+          "name": "rateLimit"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "SetDefaultTeamChannelsLocalRes",
+      "fields": [
+        {
+          "type": [
+            null,
+            "RateLimit"
+          ],
+          "name": "rateLimit"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "LastActiveTimeAll",
+      "fields": [
+        {
+          "type": {
+            "type": "map",
+            "values": "gregor1.Time",
+            "keys": "TLFIDStr"
+          },
+          "name": "teams"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "gregor1.Time",
+            "keys": "ConvIDStr"
+          },
+          "name": "channels"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "LastActiveStatusAll",
+      "fields": [
+        {
+          "type": {
+            "type": "map",
+            "values": "LastActiveStatus",
+            "keys": "TLFIDStr"
+          },
+          "name": "teams"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "LastActiveStatus",
+            "keys": "ConvIDStr"
+          },
+          "name": "channels"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "EmojiError",
+      "fields": [
+        {
+          "type": "string",
+          "name": "clidisplay"
+        },
+        {
+          "type": "string",
+          "name": "uidisplay"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "AddEmojiRes",
+      "fields": [
+        {
+          "type": [
+            null,
+            "RateLimit"
+          ],
+          "name": "rateLimit"
+        },
+        {
+          "type": [
+            null,
+            "EmojiError"
+          ],
+          "name": "error"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "AddEmojisRes",
+      "fields": [
+        {
+          "type": [
+            null,
+            "RateLimit"
+          ],
+          "name": "rateLimit"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "string"
+          },
+          "name": "successFilenames"
+        },
+        {
+          "type": {
+            "type": "map",
+            "values": "EmojiError",
+            "keys": "string"
+          },
+          "name": "failedFilenames"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "AddEmojiAliasRes",
+      "fields": [
+        {
+          "type": [
+            null,
+            "RateLimit"
+          ],
+          "name": "rateLimit"
+        },
+        {
+          "type": [
+            null,
+            "EmojiError"
+          ],
+          "name": "error"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "RemoveEmojiRes",
+      "fields": [
+        {
+          "type": [
+            null,
+            "RateLimit"
+          ],
+          "name": "rateLimit"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "UserEmojiRes",
+      "fields": [
+        {
+          "type": "UserEmojis",
+          "name": "emojis"
+        },
+        {
+          "type": [
+            null,
+            "RateLimit"
+          ],
+          "name": "rateLimit"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "EmojiFetchOpts",
+      "fields": [
+        {
+          "type": "boolean",
+          "name": "getCreationInfo"
+        },
+        {
+          "type": "boolean",
+          "name": "getAliases"
+        },
+        {
+          "type": "boolean",
+          "name": "onlyInTeam"
+        }
+      ]
     }
   ],
   "messages": {
@@ -3548,33 +4219,6 @@
         {
           "name": "reason",
           "type": "GetThreadReason"
-        },
-        {
-          "name": "query",
-          "type": [
-            null,
-            "GetThreadQuery"
-          ]
-        },
-        {
-          "name": "pagination",
-          "type": [
-            null,
-            "Pagination"
-          ]
-        },
-        {
-          "name": "identifyBehavior",
-          "type": "keybase1.TLFIdentifyBehavior"
-        }
-      ],
-      "response": "GetThreadLocalRes"
-    },
-    "getCachedThread": {
-      "request": [
-        {
-          "name": "conversationID",
-          "type": "ConversationID"
         },
         {
           "name": "query",
@@ -3627,6 +4271,13 @@
           ]
         },
         {
+          "name": "knownRemotes",
+          "type": {
+            "type": "array",
+            "items": "string"
+          }
+        },
+        {
           "name": "pagination",
           "type": [
             null,
@@ -3638,7 +4289,8 @@
           "type": "keybase1.TLFIdentifyBehavior"
         }
       ],
-      "response": "NonblockFetchRes"
+      "response": "NonblockFetchRes",
+      "timeout_msec": 30000
     },
     "getUnreadline": {
       "request": [
@@ -3671,13 +4323,6 @@
           ]
         },
         {
-          "name": "pagination",
-          "type": [
-            null,
-            "Pagination"
-          ]
-        },
-        {
           "name": "identifyBehavior",
           "type": "keybase1.TLFIdentifyBehavior"
         }
@@ -3694,18 +4339,40 @@
           ]
         },
         {
-          "name": "pagination",
-          "type": [
-            null,
-            "Pagination"
-          ]
-        },
-        {
           "name": "identifyBehavior",
           "type": "keybase1.TLFIdentifyBehavior"
         }
       ],
       "response": "GetInboxAndUnboxUILocalRes"
+    },
+    "requestInboxLayout": {
+      "request": [
+        {
+          "name": "reselectMode",
+          "type": "InboxLayoutReselectMode"
+        }
+      ],
+      "response": null
+    },
+    "requestInboxUnbox": {
+      "request": [
+        {
+          "name": "convIDs",
+          "type": {
+            "type": "array",
+            "items": "ConversationID"
+          }
+        }
+      ],
+      "response": null
+    },
+    "requestInboxSmallIncrease": {
+      "request": [],
+      "response": null
+    },
+    "requestInboxSmallReset": {
+      "request": [],
+      "response": null
     },
     "getInboxNonblockLocal": {
       "request": [
@@ -3729,13 +4396,6 @@
           "type": [
             null,
             "GetInboxLocalQuery"
-          ]
-        },
-        {
-          "name": "pagination",
-          "type": [
-            null,
-            "Pagination"
           ]
         },
         {
@@ -3769,6 +4429,10 @@
         {
           "name": "identifyBehavior",
           "type": "keybase1.TLFIdentifyBehavior"
+        },
+        {
+          "name": "skipInChatPayments",
+          "type": "boolean"
         }
       ],
       "response": "PostLocalRes"
@@ -3812,9 +4476,65 @@
         {
           "name": "identifyBehavior",
           "type": "keybase1.TLFIdentifyBehavior"
+        },
+        {
+          "name": "skipInChatPayments",
+          "type": "boolean"
         }
       ],
-      "response": "PostLocalNonblockRes"
+      "response": "PostLocalNonblockRes",
+      "timeout_msec": 30000
+    },
+    "forwardMessage": {
+      "request": [
+        {
+          "name": "sessionID",
+          "type": "int"
+        },
+        {
+          "name": "srcConvID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "dstConvID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "msgID",
+          "type": "MessageID"
+        },
+        {
+          "name": "identifyBehavior",
+          "type": "keybase1.TLFIdentifyBehavior"
+        }
+      ],
+      "response": "PostLocalRes"
+    },
+    "forwardMessageNonblock": {
+      "request": [
+        {
+          "name": "sessionID",
+          "type": "int"
+        },
+        {
+          "name": "srcConvID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "dstConvID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "msgID",
+          "type": "MessageID"
+        },
+        {
+          "name": "identifyBehavior",
+          "type": "keybase1.TLFIdentifyBehavior"
+        }
+      ],
+      "response": "PostLocalNonblockRes",
+      "timeout_msec": 30000
     },
     "postTextNonblock": {
       "request": [
@@ -3868,7 +4588,8 @@
           ]
         }
       ],
-      "response": "PostLocalNonblockRes"
+      "response": "PostLocalNonblockRes",
+      "timeout_msec": 30000
     },
     "postDeleteNonblock": {
       "request": [
@@ -3904,7 +4625,8 @@
           "type": "keybase1.TLFIdentifyBehavior"
         }
       ],
-      "response": "PostLocalNonblockRes"
+      "response": "PostLocalNonblockRes",
+      "timeout_msec": 30000
     },
     "postEditNonblock": {
       "request": [
@@ -3944,7 +4666,8 @@
           "type": "keybase1.TLFIdentifyBehavior"
         }
       ],
-      "response": "PostLocalNonblockRes"
+      "response": "PostLocalNonblockRes",
+      "timeout_msec": 30000
     },
     "postReactionNonblock": {
       "request": [
@@ -3984,7 +4707,8 @@
           "type": "keybase1.TLFIdentifyBehavior"
         }
       ],
-      "response": "PostLocalNonblockRes"
+      "response": "PostLocalNonblockRes",
+      "timeout_msec": 30000
     },
     "postHeadlineNonblock": {
       "request": [
@@ -4020,7 +4744,8 @@
           "type": "keybase1.TLFIdentifyBehavior"
         }
       ],
-      "response": "PostLocalNonblockRes"
+      "response": "PostLocalNonblockRes",
+      "timeout_msec": 30000
     },
     "postHeadline": {
       "request": [
@@ -4081,7 +4806,8 @@
           "type": "keybase1.TLFIdentifyBehavior"
         }
       ],
-      "response": "PostLocalNonblockRes"
+      "response": "PostLocalNonblockRes",
+      "timeout_msec": 30000
     },
     "postMetadata": {
       "request": [
@@ -4201,6 +4927,22 @@
       "response": "SetConversationStatusLocalRes",
       "lint": "ignore"
     },
+    "newConversationsLocal": {
+      "request": [
+        {
+          "name": "newConversationLocalArguments",
+          "type": {
+            "type": "array",
+            "items": "NewConversationLocalArgument"
+          }
+        },
+        {
+          "name": "identifyBehavior",
+          "type": "keybase1.TLFIdentifyBehavior"
+        }
+      ],
+      "response": "NewConversationsLocalRes"
+    },
     "newConversationLocal": {
       "request": [
         {
@@ -4304,7 +5046,8 @@
           "type": "MessageID"
         }
       ],
-      "response": "PostLocalNonblockRes"
+      "response": "PostLocalNonblockRes",
+      "timeout_msec": 30000
     },
     "getNextAttachmentMessageLocal": {
       "request": [
@@ -4379,8 +5122,8 @@
           "type": "MessageID"
         },
         {
-          "name": "filename",
-          "type": "string"
+          "name": "downloadToCache",
+          "type": "boolean"
         },
         {
           "name": "preview",
@@ -4392,6 +5135,20 @@
         }
       ],
       "response": "DownloadFileAttachmentLocalRes",
+      "lint": "ignore"
+    },
+    "ConfigureFileAttachmentDownloadLocal": {
+      "request": [
+        {
+          "name": "cacheDirOverride",
+          "type": "string"
+        },
+        {
+          "name": "downloadDirOverride",
+          "type": "string"
+        }
+      ],
+      "response": null,
       "lint": "ignore"
     },
     "makePreview": {
@@ -4407,6 +5164,22 @@
         {
           "name": "outboxID",
           "type": "OutboxID"
+        }
+      ],
+      "response": "MakePreviewRes"
+    },
+    "makeAudioPreview": {
+      "request": [
+        {
+          "name": "amps",
+          "type": {
+            "type": "array",
+            "items": "double"
+          }
+        },
+        {
+          "name": "duration",
+          "type": "int"
         }
       ],
       "response": "MakePreviewRes"
@@ -4440,6 +5213,15 @@
         }
       ],
       "response": "string"
+    },
+    "cancelUploadTempFile": {
+      "request": [
+        {
+          "name": "outboxID",
+          "type": "OutboxID"
+        }
+      ],
+      "response": null
     },
     "CancelPost": {
       "request": [
@@ -4480,10 +5262,26 @@
         },
         {
           "name": "msgID",
-          "type": "MessageID"
+          "type": [
+            null,
+            "MessageID"
+          ]
         }
       ],
       "response": "MarkAsReadLocalRes"
+    },
+    "markTLFAsReadLocal": {
+      "request": [
+        {
+          "name": "sessionID",
+          "type": "int"
+        },
+        {
+          "name": "tlfID",
+          "type": "TLFID"
+        }
+      ],
+      "response": "MarkTLFAsReadLocalRes"
     },
     "findConversationsLocal": {
       "request": [
@@ -4520,6 +5318,15 @@
         }
       ],
       "response": "FindConversationsLocalRes"
+    },
+    "findGeneralConvFromTeamID": {
+      "request": [
+        {
+          "name": "teamID",
+          "type": "keybase1.TeamID"
+        }
+      ],
+      "response": "InboxUIItem"
     },
     "updateTyping": {
       "request": [
@@ -4620,6 +5427,22 @@
       ],
       "response": "DeleteConversationLocalRes"
     },
+    "removeFromConversationLocal": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "usernames",
+          "type": {
+            "type": "array",
+            "items": "string"
+          }
+        }
+      ],
+      "response": "RemoveFromConversationLocalRes"
+    },
     "getTLFConversationsLocal": {
       "request": [
         {
@@ -4636,6 +5459,31 @@
         }
       ],
       "response": "GetTLFConversationsLocalRes"
+    },
+    "getChannelMembershipsLocal": {
+      "request": [
+        {
+          "name": "teamID",
+          "type": "keybase1.TeamID"
+        },
+        {
+          "name": "uid",
+          "type": "gregor1.UID"
+        }
+      ],
+      "response": "GetChannelMembershipsLocalRes"
+    },
+    "getMutualTeamsLocal": {
+      "request": [
+        {
+          "name": "usernames",
+          "type": {
+            "type": "array",
+            "items": "string"
+          }
+        }
+      ],
+      "response": "GetMutualTeamsLocalRes"
     },
     "setAppNotificationSettingsLocal": {
       "request": [
@@ -4833,6 +5681,18 @@
       ],
       "response": "SearchInboxRes"
     },
+    "simpleSearchInboxConvNames": {
+      "request": [
+        {
+          "name": "query",
+          "type": "string"
+        }
+      ],
+      "response": {
+        "type": "array",
+        "items": "SimpleSearchInboxConvNamesHit"
+      }
+    },
     "cancelActiveSearch": {
       "request": [],
       "response": null
@@ -4847,7 +5707,7 @@
       "response": {
         "type": "map",
         "values": "ProfileSearchConvStats",
-        "keys": "string"
+        "keys": "ConvIDStr"
       }
     },
     "getStaticConfig": {
@@ -4917,6 +5777,25 @@
         {
           "name": "convID",
           "type": "ConversationID"
+        },
+        {
+          "name": "usernames",
+          "type": {
+            "type": "array",
+            "items": "string"
+          }
+        }
+      ],
+      "response": null
+    },
+    "bulkAddToManyConvs": {
+      "request": [
+        {
+          "name": "conversations",
+          "type": {
+            "type": "array",
+            "items": "ConversationID"
+          }
         },
         {
           "name": "usernames",
@@ -5032,8 +5911,25 @@
       ],
       "response": "ListBotCommandsLocalRes"
     },
+    "listPublicBotCommandsLocal": {
+      "request": [
+        {
+          "name": "username",
+          "type": "string"
+        }
+      ],
+      "response": "ListBotCommandsLocalRes"
+    },
     "clearBotCommandsLocal": {
-      "request": [],
+      "request": [
+        {
+          "name": "filter",
+          "type": [
+            null,
+            "ClearBotCommandsFilter"
+          ]
+        }
+      ],
       "response": "ClearBotCommandsLocalRes"
     },
     "pinMessage": {
@@ -5070,8 +5966,8 @@
     "addBotMember": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
@@ -5087,14 +5983,6 @@
         {
           "name": "role",
           "type": "keybase1.TeamRole"
-        },
-        {
-          "name": "membersType",
-          "type": "ConversationMembersType"
-        },
-        {
-          "name": "tlfPublic",
-          "type": "boolean"
         }
       ],
       "response": null
@@ -5102,8 +5990,8 @@
     "editBotMember": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
@@ -5119,14 +6007,6 @@
         {
           "name": "role",
           "type": "keybase1.TeamRole"
-        },
-        {
-          "name": "membersType",
-          "type": "ConversationMembersType"
-        },
-        {
-          "name": "tlfPublic",
-          "type": "boolean"
         }
       ],
       "response": null
@@ -5134,20 +6014,12 @@
     "removeBotMember": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
           "type": "string"
-        },
-        {
-          "name": "membersType",
-          "type": "ConversationMembersType"
-        },
-        {
-          "name": "tlfPublic",
-          "type": "boolean"
         }
       ],
       "response": null
@@ -5155,8 +6027,8 @@
     "setBotMemberSettings": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
@@ -5165,14 +6037,6 @@
         {
           "name": "botSettings",
           "type": "keybase1.TeamBotSettings"
-        },
-        {
-          "name": "membersType",
-          "type": "ConversationMembersType"
-        },
-        {
-          "name": "tlfPublic",
-          "type": "boolean"
         }
       ],
       "response": null
@@ -5180,11 +6044,57 @@
     "getBotMemberSettings": {
       "request": [
         {
-          "name": "tlfName",
-          "type": "string"
+          "name": "convID",
+          "type": "ConversationID"
         },
         {
           "name": "username",
+          "type": "string"
+        }
+      ],
+      "response": "keybase1.TeamBotSettings"
+    },
+    "getTeamRoleInConversation": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "username",
+          "type": "string"
+        }
+      ],
+      "response": "keybase1.TeamRole"
+    },
+    "addBotConvSearch": {
+      "request": [
+        {
+          "name": "term",
+          "type": "string"
+        }
+      ],
+      "response": {
+        "type": "array",
+        "items": "ConvSearchHit"
+      }
+    },
+    "forwardMessageConvSearch": {
+      "request": [
+        {
+          "name": "term",
+          "type": "string"
+        }
+      ],
+      "response": {
+        "type": "array",
+        "items": "ConvSearchHit"
+      }
+    },
+    "teamIDFromTLFName": {
+      "request": [
+        {
+          "name": "tlfName",
           "type": "string"
         },
         {
@@ -5196,7 +6106,249 @@
           "type": "boolean"
         }
       ],
-      "response": "keybase1.TeamBotSettings"
+      "response": "keybase1.TeamID"
+    },
+    "dismissJourneycard": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "cardType",
+          "type": "JourneycardType"
+        }
+      ],
+      "response": null
+    },
+    "setWelcomeMessage": {
+      "request": [
+        {
+          "name": "teamID",
+          "type": "keybase1.TeamID"
+        },
+        {
+          "name": "message",
+          "type": "WelcomeMessage"
+        }
+      ],
+      "response": null
+    },
+    "getWelcomeMessage": {
+      "request": [
+        {
+          "name": "teamID",
+          "type": "keybase1.TeamID"
+        }
+      ],
+      "response": "WelcomeMessageDisplay"
+    },
+    "getDefaultTeamChannelsLocal": {
+      "request": [
+        {
+          "name": "teamID",
+          "type": "keybase1.TeamID"
+        }
+      ],
+      "response": "GetDefaultTeamChannelsLocalRes"
+    },
+    "setDefaultTeamChannelsLocal": {
+      "request": [
+        {
+          "name": "teamID",
+          "type": "keybase1.TeamID"
+        },
+        {
+          "name": "convs",
+          "type": {
+            "type": "array",
+            "items": "ConvIDStr"
+          }
+        }
+      ],
+      "response": "SetDefaultTeamChannelsLocalRes"
+    },
+    "getLastActiveForTLF": {
+      "request": [
+        {
+          "name": "tlfID",
+          "type": "TLFIDStr"
+        }
+      ],
+      "response": "LastActiveStatus"
+    },
+    "getLastActiveForTeams": {
+      "request": [],
+      "response": "LastActiveStatusAll"
+    },
+    "getRecentJoinsLocal": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        }
+      ],
+      "response": "int"
+    },
+    "refreshParticipants": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        }
+      ],
+      "response": null
+    },
+    "getLastActiveAtLocal": {
+      "request": [
+        {
+          "name": "teamID",
+          "type": "keybase1.TeamID"
+        },
+        {
+          "name": "username",
+          "type": "string"
+        }
+      ],
+      "response": "gregor1.Time"
+    },
+    "getLastActiveAtMultiLocal": {
+      "request": [
+        {
+          "name": "teamIDs",
+          "type": {
+            "type": "array",
+            "items": "keybase1.TeamID"
+          }
+        },
+        {
+          "name": "username",
+          "type": "string"
+        }
+      ],
+      "response": {
+        "type": "map",
+        "values": "gregor1.Time",
+        "keys": "keybase1.TeamID"
+      }
+    },
+    "getParticipants": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        }
+      ],
+      "response": {
+        "type": "array",
+        "items": "ConversationLocalParticipant"
+      }
+    },
+    "addEmoji": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "alias",
+          "type": "string"
+        },
+        {
+          "name": "filename",
+          "type": "string"
+        },
+        {
+          "name": "allowOverwrite",
+          "type": "boolean"
+        }
+      ],
+      "response": "AddEmojiRes"
+    },
+    "addEmojis": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "aliases",
+          "type": {
+            "type": "array",
+            "items": "string"
+          }
+        },
+        {
+          "name": "filenames",
+          "type": {
+            "type": "array",
+            "items": "string"
+          }
+        },
+        {
+          "name": "allowOverwrite",
+          "type": {
+            "type": "array",
+            "items": "boolean"
+          }
+        }
+      ],
+      "response": "AddEmojisRes"
+    },
+    "addEmojiAlias": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "newAlias",
+          "type": "string"
+        },
+        {
+          "name": "existingAlias",
+          "type": "string"
+        }
+      ],
+      "response": "AddEmojiAliasRes"
+    },
+    "removeEmoji": {
+      "request": [
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        },
+        {
+          "name": "alias",
+          "type": "string"
+        }
+      ],
+      "response": "RemoveEmojiRes"
+    },
+    "userEmojis": {
+      "request": [
+        {
+          "name": "opts",
+          "type": "EmojiFetchOpts"
+        },
+        {
+          "name": "convID",
+          "type": [
+            null,
+            "ConversationID"
+          ]
+        }
+      ],
+      "response": "UserEmojiRes"
+    },
+    "toggleEmojiAnimations": {
+      "request": [
+        {
+          "name": "enabled",
+          "type": "boolean"
+        }
+      ],
+      "response": null
     }
   },
   "namespace": "chat.1"

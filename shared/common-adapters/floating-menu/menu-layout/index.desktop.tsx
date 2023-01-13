@@ -1,13 +1,18 @@
-import React, {Component} from 'react'
-import {MenuLayoutProps, MenuItem} from '.'
+import * as React from 'react'
+import type {MenuLayoutProps, MenuItem} from '.'
 import Box from '../../box'
 import Divider from '../../divider'
+import Icon from '../../icon'
 import Text from '../../text'
 import Meta from '../../meta'
+import Badge from '../../badge'
+import ProgressIndicator from '../../progress-indicator'
 import * as Styles from '../../../styles'
 
-class MenuLayout extends Component<MenuLayoutProps> {
-  private renderDivider = (index: number) => <Divider style={styles.divider} key={index} />
+class MenuLayout extends React.Component<MenuLayoutProps> {
+  private renderDivider = (index: number) => (
+    <Divider style={index === 0 ? styles.dividerFirst : styles.divider} key={index} />
+  )
 
   private renderMenuItem = (item: MenuItem, index: number) => {
     let hoverClassName
@@ -20,7 +25,9 @@ class MenuLayout extends Component<MenuLayoutProps> {
 
     const styleClickable = item.disabled ? {} : Styles.desktopStyles.clickable
 
-    return (
+    return item.unWrapped ? (
+      item.view
+    ) : (
       <Box
         key={index}
         className={hoverClassName}
@@ -42,6 +49,7 @@ class MenuLayout extends Component<MenuLayoutProps> {
             >
               {item.title}
             </Text>
+            {!!item.icon && item.iconIsVisible && <Icon style={styles.icon} type={item.icon} />}
             {item.newTag && (
               <Meta
                 title="New"
@@ -51,6 +59,16 @@ class MenuLayout extends Component<MenuLayoutProps> {
               />
             )}
             {item.decoration}
+            {item.isBadged && <Badge badgeStyle={Styles.collapseStyles([styles.badge, styles.iconBadge])} />}
+            {item.isSelected && (
+              <Icon
+                type="iconfont-check"
+                color={Styles.globalColors.blue}
+                fontSize={16}
+                sizeType="Default"
+                style={{paddingLeft: Styles.globalMargins.tiny}}
+              />
+            )}
           </Box>
         )}
         {!item.view && item.subTitle && (
@@ -63,6 +81,7 @@ class MenuLayout extends Component<MenuLayoutProps> {
             {item.subTitle}
           </Text>
         )}
+        {!!item.progressIndicator && <ProgressIndicator type="Large" style={styles.progressIndicator} />}
       </Box>
     )
   }
@@ -81,6 +100,14 @@ class MenuLayout extends Component<MenuLayoutProps> {
     .menu-hover-danger:hover .subtitle { color: ${Styles.globalColors.white}; }
     `
 
+    const items = this.props.items.reduce<Array<'Divider' | MenuItem>>((arr, item) => {
+      if (item === 'Divider' && arr.length && arr[arr.length - 1] === 'Divider') {
+        return arr
+      }
+      item && arr.push(item)
+      return arr
+    }, [])
+
     return (
       <Box
         onClick={event => {
@@ -91,18 +118,13 @@ class MenuLayout extends Component<MenuLayoutProps> {
         <style>{realCSS}</style>
         <Box style={Styles.collapseStyles([styles.menuContainer, this.props.style])}>
           {/* Display header if there is one */}
-          {this.props.header && this.props.header.view}
+          {this.props.header}
           {/* Display menu items */}
-          {this.props.items.length > 0 && (
+          {items.some(item => item !== 'Divider') && (
             <Box style={Styles.collapseStyles([styles.menuItemList, this.props.listStyle])}>
-              {this.props.items
-                .reduce<Array<'Divider' | MenuItem>>((arr, item) => {
-                  item && arr.push(item)
-                  return arr
-                }, [])
-                .map((item, index) =>
-                  item === 'Divider' ? this.renderDivider(index) : this.renderMenuItem(item, index)
-                )}
+              {items.map((item, index) =>
+                item === 'Divider' ? this.renderDivider(index) : this.renderMenuItem(item, index)
+              )}
             </Box>
           )}
         </Box>
@@ -122,14 +144,26 @@ const styles = Styles.styleSheetCreate(
         marginBottom: 8,
         marginTop: 8,
       },
+      dividerFirst: {
+        marginBottom: 8,
+      },
       horizBox: {...Styles.globalStyles.flexBoxRow},
+      icon: {marginLeft: Styles.globalMargins.xtiny},
+      iconBadge: {
+        backgroundColor: Styles.globalColors.blue,
+        height: Styles.globalMargins.tiny,
+        minWidth: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        position: 'relative',
+        right: Styles.globalMargins.xtiny,
+        width: Styles.globalMargins.tiny,
+      },
       itemBodyText: {color: undefined},
       itemContainer: {
         ...Styles.globalStyles.flexBoxColumn,
-        paddingBottom: Styles.globalMargins.xtiny,
-        paddingLeft: Styles.globalMargins.small,
-        paddingRight: Styles.globalMargins.small,
-        paddingTop: Styles.globalMargins.xtiny,
+        ...Styles.padding(7, Styles.globalMargins.small),
+        position: 'relative',
       },
       menuContainer: Styles.platformStyles({
         isElectron: {
@@ -137,11 +171,11 @@ const styles = Styles.styleSheetCreate(
           ...Styles.globalStyles.flexBoxColumn,
           alignItems: 'stretch',
           backgroundColor: Styles.globalColors.white,
-          borderRadius: 3,
+          borderRadius: Styles.borderRadius,
           justifyContent: 'flex-start',
-          minWidth: 200,
           overflowX: 'hidden',
           overflowY: 'auto',
+          width: 240,
         },
       }),
       menuItemList: {
@@ -149,6 +183,12 @@ const styles = Styles.styleSheetCreate(
         flexShrink: 0,
         paddingBottom: Styles.globalMargins.tiny,
         paddingTop: Styles.globalMargins.tiny,
+      },
+      progressIndicator: {
+        left: 0,
+        position: 'absolute',
+        right: 0,
+        top: Styles.globalMargins.xtiny,
       },
     } as const)
 )

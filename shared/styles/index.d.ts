@@ -1,8 +1,9 @@
 // Styles from our designers
-import * as CSS from './css'
+import * as React from 'react'
+import type * as CSS from './css'
 export {default as globalColors} from './colors'
 
-export declare const transition: (...properties: Array<string>) => Object
+export declare const transition: (...properties: Array<string>) => any
 
 type _fakeFontDefSeeCommentsOnThisStyle = {
   fontFamily: 'Keybase'
@@ -11,6 +12,7 @@ type _fakeFontDefSeeCommentsOnThisStyle = {
 }
 
 export declare const globalStyles: {
+  fastBackground: _fakeFontDefSeeCommentsOnThisStyle
   fillAbsolute: {
     bottom: 0
     left: 0
@@ -50,6 +52,7 @@ export declare const globalStyles: {
   }
   fontExtrabold: _fakeFontDefSeeCommentsOnThisStyle
   fontRegular: _fakeFontDefSeeCommentsOnThisStyle
+  fontNyctographic: _fakeFontDefSeeCommentsOnThisStyle
   fontSemibold: _fakeFontDefSeeCommentsOnThisStyle
   fontTerminal: _fakeFontDefSeeCommentsOnThisStyle
   fontTerminalSemibold: _fakeFontDefSeeCommentsOnThisStyle
@@ -60,21 +63,27 @@ export declare const globalStyles: {
     width: '100%'
   }
   italic: _fakeFontDefSeeCommentsOnThisStyle
+  largeWidthPercent: string
   loadingTextStyle: CSS._StylesCrossPlatform
+  mediumSubNavWidth: number | string
+  mediumWidth: number | string
+  opacity0: {opacity: 0}
+  positionRelative: {position: 'relative'}
   rounded: {
     borderRadius: 3
   }
+  shortSubNavWidth: number | string
 }
 
 export declare const desktopStyles: {
-  boxShadow?: CSS._StylesDesktop
-  clickable?: CSS._StylesDesktop
-  editable?: CSS._StylesDesktop
-  fadeOpacity?: CSS._StylesDesktop
-  noSelect?: CSS._StylesDesktop
-  scrollable?: CSS._StylesDesktop
-  windowDragging?: CSS._StylesDesktop
-  windowDraggingClickable?: CSS._StylesDesktop
+  boxShadow: {boxShadow: ''}
+  clickable: {cursor: 'pointer'}
+  editable: {cursor: 'text'}
+  fadeOpacity: {transition: 'opacity .25s ease-in-out'}
+  noSelect: {userSelect: 'none'}
+  scrollable: {overflowY: 'auto'}
+  windowDragging: {WebkitAppRegion: 'drag'}
+  windowDraggingClickable: {WebkitAppRegion: 'no-drag'}
 }
 
 export declare const mobileStyles: {}
@@ -84,14 +93,16 @@ export declare const borderRadius: number
 export declare const hairlineWidth: number
 export declare function backgroundURL(...path: Array<string>): string
 
-type NamedStyles<T> = {[P in keyof T]: CSS._StylesDesktop | CSS._StylesMobile}
+type NamedStyles = {[key: string]: CSS._StylesCrossPlatform}
 // order important!
-export declare function styleSheetCreate<T extends () => NamedStyles<T>>(styles: T): ReturnType<T>
+export declare function styleSheetCreate<O extends NamedStyles>(styles: () => O): O
 
-type _Elem = Object | null | false | void
 // CollapsibleStyle is a generic version of ?StylesMobile and family,
 // slightly extended to support "isFoo && myStyle".
-export type CollapsibleStyle = _Elem | ReadonlyArray<_Elem>
+type RemovedStyle = false | '' | 0 | null | undefined
+type CollapsibleStyle = CSS.StylesCrossPlatform | RemovedStyle
+
+// TODO better styles that aren't slow
 export declare function collapseStyles(styles: ReadonlyArray<CollapsibleStyle>): any
 
 export declare const windowStyle: {
@@ -101,7 +112,17 @@ export declare const windowStyle: {
   height: number
 }
 
-// TODO: this typing is incomplete
+export type Position =
+  | 'top left'
+  | 'top right'
+  | 'bottom right'
+  | 'bottom left'
+  | 'right center'
+  | 'left center'
+  | 'top center'
+  | 'bottom center'
+  | 'center center'
+
 export declare function padding(
   top: number,
   right?: number,
@@ -114,23 +135,31 @@ export declare function padding(
   paddingLeft: number
 }
 
-export declare const styledCss: any
 export declare const styledKeyframes: any
 export declare const isAndroid: boolean
 export declare const isIOS: boolean
 export declare const isMobile: boolean
+export declare const isPhone: boolean
+export declare const isTablet: boolean
 export declare const isDarkMode: () => boolean
 export declare const isIPhoneX: boolean
 export declare const dimensionWidth: number
 export declare const dimensionHeight: number
+export declare const headerExtraHeight: number
 
 export {platformStyles, globalMargins, backgroundModeToColor, backgroundModeToTextColor} from './shared'
-export {
+export type {
   StylesDesktop,
   StylesMobile,
   StylesCrossPlatform,
   Color,
-  StylesCrossPlatformWithSomeDisallowed,
+  CustomStyles,
+  _StylesCrossPlatform,
+  _StylesDesktop,
+  _StylesMobile,
 } from './css'
 export {default as classNames} from 'classnames'
 export {default as styled} from '@emotion/styled'
+export declare const CanFixOverdrawContext: React.Context<boolean>
+export declare const DarkModeContext: React.Context<boolean>
+export declare const undynamicColor: (col: any) => any

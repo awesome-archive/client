@@ -1,5 +1,5 @@
-import React from 'react'
-import Text, {StylesTextCrossPlatform} from '../../../common-adapters/text'
+import * as React from 'react'
+import Text, {type StylesTextCrossPlatform} from '../../../common-adapters/text'
 import {Box2} from '../../../common-adapters/box'
 import * as Styles from '../../../styles'
 import TeamInfo from '../../../profile/user/teams/teaminfo'
@@ -13,12 +13,12 @@ export type Props = {
   inTeam: boolean
   isOpen: boolean
   name: string
+  numMembers: number
   onChat?: () => void
   onJoinTeam: (arg0: string) => void
-  onViewTeam: (arg0: string) => void
-  resolved: boolean
-  numMembers: number
+  onViewTeam: () => void
   publicAdmins: Array<string>
+  resolved: boolean
   style?: StylesTextCrossPlatform
 }
 
@@ -34,7 +34,7 @@ class TeamMention extends React.Component<Props, State> {
   }
 
   _onClick = () => {
-    if (!Styles.isMobile && this.props.onChat) {
+    if (this.props.onChat) {
       this.props.onChat()
     } else {
       this.setState({showPopup: true})
@@ -54,15 +54,19 @@ class TeamMention extends React.Component<Props, State> {
     const content = (
       <Kb.Text
         ref={this._mentionRef}
-        type="BodySemibold"
+        type="BodyBold"
         className={Styles.classNames({'hover-underline': !Styles.isMobile})}
-        style={Styles.collapseStyles([this.props.style, styles.resolved, styles.text])}
+        style={Styles.collapseStyles([this.props.style, styles.text])}
         allowFontScaling={this.props.allowFontScaling}
         onClick={this._onClick}
       >
-        {Styles.isMobile && ' '}
-        {text}
-        {Styles.isMobile && ' '}
+        <Kb.Text
+          type="BodyBold"
+          style={Styles.collapseStyles([this.props.style, styles.resolved, styles.text])}
+          allowFontScaling={this.props.allowFontScaling}
+        >
+          {text}
+        </Kb.Text>
       </Kb.Text>
     )
     const popups = (
@@ -99,7 +103,7 @@ class TeamMention extends React.Component<Props, State> {
         </Kb.Box2>
       )
     ) : (
-      <Kb.Text type="Body" style={this.props.style} allowFontScaling={this.props.allowFontScaling}>
+      <Kb.Text type="BodySemibold" style={this.props.style} allowFontScaling={this.props.allowFontScaling}>
         {text}
       </Kb.Text>
     )

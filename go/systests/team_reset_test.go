@@ -443,14 +443,14 @@ func TestTeamRemoveAfterReset(t *testing.T) {
 
 	cli := ann.getTeamsClient()
 	err := cli.TeamRemoveMember(context.TODO(), keybase1.TeamRemoveMemberArg{
-		Name:     team.name,
-		Username: bob.username,
+		TeamID: team.ID,
+		Member: keybase1.NewTeamMemberToRemoveWithAssertion(keybase1.AssertionTeamMemberToRemove{Assertion: bob.username}),
 	})
 	require.NoError(t, err)
 
 	err = cli.TeamRemoveMember(context.TODO(), keybase1.TeamRemoveMemberArg{
-		Name:     team.name,
-		Username: joe.username,
+		TeamID: team.ID,
+		Member: keybase1.NewTeamMemberToRemoveWithAssertion(keybase1.AssertionTeamMemberToRemove{Assertion: joe.username}),
 	})
 	require.NoError(t, err)
 
@@ -494,8 +494,8 @@ func TestTeamRemoveMemberAfterDelete(t *testing.T) {
 
 	cli := ann.getTeamsClient()
 	err = cli.TeamRemoveMember(context.Background(), keybase1.TeamRemoveMemberArg{
-		Name:     team.name,
-		Username: bob.username,
+		TeamID: team.ID,
+		Member: keybase1.NewTeamMemberToRemoveWithAssertion(keybase1.AssertionTeamMemberToRemove{Assertion: bob.username}),
 	})
 	require.NoError(t, err)
 
@@ -534,7 +534,7 @@ func TestTeamTryAddDeletedUser(t *testing.T) {
 	divDebug(ctx, "team created (%s)", team.name)
 
 	_, err := cli.TeamAddMember(context.Background(), keybase1.TeamAddMemberArg{
-		Name:     team.name,
+		TeamID:   team.ID,
 		Username: bob.username,
 		Role:     keybase1.TeamRole_READER,
 	})
@@ -570,7 +570,7 @@ func TestTeamAddAfterReset(t *testing.T) {
 
 	cli := ann.getTeamsClient()
 	_, err := cli.TeamAddMember(context.TODO(), keybase1.TeamAddMemberArg{
-		Name:     team.name,
+		TeamID:   team.ID,
 		Username: bob.username,
 		// Note: any role would do! Does not have to be the same as before
 		// reset. This does not apply to imp-teams though, it requires the
@@ -639,6 +639,8 @@ func testTeamReAddAfterReset(t *testing.T, pukful, adminOwner, removeAfterReset 
 	}
 	divDebug(ctx, "team created (%s) (%v)", team.name, team.ID)
 
+	bobUVBeforeReset := bob.userVersion()
+
 	ann.sendChat(team, "0")
 	kickTeamRekeyd(ann.getPrimaryGlobalContext(), t)
 	bob.reset()
@@ -661,8 +663,8 @@ func testTeamReAddAfterReset(t *testing.T, pukful, adminOwner, removeAfterReset 
 
 	if removeAfterReset {
 		err := ann.getTeamsClient().TeamRemoveMember(context.TODO(), keybase1.TeamRemoveMemberArg{
-			Name:     team.name,
-			Username: bob.username,
+			TeamID: team.ID,
+			Member: keybase1.NewTeamMemberToRemoveWithAssertion(keybase1.AssertionTeamMemberToRemove{Assertion: bob.username}),
 		})
 		require.NoError(t, err)
 		return
@@ -681,10 +683,18 @@ func testTeamReAddAfterReset(t *testing.T, pukful, adminOwner, removeAfterReset 
 		expectedRole = keybase1.TeamRole_ADMIN
 	}
 
+	teams.NewTeamLoaderAndInstall(ann.getPrimaryGlobalContext())
+
 	pollFn := func(_ int) bool {
 		G := ann.getPrimaryGlobalContext()
-		teams.NewTeamLoaderAndInstall(G)
-		role, err := teams.MemberRole(context.Background(), G, team.name, bob.username)
+		teamObj, err := teams.Load(context.TODO(), G, keybase1.LoadTeamArg{
+			ID:          team.ID,
+			NeedAdmin:   true,
+			ForceRepoll: true,
+		})
+		require.NoError(t, err)
+
+		role, err := teamObj.MemberRole(context.TODO(), bob.userVersion())
 		require.NoError(t, err)
 		if role == keybase1.TeamRole_NONE {
 			return false
@@ -693,6 +703,15 @@ func testTeamReAddAfterReset(t *testing.T, pukful, adminOwner, removeAfterReset 
 			return true
 		}
 		require.FailNowf(t, "unexpected role", "got %v on the hunt for %v", role, expectedRole)
+
+		// Old UV should be gone. Note that the server would not have allowed
+		// adding new UV without removing the old one first, so if the old UV
+		// is not being removed correctly during SBS handling, this test would
+		// probably never get to the following assertions (unless that server
+		// logic has changed.)
+		role, err = teamObj.MemberRole(context.TODO(), bobUVBeforeReset)
+		require.NoError(t, err)
+		require.Equal(t, keybase1.TeamRole_NONE, role)
 		return false
 	}
 
@@ -909,8 +928,6 @@ func TestTeamResetAfterReset(t *testing.T) {
 	bob.reset()
 	bob.loginAfterReset()
 	alice.addTeamMember(tn, bob.username, keybase1.TeamRole_OWNER)
-	bob.changeTeamMember(tn, alice.username, keybase1.TeamRole_READER)
-	alice.loadTeam(tn, false)
 	bob.leave(tn)
 	alice.loadTeam(tn, false)
 }

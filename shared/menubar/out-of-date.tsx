@@ -1,11 +1,8 @@
-import * as React from 'react'
 import * as Kb from '../common-adapters'
 import * as Styles from '../styles'
-import * as ConfigTypes from '../constants/types/config'
-import flags from '../util/feature-flags'
+import type * as ConfigTypes from '../constants/types/config'
 
 type Props = {
-  // eslint-disable-next-line no-use-before-define
   outOfDate?: ConfigTypes.OutOfDate
   updateNow?: () => void
 }
@@ -15,7 +12,7 @@ const getOutOfDateText = (outOfDate: ConfigTypes.OutOfDate) =>
   (outOfDate.message ? `: ${outOfDate.message}` : '.')
 
 const OutOfDate = ({outOfDate, updateNow}: Props) => {
-  if (!flags.outOfDateBanner || !outOfDate) return null
+  if (!outOfDate) return null
   const bannerColor = outOfDate.critical ? 'red' : 'yellow'
   return (
     <Kb.Banner color={bannerColor} style={styles.banner} textContainerStyle={styles.textContainerStyle}>
@@ -45,8 +42,7 @@ const OutOfDate = ({outOfDate, updateNow}: Props) => {
 
 const styles = Styles.styleSheetCreate(() => ({
   banner: {
-    paddingBottom: Styles.globalMargins.tiny,
-    paddingTop: Styles.globalMargins.tiny,
+    flexShrink: 0,
   },
   textContainerStyle: {
     paddingLeft: Styles.globalMargins.small,

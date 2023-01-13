@@ -25,6 +25,10 @@ import (
 	"golang.org/x/net/context"
 )
 
+const (
+	cacheNotWriterExpiration = 5 * time.Second
+)
+
 // KeybaseServiceBase implements most of KeybaseService from protocol
 // defined clients.
 type KeybaseServiceBase struct {
@@ -38,6 +42,7 @@ type KeybaseServiceBase struct {
 	kbfsClient      keybase1.KbfsInterface
 	kbfsMountClient keybase1.KbfsMountInterface
 	gitClient       keybase1.GitInterface
+	kvstoreClient   keybase1.KvstoreInterface
 	log             logger.Logger
 
 	config     Config
@@ -54,7 +59,8 @@ type KeybaseServiceBase struct {
 
 	teamCacheLock sync.RWMutex
 	// Map entries are removed when invalidated.
-	teamCache map[keybase1.TeamID]idutil.TeamInfo
+	teamCache      map[keybase1.TeamID]idutil.TeamInfo
+	notWriterCache map[keybase1.TeamID]map[keybase1.UID]time.Time
 }
 
 // Wrapper over `KeybaseServiceBase` implementing a `merkleRootGetter`
@@ -79,11 +85,12 @@ func (k *keybaseServiceMerkleGetter) VerifyMerkleRoot(
 // NewKeybaseServiceBase makes a new KeybaseService.
 func NewKeybaseServiceBase(config Config, kbCtx Context, log logger.Logger) *KeybaseServiceBase {
 	k := KeybaseServiceBase{
-		config:    config,
-		context:   kbCtx,
-		log:       log,
-		userCache: make(map[keybase1.UID]idutil.UserInfo),
-		teamCache: make(map[keybase1.TeamID]idutil.TeamInfo),
+		config:         config,
+		context:        kbCtx,
+		log:            log,
+		userCache:      make(map[keybase1.UID]idutil.UserInfo),
+		teamCache:      make(map[keybase1.TeamID]idutil.TeamInfo),
+		notWriterCache: make(map[keybase1.TeamID]map[keybase1.UID]time.Time),
 	}
 	if config != nil {
 		k.merkleRoot = NewEventuallyConsistentMerkleRoot(
@@ -101,7 +108,7 @@ func (k *KeybaseServiceBase) FillClients(
 	favoriteClient keybase1.FavoriteInterface,
 	kbfsClient keybase1.KbfsInterface,
 	kbfsMountClient keybase1.KbfsMountInterface,
-	gitClient keybase1.GitInterface) {
+	gitClient keybase1.GitInterface, kvstoreClient keybase1.KvstoreClient) {
 	k.identifyClient = identifyClient
 	k.userClient = userClient
 	k.teamsClient = teamsClient
@@ -111,6 +118,7 @@ func (k *KeybaseServiceBase) FillClients(
 	k.kbfsClient = kbfsClient
 	k.kbfsMountClient = kbfsMountClient
 	k.gitClient = gitClient
+	k.kvstoreClient = kvstoreClient
 }
 
 type addVerifyingKeyFunc func(kbfscrypto.VerifyingKey)
@@ -284,9 +292,40 @@ func (k *KeybaseServiceBase) setCachedTeamInfo(
 	defer k.teamCacheLock.Unlock()
 	if info.Name == kbname.NormalizedUsername("") {
 		delete(k.teamCache, tid)
+		delete(k.notWriterCache, tid)
 	} else {
 		k.teamCache[tid] = info
 	}
+}
+
+func (k *KeybaseServiceBase) getCachedNotWriter(
+	tid keybase1.TeamID, uid keybase1.UID) (notWriter bool) {
+	// Full write lock because of the delete-after-expiration code
+	// below.
+	k.teamCacheLock.Lock()
+	defer k.teamCacheLock.Unlock()
+	cachedTime, notWriter := k.notWriterCache[tid][uid]
+	if !notWriter {
+		return false
+	}
+
+	if k.config.Clock().Now().Sub(cachedTime) > cacheNotWriterExpiration {
+		delete(k.notWriterCache[tid], uid)
+		return false
+	}
+	return true
+}
+
+func (k *KeybaseServiceBase) setCachedNotWriter(
+	tid keybase1.TeamID, uid keybase1.UID) {
+	k.teamCacheLock.Lock()
+	defer k.teamCacheLock.Unlock()
+	teamMap := k.notWriterCache[tid]
+	if teamMap == nil {
+		teamMap = make(map[keybase1.UID]time.Time)
+		k.notWriterCache[tid] = teamMap
+	}
+	teamMap[uid] = k.config.Clock().Now()
 }
 
 // ClearCaches implements the KeybaseService interface for
@@ -303,6 +342,7 @@ func (k *KeybaseServiceBase) ClearCaches(ctx context.Context) {
 	k.teamCacheLock.Lock()
 	defer k.teamCacheLock.Unlock()
 	k.teamCache = make(map[keybase1.TeamID]idutil.TeamInfo)
+	k.notWriterCache = make(map[keybase1.TeamID]map[keybase1.UID]time.Time)
 }
 
 // LoggedIn implements keybase1.NotifySessionInterface.
@@ -485,10 +525,15 @@ func (k *KeybaseServiceBase) Identify(
 	switch err.(type) {
 	case nil:
 	case libkb.NoSigChainError, libkb.UserDeletedError:
+		ei.OnError(ctx)
+		// But if the username is blame, just return it, since the
+		// returned username would be useless and confusing.
+		if res.Ul.Name == "" {
+			return kbname.NormalizedUsername(""), keybase1.UserOrTeamID(""), err
+		}
 		k.log.CDebugf(ctx,
 			"Ignoring error (%s) for user %s with no sigchain; "+
 				"error type=%T", err, res.Ul.Name, err)
-		ei.OnError(ctx)
 	default:
 		// If the caller is waiting for breaks, let them know we got an error.
 		ei.OnError(ctx)
@@ -791,18 +836,27 @@ func (k *KeybaseServiceBase) LoadTeamPlusKeys(
 					// role is a reader, we need to check the reader
 					// map explicitly.
 					satisfiesDesires = cachedTeamInfo.Readers[desiredUser.Uid]
-				} else if !desiredKey.IsNil() {
-					// If the desired role was at least a writer, but
-					// the user isn't currently a writer, see if they
-					// ever were.
-					var err error
-					cachedTeamInfo, err = k.getLastWriterInfo(
-						ctx, cachedTeamInfo, tlfType, desiredUser.Uid,
-						desiredKey)
-					if err != nil {
-						return idutil.TeamInfo{}, err
+				} else {
+					if !desiredKey.IsNil() {
+						// If the desired role was at least a writer, but
+						// the user isn't currently a writer, see if they
+						// ever were.
+						var err error
+						cachedTeamInfo, err = k.getLastWriterInfo(
+							ctx, cachedTeamInfo, tlfType, desiredUser.Uid,
+							desiredKey)
+						if err != nil {
+							return idutil.TeamInfo{}, err
+						}
+						k.setCachedTeamInfo(tid, cachedTeamInfo)
 					}
-					k.setCachedTeamInfo(tid, cachedTeamInfo)
+
+					// If we have recently learned that the user is
+					// not a writer (e.g., of a public folder), we
+					// should rely on that cached info to avoid
+					// looking that up too often.
+					satisfiesDesires = k.getCachedNotWriter(
+						tid, desiredUser.Uid)
 				}
 			}
 		}
@@ -887,6 +941,15 @@ func (k *KeybaseServiceBase) LoadTeamPlusKeys(
 	}
 
 	k.setCachedTeamInfo(tid, info)
+
+	if desiredUser.Uid.Exists() && !info.Writers[desiredUser.Uid] &&
+		!(desiredRole == keybase1.TeamRole_NONE ||
+			desiredRole == keybase1.TeamRole_READER) {
+		// Remember that this user was not a writer for a short
+		// amount of time, to avoid repeated lookups for writers
+		// in a public folder (for example).
+		k.setCachedNotWriter(tid, desiredUser.Uid)
+	}
 
 	return info, nil
 }
@@ -1173,13 +1236,19 @@ func (k *KeybaseServiceBase) NotifyFavoritesChanged(ctx context.Context) error {
 
 // OnPathChange implements the SubscriptionNotifier interface.
 func (k *KeybaseServiceBase) OnPathChange(
-	subscriptionID SubscriptionID, path string,
-	topic keybase1.PathSubscriptionTopic) {
+	clientID SubscriptionManagerClientID,
+	subscriptionIDs []SubscriptionID, path string,
+	topics []keybase1.PathSubscriptionTopic) {
+	subscriptionIDStrings := make([]string, 0, len(subscriptionIDs))
+	for _, sid := range subscriptionIDs {
+		subscriptionIDStrings = append(subscriptionIDStrings, string(sid))
+	}
 	err := k.kbfsClient.FSSubscriptionNotifyPathEvent(
 		context.Background(), keybase1.FSSubscriptionNotifyPathEventArg{
-			SubscriptionID: string(subscriptionID),
-			Path:           path,
-			Topic:          topic,
+			ClientID:        string(clientID),
+			SubscriptionIDs: subscriptionIDStrings,
+			Path:            path,
+			Topics:          topics,
 		})
 	if err != nil {
 		k.log.CDebugf(
@@ -1189,11 +1258,17 @@ func (k *KeybaseServiceBase) OnPathChange(
 
 // OnNonPathChange implements the SubscriptionNotifier interface.
 func (k *KeybaseServiceBase) OnNonPathChange(
-	subscriptionID SubscriptionID, topic keybase1.SubscriptionTopic) {
+	clientID SubscriptionManagerClientID,
+	subscriptionIDs []SubscriptionID, topic keybase1.SubscriptionTopic) {
+	subscriptionIDStrings := make([]string, 0, len(subscriptionIDs))
+	for _, sid := range subscriptionIDs {
+		subscriptionIDStrings = append(subscriptionIDStrings, string(sid))
+	}
 	err := k.kbfsClient.FSSubscriptionNotifyEvent(context.Background(),
 		keybase1.FSSubscriptionNotifyEventArg{
-			SubscriptionID: string(subscriptionID),
-			Topic:          topic,
+			ClientID:        string(clientID),
+			SubscriptionIDs: subscriptionIDStrings,
+			Topic:           topic,
 		})
 	if err != nil {
 		k.log.CDebugf(
@@ -1319,9 +1394,20 @@ func (k *KeybaseDaemonRPC) TeamExit(context.Context, keybase1.TeamID) error {
 	return nil
 }
 
+// TeamRoleMapChanged implements keybase1.NotifyTeamInterface for KeybaseServiceBase.
+func (k *KeybaseDaemonRPC) TeamRoleMapChanged(context.Context, keybase1.UserTeamVersion) error {
+	return nil
+}
+
 // NewlyAddedToTeam implements keybase1.NotifyTeamInterface for
 // KeybaseServiceBase.
 func (k *KeybaseDaemonRPC) NewlyAddedToTeam(context.Context, keybase1.TeamID) error {
+	return nil
+}
+
+// TeamMetadataUpdate implements keybase1.NotifyTeamInterface for
+// KeybaseServiceBase.
+func (k *KeybaseDaemonRPC) TeamMetadataUpdate(context.Context) error {
 	return nil
 }
 
@@ -1337,6 +1423,18 @@ func (k *KeybaseDaemonRPC) TeamAbandoned(
 // AvatarUpdated implements keybase1.NotifyTeamInterface for KeybaseServiceBase.
 func (k *KeybaseDaemonRPC) AvatarUpdated(ctx context.Context,
 	arg keybase1.AvatarUpdatedArg) error {
+	return nil
+}
+
+// TeamTreeMembershipsPartial implements keybase1.NotifyTeamInterface for KeybaseServiceBase.
+func (k *KeybaseDaemonRPC) TeamTreeMembershipsPartial(context.Context,
+	keybase1.TeamTreeMembership) error {
+	return nil
+}
+
+// TeamTreeMembershipsDone implements keybase1.NotifyTeamInterface for KeybaseServiceBase.
+func (k *KeybaseDaemonRPC) TeamTreeMembershipsDone(context.Context,
+	keybase1.TeamTreeMembershipsDoneResult) error {
 	return nil
 }
 
@@ -1512,4 +1610,10 @@ func (k *KeybaseServiceBase) PutGitMetadata(
 		RepoID:   repoID,
 		Metadata: metadata,
 	})
+}
+
+// GetKVStoreClient implements the KeybaseService interface for
+// KeybaseServiceBase.
+func (k *KeybaseServiceBase) GetKVStoreClient() keybase1.KvstoreInterface {
+	return k.kvstoreClient
 }

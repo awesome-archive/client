@@ -1,8 +1,8 @@
 import * as React from 'react'
-import {connect} from '../../../../util/container'
+import * as Container from '../../../../util/container'
 import * as Constants from '../../../../constants/chat2'
 import * as Chat2Gen from '../../../../actions/chat2-gen'
-import * as Types from '../../../../constants/types/chat2'
+import type * as Types from '../../../../constants/types/chat2'
 import SetExplodeTime from '.'
 
 const makeItems = (meta: Types.ConversationMeta) => {
@@ -24,34 +24,33 @@ type OwnProps = {
   visible: boolean
 }
 
-const mapStateToProps = (state, ownProps: OwnProps) => {
-  const meta = Constants.getMeta(state, ownProps.conversationIDKey)
-  return {
-    items: makeItems(meta),
-    selected: Constants.getConversationExplodingMode(state, ownProps.conversationIDKey),
+const SetExplodePopup = React.memo(function SetExplodePopup(p: OwnProps) {
+  const {onHidden, visible, attachTo, conversationIDKey, onAfterSelect} = p
+  const _meta = Container.useSelector(state => Constants.getMeta(state, conversationIDKey))
+  const selected = Container.useSelector(state =>
+    Constants.getConversationExplodingMode(state, conversationIDKey)
+  )
+
+  const dispatch = Container.useDispatch()
+  const onSelect = React.useCallback(
+    (seconds: number) => {
+      dispatch(Chat2Gen.createSetConvExplodingMode({conversationIDKey, seconds}))
+      onAfterSelect?.(seconds)
+    },
+    [dispatch, onAfterSelect, conversationIDKey]
+  )
+
+  const items = React.useMemo(() => makeItems(_meta), [_meta])
+
+  const props = {
+    attachTo,
+    items,
+    onHidden,
+    onSelect,
+    selected,
+    visible,
   }
-}
-
-const mapDispatchToProps = (dispatch, ownProps: OwnProps) => ({
-  onSelect: seconds => {
-    dispatch(Chat2Gen.createSetConvExplodingMode({conversationIDKey: ownProps.conversationIDKey, seconds}))
-    ownProps.onAfterSelect && ownProps.onAfterSelect(seconds)
-  },
+  return <SetExplodeTime {...props} />
 })
-
-const mergeProps = (stateProps, dispatchProps, ownProps) => ({
-  attachTo: ownProps.attachTo,
-  items: stateProps.items,
-  onHidden: ownProps.onHidden,
-  onSelect: dispatchProps.onSelect,
-  selected: stateProps.selected,
-  visible: ownProps.visible,
-})
-
-const SetExplodePopup = connect(
-  mapStateToProps,
-  mapDispatchToProps,
-  mergeProps
-)(SetExplodeTime)
 
 export default SetExplodePopup

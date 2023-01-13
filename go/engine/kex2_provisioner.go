@@ -26,7 +26,7 @@ type Kex2Provisioner struct {
 	encryptionKey         libkb.NaclDHKeyPair
 	pps                   keybase1.PassphraseStream
 	provisioneeDeviceName string
-	provisioneeDeviceType string
+	provisioneeDeviceType keybase1.DeviceTypeV2
 	mctx                  libkb.MetaContext
 	proof                 *jsonw.Wrapper
 }
@@ -170,6 +170,11 @@ func (e *Kex2Provisioner) GetLogFactory() rpc.LogFactory {
 	return rpc.NewSimpleLogFactory(e.G().Log, nil)
 }
 
+// GetNetworkInstrumenter implements GetNetworkInstrumenter in kex2.Provisioner.
+func (e *Kex2Provisioner) GetNetworkInstrumenter() rpc.NetworkInstrumenterStorage {
+	return e.G().RemoteNetworkInstrumenterStorage
+}
+
 // GetHelloArg implements GetHelloArg in kex2.Provisioner.
 func (e *Kex2Provisioner) GetHelloArg() (arg keybase1.HelloArg, err error) {
 
@@ -177,7 +182,7 @@ func (e *Kex2Provisioner) GetHelloArg() (arg keybase1.HelloArg, err error) {
 	// kex2/provisioner interface
 	m := e.mctx
 
-	defer m.Trace("Kex2Provisioner#GetHelloArg()", func() error { return err })()
+	defer m.Trace("Kex2Provisioner#GetHelloArg()", &err)()
 
 	_ = m.UIs().ProvisionUI.DisplaySecretExchanged(context.Background(), 0)
 
@@ -212,7 +217,7 @@ func (e *Kex2Provisioner) GetHello2Arg() (arg2 keybase1.Hello2Arg, err error) {
 	// kex2/provisioner interface
 	m := e.mctx
 
-	defer m.Trace("Kex2Provisioner#GetHello2Arg", func() error { return err })()
+	defer m.Trace("Kex2Provisioner#GetHello2Arg", &err)()
 
 	var arg1 keybase1.HelloArg
 	arg1, err = e.GetHelloArg()
@@ -232,7 +237,7 @@ func (e *Kex2Provisioner) GetHello2Arg() (arg2 keybase1.Hello2Arg, err error) {
 // CounterSign implements CounterSign in kex2.Provisioner.
 func (e *Kex2Provisioner) CounterSign(input keybase1.HelloRes) (sig []byte, err error) {
 	m := e.mctx
-	defer m.Trace("Kex2Provisioner#CounterSign", func() error { return err })()
+	defer m.Trace("Kex2Provisioner#CounterSign", &err)()
 
 	jw, err := jsonw.Unmarshal([]byte(input))
 	if err != nil {
@@ -266,7 +271,7 @@ func (e *Kex2Provisioner) CounterSign2(input keybase1.Hello2Res) (output keybase
 
 	m := e.mctx
 
-	defer m.Trace("Kex2Provisioner#CounterSign2", func() error { return err })()
+	defer m.Trace("Kex2Provisioner#CounterSign2", &err)()
 	var key libkb.GenericKey
 	key, err = libkb.ImportKeypairFromKID(input.EncryptionKey)
 	if err != nil {
@@ -426,9 +431,9 @@ func (e *Kex2Provisioner) rememberDeviceInfo(jw *jsonw.Wrapper) error {
 	if err != nil {
 		return err
 	}
-	e.provisioneeDeviceType = dtype
+	e.provisioneeDeviceType, err = keybase1.StringToDeviceTypeV2(dtype)
 
-	return nil
+	return err
 }
 
 // Returns nil if there are no per-user-keys.

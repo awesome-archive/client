@@ -1,6 +1,7 @@
 // Copyright 2015 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
+//go:build !darwin
 // +build !darwin
 
 package client
@@ -54,13 +55,17 @@ func (s *CmdCtlStop) Run() (err error) {
 
 	switch runtime.GOOS {
 	case "windows":
-		if !s.shutdown {
-			install.StopAllButService(mctx, keybase1.ExitCode_OK)
+		if s.shutdown {
+			mctx.Error("the `shutdown` parameter is not supported on windows")
 		}
+		mctx.Info("stopping the keybase file system")
+		install.StopAllButService(mctx, keybase1.ExitCode_OK)
 		cli, err := GetCtlClient(s.G())
 		if err != nil {
+			mctx.Error("failed to get ctl client for shutdown: %s", err)
 			return err
 		}
+		mctx.Info("stopping the keybase background services")
 		return cli.StopService(mctx.Ctx(), keybase1.StopServiceArg{ExitCode: keybase1.ExitCode_OK})
 	default:
 		// On Linux, StopAllButService depends on a running service to tell it

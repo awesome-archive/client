@@ -159,6 +159,8 @@ type usernameLoginUI struct {
 	username string
 }
 
+var _ libkb.LoginUI = (*usernameLoginUI)(nil)
+
 func (s usernameLoginUI) GetEmailOrUsername(contextOld.Context, int) (string, error) {
 	return s.username, nil
 }
@@ -171,8 +173,8 @@ func (s usernameLoginUI) DisplayPaperKeyPhrase(contextOld.Context, keybase1.Disp
 func (s usernameLoginUI) DisplayPrimaryPaperKey(contextOld.Context, keybase1.DisplayPrimaryPaperKeyArg) error {
 	return nil
 }
-func (s usernameLoginUI) PromptResetAccount(_ context.Context, arg keybase1.PromptResetAccountArg) (bool, error) {
-	return false, nil
+func (s usernameLoginUI) PromptResetAccount(_ context.Context, arg keybase1.PromptResetAccountArg) (keybase1.ResetPromptResponse, error) {
+	return keybase1.ResetPromptResponse_NOTHING, nil
 }
 func (s usernameLoginUI) DisplayResetProgress(_ context.Context, arg keybase1.DisplayResetProgressArg) error {
 	return nil
@@ -182,6 +184,12 @@ func (s usernameLoginUI) ExplainDeviceRecovery(_ context.Context, arg keybase1.E
 }
 func (s usernameLoginUI) PromptPassphraseRecovery(_ context.Context, arg keybase1.PromptPassphraseRecoveryArg) (bool, error) {
 	return false, nil
+}
+func (s usernameLoginUI) ChooseDeviceToRecoverWith(_ context.Context, arg keybase1.ChooseDeviceToRecoverWithArg) (keybase1.DeviceID, error) {
+	return "", nil
+}
+func (s usernameLoginUI) DisplayResetMessage(_ context.Context, arg keybase1.DisplayResetMessageArg) error {
+	return nil
 }
 
 func (d *smuDeviceWrapper) popClone() *libkb.TestContext {
@@ -289,9 +297,9 @@ func (d *smuDeviceWrapper) loadEncryptionKIDs() (devices []keybase1.KID, backups
 		}
 
 		switch parent.DeviceType {
-		case libkb.DeviceTypePaper:
+		case keybase1.DeviceTypeV2_PAPER:
 			backups = append(backups, backupKey{KID: key.KID, deviceID: parent.DeviceID})
-		case libkb.DeviceTypeDesktop:
+		case keybase1.DeviceTypeV2_DESKTOP:
 			devices = append(devices, key.KID)
 		default:
 		}
@@ -386,7 +394,29 @@ func (u *smuUser) registerForNotifications() {
 	}
 }
 
+// nolint
+func (u *smuUser) waitForNewlyAddedToTeamByID(teamID keybase1.TeamID) {
+	u.ctx.t.Logf("waiting for newly added to team %s", teamID)
+
+	// process 10 team rotations or 10s worth of time
+	for i := 0; i < 10; i++ {
+		select {
+		case tid := <-u.notifications.newlyAddedToTeam:
+			u.ctx.t.Logf("team newly added notification received: %v", tid)
+			if tid.Eq(teamID) {
+				u.ctx.t.Logf("notification matched!")
+				return
+			}
+			u.ctx.t.Logf("ignoring newly added message (expected teamID = %q)", teamID)
+		case <-time.After(1 * time.Second * libkb.CITimeMultiplier(u.getPrimaryGlobalContext())):
+		}
+	}
+	u.ctx.t.Fatalf("timed out waiting for team newly added %s", teamID)
+}
+
 func (u *smuUser) waitForTeamAbandoned(teamID keybase1.TeamID) {
+	u.ctx.t.Logf("waiting for team abandoned %s", teamID)
+
 	// process 10 team rotations or 10s worth of time
 	for i := 0; i < 10; i++ {
 		select {
@@ -478,7 +508,7 @@ func (u *smuUser) createTeam2(readers, writers, admins, owners []*smuUser) smuTe
 	for i, list := range lists {
 		for _, u2 := range list {
 			_, err = cli.TeamAddMember(context.TODO(), keybase1.TeamAddMemberArg{
-				Name:     name,
+				TeamID:   x.TeamID,
 				Username: u2.username,
 				Role:     roles[i],
 			})
@@ -516,7 +546,7 @@ func (u *smuUser) loadTeam(teamname string, admin bool) *teams.Team {
 func (u *smuUser) addTeamMember(team smuTeam, member *smuUser, role keybase1.TeamRole) {
 	cli := u.getTeamsClient()
 	_, err := cli.TeamAddMember(context.TODO(), keybase1.TeamAddMemberArg{
-		Name:     team.name,
+		TeamID:   team.ID,
 		Username: member.username,
 		Role:     role,
 	})
@@ -698,7 +728,7 @@ func (u *smuUser) uid() keybase1.UID {
 func (u *smuUser) openTeam(team smuTeam, role keybase1.TeamRole) {
 	cli := u.getTeamsClient()
 	err := cli.TeamSetSettings(context.Background(), keybase1.TeamSetSettingsArg{
-		Name: team.name,
+		TeamID: team.ID,
 		Settings: keybase1.TeamSettings{
 			Open:   true,
 			JoinAs: role,
@@ -723,34 +753,40 @@ func (u *smuUser) readChatsWithError(team smuTeam) (messages []chat1.MessageUnbo
 	return u.readChatsWithErrorAndDevice(team, u.primaryDevice(), 0)
 }
 
+// readChatsWithErrorAndDevice reads chats from `team` to get *at least*
+// `nMessages` messages.
 func (u *smuUser) readChatsWithErrorAndDevice(team smuTeam, dev *smuDeviceWrapper, nMessages int) (messages []chat1.MessageUnboxed, err error) {
 	tctx := dev.popClone()
 
-	wait := time.Second
-	var totalWait time.Duration
-	for i := 0; i < 10; i++ {
+	pollInterval := 100 * time.Millisecond
+	timeLimit := 10 * time.Second
+	timeout := time.After(timeLimit)
+
+pollLoop:
+	for i := 0; ; i++ {
 		runner := client.NewCmdChatReadRunner(tctx.G)
 		runner.SetTeamChatForTest(team.name)
 		_, messages, err = runner.Fetch()
+		if err != nil {
+			u.ctx.t.Logf("readChatsWithErrorAndDevice failure: %s", err.Error())
+			return nil, err
+		}
 
-		if err == nil && len(messages) == nMessages {
-			if i != 0 {
-				u.ctx.t.Logf("readChatsWithErrorAndDevice success after retrying %d times, polling for %s", i, totalWait)
-			}
+		if len(messages) >= nMessages {
+			u.ctx.t.Logf("readChatsWithErrorAndDevice success after retrying %d times, got %d msgs, asked for %d", i, len(messages), nMessages)
 			return messages, nil
 		}
 
-		if err != nil {
-			u.ctx.t.Logf("readChatsWithErrorAndDevice failure: %s", err.Error())
+		u.ctx.t.Logf("readChatsWithErrorAndDevice trying again in %s (i=%d)", pollInterval, i)
+		select {
+		case <-timeout:
+			break pollLoop
+		case <-time.After(pollInterval):
 		}
-
-		u.ctx.t.Logf("readChatsWithErrorAndDevice trying again")
-		time.Sleep(wait)
-		totalWait += wait
 	}
 
-	u.ctx.t.Logf("Failed to readChatsWithErrorAndDevice after polling for %s", totalWait)
-	return messages, err
+	u.ctx.t.Logf("Failed to readChatsWithErrorAndDevice after polling for %s", timeLimit)
+	return nil, fmt.Errorf("failed to read messages after polling for %s", timeLimit)
 }
 
 func (u *smuUser) readChats(team smuTeam, nMessages int) {
@@ -761,7 +797,26 @@ func (u *smuUser) readChatsWithDevice(team smuTeam, dev *smuDeviceWrapper, nMess
 	messages, err := u.readChatsWithErrorAndDevice(team, dev, nMessages)
 	t := u.ctx.t
 	require.NoError(t, err)
+
+	// Filter out journeycards
+	originalLen := len(messages)
+	n := 0 // https://github.com/golang/go/wiki/SliceTricks#filter-in-place
+	for _, msg := range messages {
+		if !msg.IsJourneycard() {
+			messages[n] = msg
+			n++
+		}
+	}
+	messages = messages[:n]
+	if originalLen < len(messages) {
+		t.Logf("filtered out %v journeycard messages", originalLen-len(messages))
+	}
+
+	if len(messages) != nMessages {
+		t.Logf("messages: %v", chat1.MessageUnboxedDebugLines(messages))
+	}
 	require.Len(t, messages, nMessages)
+
 	for i, msg := range messages {
 		require.Equal(t, msg.Valid().MessageBody.Text().Body, fmt.Sprintf("%d", len(messages)-i-1))
 	}

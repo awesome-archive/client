@@ -1,23 +1,17 @@
 import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import * as Types from '../../constants/types/wallets'
+import type * as Types from '../../constants/types/wallets'
 import AccountReloader from '../common/account-reloader'
-import Header from './header/container'
 import Asset from '../asset/container'
 import Transaction from '../transaction/container'
-import Airdrop from '../airdrop/container'
-
-const stripePatternName = Styles.isMobile
-  ? require('../../images/icons/pattern-stripes-blue-5-black-5-mobile.png')
-  : 'pattern-stripes-blue-5-black-5-desktop.png'
 
 const stripePatternSize = Styles.isMobile ? 18 : 9
 
 export type Props = {
   acceptedDisclaimer: boolean
   accountID: Types.AccountID
-  airdropSelected: boolean
+  loadError: string
   loadingMore: boolean
   onBack: () => void
   onLoadMore: () => void
@@ -113,8 +107,16 @@ class Wallet extends React.Component<Props> {
     return index
   }
 
-  _renderSectionHeader = ({section}) =>
-    section.stripeHeader ? (
+  _renderSectionHeader = ({section}) => {
+    const stripePatternName = Styles.isMobile
+      ? Styles.isDarkMode()
+        ? require('../../images/icons/dark-pattern-stripes-blue-5-black-5-mobile.png')
+        : require('../../images/icons/pattern-stripes-blue-5-black-5-mobile.png')
+      : Styles.isDarkMode()
+      ? 'dark-pattern-stripes-blue-5-black-5-desktop.png'
+      : 'pattern-stripes-blue-5-black-5-desktop.png'
+
+    return section.stripeHeader ? (
       <Kb.BackgroundRepeatBox
         imageHeight={stripePatternSize}
         imageName={stripePatternName}
@@ -127,6 +129,7 @@ class Wallet extends React.Component<Props> {
     ) : (
       <Kb.SectionDivider label={section.title} />
     )
+  }
 
   _onEndReached = () => {
     // React native's SectionList seems to call the onEndReached method twice each time it hits the end of the list
@@ -139,19 +142,15 @@ class Wallet extends React.Component<Props> {
   render() {
     return (
       <Kb.Box2 direction="vertical" style={{flexGrow: 1}} fullHeight={true}>
-        {Styles.isMobile && <Header onBack={this.props.onBack} />}
-        {this.props.airdropSelected ? (
-          <Airdrop />
-        ) : (
-          <Kb.SectionList
-            sections={this.props.sections}
-            renderItem={this._renderItem}
-            renderSectionHeader={this._renderSectionHeader}
-            stickySectionHeadersEnabled={false}
-            keyExtractor={this._keyExtractor}
-            onEndReached={this._onEndReached}
-          />
-        )}
+        {!!this.props.loadError && <Kb.Banner color="yellow">{this.props.loadError}</Kb.Banner>}
+        <Kb.SectionList
+          sections={this.props.sections}
+          renderItem={this._renderItem}
+          renderSectionHeader={this._renderSectionHeader}
+          stickySectionHeadersEnabled={false}
+          keyExtractor={this._keyExtractor}
+          onEndReached={this._onEndReached}
+        />
         {this.props.loadingMore && <Kb.ProgressIndicator style={styles.loadingMore} />}
       </Kb.Box2>
     )
@@ -202,7 +201,7 @@ const styles = Styles.styleSheetCreate(
 // with AccountReloader.
 const MaybeReloaderWallet = (props: Props) => {
   const wallet = <Wallet {...props} />
-  return Styles.isMobile ? <AccountReloader onBack={props.onBack}>{wallet}</AccountReloader> : wallet
+  return Styles.isPhone ? <AccountReloader onBack={props.onBack}>{wallet}</AccountReloader> : wallet
 }
 
 export default MaybeReloaderWallet

@@ -1,7 +1,7 @@
 import * as React from 'react'
-import * as Styles from '../../styles'
-import {StylesTextCrossPlatform} from '../../common-adapters/text'
-import {MessageText} from '../../constants/types/chat2'
+import type * as Types from '../../constants/types/chat2'
+import {StylesTextCrossPlatform, LineClampType} from '../../common-adapters/text'
+import {MessageText, MessageAttachment} from '../../constants/types/chat2'
 
 type MarkdownComponentType =
   | 'inline-code'
@@ -27,7 +27,7 @@ export type MarkdownCreateComponent = (
 ) => React.ReactNode | null
 
 export type MarkdownMeta = {
-  message: MessageText
+  message: MessageText | MessageAttachment
 }
 
 export type StyleOverride = {
@@ -41,13 +41,16 @@ export type StyleOverride = {
   mailto?: StylesTextCrossPlatform
   preview?: StylesTextCrossPlatform
   kbfsPath?: StylesTextCrossPlatform
+  emoji?: StylesTextCrossPlatform
+  customEmoji?: StylesTextCrossPlatform
 }
 
 export type Props = {
   children?: string
-  lineClamp?: number
+  lineClamp?: LineClampType
   selectable?: boolean // desktop - applies to outer container only
   smallStandaloneEmoji?: boolean // don't increase font size for a standalone emoji
+  paragraphTextClassName?: string
   preview?: boolean // if true render a simplified version
   serviceOnly?: boolean // only render stuff from the service
 
@@ -62,11 +65,13 @@ export type Props = {
   // TODO type this up or remove it
   style?: any
   allowFontScaling?: boolean
-  meta?: MarkdownMeta | null
+  messageType?: Types.MessageType
   // This changes the specific style for specific types of text
   // for example you may want to make paragraphs, italics, etc to be black_50
   // but want blue_30 for the inline code
   styleOverride?: StyleOverride
+
+  virtualText?: boolean // desktop only, see text.desktop
 }
 
 export default class Markdown extends React.Component<Props> {}

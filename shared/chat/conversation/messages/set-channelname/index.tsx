@@ -1,5 +1,4 @@
-import * as React from 'react'
-import * as Types from '../../../../constants/types/chat2'
+import type * as Types from '../../../../constants/types/chat2'
 import * as Kb from '../../../../common-adapters'
 import * as Styles from '../../../../styles'
 
@@ -7,11 +6,12 @@ type Props = {
   message: Types.MessageSetChannelname
 }
 
-export default (props: Props) => (
+const ChannelNameMessage = (props: Props) => (
   <Kb.Text type="BodySmall" style={styles.text} selectable={true}>
-    set the channel name to <Kb.Text type="BodySmallItalic">#{props.message.newChannelname}</Kb.Text>
+    set the channel name to #{props.message.newChannelname}
   </Kb.Text>
 )
+export default ChannelNameMessage
 
 const styles = Styles.styleSheetCreate(
   () =>

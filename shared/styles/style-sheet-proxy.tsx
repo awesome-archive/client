@@ -1,36 +1,47 @@
-import {isDarkMode} from './dark-mode'
+import {isDarkMode, isDarkModePreference} from './dark-mode'
+import type {StylesCrossPlatform} from '.'
 
 // Support a closure to enable simple dark mode.
 // transform is to allow native styleSheetCreate to convert the object
 
-type FuncOrObject = (() => Object) | Object
-type Transform = (o: Object) => Object
+type Transform = (o: MapToStyles) => MapToStyles
 
-const styleSheetCreate = (funcOrObj: FuncOrObject, transform: Transform) => {
-  if (typeof funcOrObj === 'function') {
-    let lightCached: Object | undefined
-    let darkCached: Object | undefined
+type MapToStyles = Record<string, StylesCrossPlatform>
 
-    const wrapped = {
-      get: function(_: unknown, prop: string) {
+const styleSheetCreate = (f: () => MapToStyles, transform: Transform) => {
+  let lightCached: MapToStyles | undefined
+  let darkCached: MapToStyles | undefined
+
+  let darkModePrefCached = isDarkModePreference()
+
+  const keys = Object.keys(f())
+  const sheet = {}
+
+  keys.forEach(key => {
+    Object.defineProperty(sheet, key, {
+      configurable: false,
+      enumerable: true,
+      get() {
+        // if this changes we should kill our caches
+        const darkModePref = isDarkModePreference()
+        if (darkModePrefCached !== darkModePref) {
+          darkModePrefCached = darkModePref
+          darkCached = undefined
+          lightCached = undefined
+        }
+
         if (isDarkMode()) {
-          darkCached = darkCached || transform(funcOrObj())
-          return darkCached[prop]
+          darkCached = darkCached || transform(f())
+          return darkCached[key]
         } else {
-          lightCached = lightCached || transform(funcOrObj())
-          return lightCached[prop]
+          lightCached = lightCached || transform(f())
+          return lightCached[key]
         }
       },
-    }
+    })
+  })
 
-    return new Proxy({}, wrapped)
-  } else {
-    if (__DEV__) {
-      // TODO turn on to see whats not updated
-      // console.log('Darkmode incompatible style passed', funcOrObj)
-    }
-    return funcOrObj
-  }
+  return sheet
 }
 
 export default styleSheetCreate

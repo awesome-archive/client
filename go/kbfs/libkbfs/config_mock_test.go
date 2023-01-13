@@ -74,6 +74,8 @@ func NewConfigMock(c *gomock.Controller, ctr *SafeTestReporter) *ConfigMock {
 			loggerFn: func(m string) logger.Logger {
 				return logger.NewTestLogger(ctr.t)
 			},
+			quotaUsage: make(
+				map[keybase1.UserOrTeamID]*EventuallyConsistentQuotaUsage),
 		},
 	}
 	config.mockKbfs = NewMockKBFSOps(c)
@@ -141,10 +143,14 @@ func NewConfigMock(c *gomock.Controller, ctr *SafeTestReporter) *ConfigMock {
 	config.mode = modeTest{NewInitModeFromType(InitDefault)}
 	config.conflictResolutionDB = openCRDB(config)
 
+	config.subscriptionManagerManager = newSubscriptionManagerManager(config)
 	config.mockSubscriptionManagerPublisher = NewMockSubscriptionManagerPublisher(gomock.NewController(ctr.t))
-	config.subscriptionManagerPublisher = config.mockSubscriptionManagerPublisher
-	config.mockSubscriptionManagerPublisher.EXPECT().PublishChange(keybase1.SubscriptionTopic_FAVORITES).AnyTimes()
-	config.mockSubscriptionManagerPublisher.EXPECT().PublishChange(keybase1.SubscriptionTopic_JOURNAL_STATUS).AnyTimes()
+	config.mockSubscriptionManagerPublisher.EXPECT().PublishChange(
+		keybase1.SubscriptionTopic_FAVORITES).AnyTimes()
+	config.mockSubscriptionManagerPublisher.EXPECT().PublishChange(
+		keybase1.SubscriptionTopic_JOURNAL_STATUS).AnyTimes()
+	config.mockSubscriptionManagerPublisher.EXPECT().PublishChange(
+		keybase1.SubscriptionTopic_FILES_TAB_BADGE).AnyTimes()
 
 	return config
 }

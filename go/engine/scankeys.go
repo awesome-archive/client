@@ -43,7 +43,7 @@ func NewScanKeys(m libkb.MetaContext) (sk *ScanKeys, err error) {
 		MetaContextified: libkb.NewMetaContextified(m),
 	}
 
-	defer m.Trace("NewScanKeys", func() error { return err })()
+	defer m.Trace("NewScanKeys", &err)()
 
 	var loggedIn bool
 	loggedIn, err = isLoggedInWithError(m)
@@ -125,7 +125,6 @@ func (s *ScanKeys) KeysById(id uint64, fp []byte) []openpgp.Key {
 // requiredUsage will only equal KeyFlagSign, thus only public
 // keys are required.  If this ever changes upstream in openpgp,
 // this function will panic.
-//
 func (s *ScanKeys) KeysByIdUsage(id uint64, fp []byte, requiredUsage byte) []openpgp.Key {
 	if requiredUsage != packet.KeyFlagSign {
 		panic(fmt.Sprintf("ScanKeys: unexpected requiredUsage flags set: %x", requiredUsage))
@@ -196,7 +195,7 @@ func (s *ScanKeys) KeyOwnerByEntity(entity *openpgp.Entity) *libkb.User {
 // coalesceBlocks puts the synced pgp key block and all the pgp key
 // blocks in ring into s.skbs.
 func (s *ScanKeys) coalesceBlocks(m libkb.MetaContext, ring *libkb.SKBKeyringFile, synced []*libkb.SKB) (err error) {
-	defer m.Trace("ScanKeys#coalesceBlocks", func() error { return err })()
+	defer m.Trace("ScanKeys#coalesceBlocks", &err)()
 
 	// We want keys in this order: first local keyring keys that are LKSec, and
 	// then server synced keys that are triplesec. In ScanKeys.KeysById, this
@@ -312,7 +311,7 @@ func (s *ScanKeys) unlockByID(m libkb.MetaContext, id uint64) openpgp.EntityList
 			Reason:   unlockReason,
 			SecretUI: m.UIs().SecretUI,
 		}
-		secretStore := libkb.NewSecretStore(m.G(), s.me.GetNormalizedName())
+		secretStore := libkb.NewSecretStore(m, s.me.GetNormalizedName())
 		unlocked, err := skb.PromptAndUnlock(m, parg, secretStore, s.me)
 		if err != nil {
 			m.Warning("error unlocking key: %s", err)
@@ -335,7 +334,7 @@ func (s *ScanKeys) unlockAll(m libkb.MetaContext) openpgp.EntityList {
 			Reason:   unlockReason,
 			SecretUI: m.UIs().SecretUI,
 		}
-		secretStore := libkb.NewSecretStore(m.G(), s.me.GetNormalizedName())
+		secretStore := libkb.NewSecretStore(m, s.me.GetNormalizedName())
 		unlocked, err := skb.PromptAndUnlock(m, parg, secretStore, s.me)
 		if err != nil {
 			m.Warning("error unlocking key: %s", err)

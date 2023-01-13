@@ -1,51 +1,134 @@
 package io.keybase.ossifrage;
-
+import android.content.res.Configuration;
+import expo.modules.ApplicationLifecycleDispatcher;
+import expo.modules.ReactNativeHostWrapper;
 import android.app.Application;
 import android.content.Context;
-import android.support.multidex.MultiDex;
 
-import com.reactnativecommunity.netinfo.NetInfoPackage;
-import com.evernote.android.job.JobManager;
-import com.facebook.imagepipeline.core.ImagePipelineConfig;
+import androidx.multidex.MultiDex;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
+import androidx.work.WorkRequest;
+
+import com.facebook.react.PackageList;
 import com.facebook.react.ReactApplication;
+import com.facebook.react.ReactInstanceManager;
 import com.facebook.react.ReactNativeHost;
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.shell.MainPackageConfig;
-import com.facebook.react.shell.MainReactPackage;
-import com.dieam.reactnativepushnotification.ReactNativePushNotificationPackage;
+import com.facebook.react.config.ReactFeatureFlags;
 import com.facebook.soloader.SoLoader;
-import com.RNFetchBlob.RNFetchBlobPackage;
-import com.reactnativecommunity.webview.RNCWebViewPackage;
-import com.rt2zz.reactnativecontacts.ReactNativeContacts;
-import com.dylanvann.fastimage.FastImageViewPackage;
+import io.keybase.ossifrage.newarchitecture.MainApplicationReactNativeHost;
 
-import com.airbnb.android.react.lottie.LottiePackage;
-import com.swmansion.gesturehandler.react.RNGestureHandlerPackage;
-import com.swmansion.reanimated.ReanimatedPackage;
-import com.swmansion.rnscreens.RNScreensPackage;
-import com.brentvatne.react.ReactVideoPackage;
-
-
-import java.io.File;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
-import io.keybase.ossifrage.modules.StorybookConstants;
-import io.keybase.ossifrage.modules.BackgroundJobCreator;
-import io.keybase.ossifrage.modules.BackgroundSyncJob;
+import io.keybase.ossifrage.modules.BackgroundSyncWorker;
 import io.keybase.ossifrage.modules.NativeLogger;
-import io.keybase.ossifrage.generated.BasePackageList;
+import io.keybase.ossifrage.modules.StorybookConstants;
 
-import org.unimodules.adapters.react.ModuleRegistryAdapter;
-import org.unimodules.adapters.react.ReactModuleRegistryProvider;
-import org.unimodules.core.interfaces.SingletonModule;
+import static keybase.Keybase.forceGC;
 
 public class MainApplication extends Application implements ReactApplication {
-    private final ReactModuleRegistryProvider mModuleRegistryProvider = new ReactModuleRegistryProvider(new BasePackageList().getPackageList(), Arrays.<SingletonModule>asList());
+    private final ReactNativeHost mReactNativeHost = new ReactNativeHostWrapper(this, new ReactNativeHost(this) {
+        @Override
+        public boolean getUseDeveloperSupport() {
+            return BuildConfig.DEBUG;
+        }
+
+        @Override
+        protected List<ReactPackage> getPackages() {
+            //@SuppressWarnings("UnnecessaryLocalVariable")
+            List<ReactPackage> packages = new PackageList(this).getPackages();
+            packages.add(new KBReactPackage() {
+                @Override
+                public List<NativeModule> createNativeModules(ReactApplicationContext reactApplicationContext) {
+                    if (BuildConfig.BUILD_TYPE == "storyBook") {
+                        List<NativeModule> modules = new ArrayList<>();
+                        modules.add(new StorybookConstants(reactApplicationContext));
+                        return modules;
+                    } else {
+                        return super.createNativeModules(reactApplicationContext);
+                    }
+                }
+            });
+
+            return packages;
+        }
+
+        @Override
+        protected String getJSMainModuleName() {
+            return "index";
+        }
+    });
+
+    private final ReactNativeHost mNewArchitectureNativeHost = new MainApplicationReactNativeHost(this);
+
+    @Override
+    public ReactNativeHost getReactNativeHost() {
+        if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+            return mNewArchitectureNativeHost;
+        } else {
+            return mReactNativeHost;
+        }
+    }
+
+
+    @Override
+    public void onCreate() {
+        NativeLogger.info("MainApplication created");
+        super.onCreate();
+        // If you opted-in for the New Architecture, we enable the TurboModule system
+        ReactFeatureFlags.useTurboModules = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;
+        SoLoader.init(this, /* native exopackage */ false);
+        initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
+
+        // KB
+        ApplicationLifecycleDispatcher.onApplicationCreate(this);
+
+        WorkRequest backgroundSyncRequest =
+            new PeriodicWorkRequest.Builder(BackgroundSyncWorker.class,
+                    1, TimeUnit.HOURS,
+                    15, TimeUnit.MINUTES)
+            .build();
+        WorkManager
+            .getInstance(this)
+            .enqueue(backgroundSyncRequest);
+    }
+
+/**
+   * Loads Flipper in React Native templates. Call this in the onCreate method with something like
+   * initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
+   *
+   * @param context
+   * @param reactInstanceManager
+   */
+  private static void initializeFlipper(
+      Context context, ReactInstanceManager reactInstanceManager) {
+    if (BuildConfig.DEBUG) {
+      try {
+        /*
+         We use reflection here to pick up the class that initializes Flipper,
+        since Flipper library is not available in release mode
+        */
+        Class<?> aClass = Class.forName("io.keybase.ossifrage.ReactNativeFlipper");
+        aClass
+            .getMethod("initializeFlipper", Context.class, ReactInstanceManager.class)
+            .invoke(null, context, reactInstanceManager);
+      } catch (ClassNotFoundException e) {
+        e.printStackTrace();
+      } catch (NoSuchMethodException e) {
+        e.printStackTrace();
+      } catch (IllegalAccessException e) {
+        e.printStackTrace();
+      } catch (InvocationTargetException e) {
+        e.printStackTrace();
+      }
+    }
+  }
 
     @Override
     protected void attachBaseContext(Context base) {
@@ -54,77 +137,14 @@ public class MainApplication extends Application implements ReactApplication {
     }
 
     @Override
-    public void onCreate() {
-        NativeLogger.info("MainApplication created");
-        super.onCreate();
-        SoLoader.init(this, /* native exopackage */ false);
-        JobManager manager = JobManager.create(this);
-        manager.addJobCreator(new BackgroundJobCreator());
-
-        // Make sure exactly one background job is scheduled.
-        int numBackgroundJobs = manager.getAllJobRequestsForTag(BackgroundSyncJob.TAG).size();
-        if (numBackgroundJobs == 0) {
-            BackgroundSyncJob.scheduleJob();
-        } else if (numBackgroundJobs > 1) {
-            manager.cancelAllForTag(BackgroundSyncJob.TAG);
-            BackgroundSyncJob.scheduleJob();
-        }
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig);
     }
 
-    private final ReactNativeHost mReactNativeHost = new ReactNativeHost(this) {
-
-        @Override
-        public boolean getUseDeveloperSupport() {
-            return BuildConfig.DEBUG;
-        }
-
-        @Override
-        protected List<ReactPackage> getPackages() {
-            Context context = getApplicationContext();
-            // limit fresco memory
-            ImagePipelineConfig frescoConfig = ImagePipelineConfig
-                    .newBuilder(context)
-                    .setBitmapMemoryCacheParamsSupplier(new CustomBitmapMemoryCacheParamsSupplier(context))
-                    .build();
-
-            MainPackageConfig appConfig = new MainPackageConfig.Builder().setFrescoConfig(frescoConfig).build();
-
-            return Arrays.<ReactPackage>asList(
-                    new MainReactPackage(appConfig),
-                    new KBReactPackage() {
-                        @Override
-                        public List<NativeModule> createNativeModules(ReactApplicationContext reactApplicationContext) {
-                            if (BuildConfig.BUILD_TYPE == "storyBook") {
-                                List<NativeModule> modules = new ArrayList<>();
-                                modules.add(new StorybookConstants(reactApplicationContext));
-                                return modules;
-                            } else {
-                                return super.createNativeModules(reactApplicationContext);
-                            }
-                        }
-                    },
-                    new ReactNativePushNotificationPackage(),
-                    new RNFetchBlobPackage(),
-                    new ReactNativeContacts(),
-                    new FastImageViewPackage(),
-                    new LottiePackage(),
-                    new RNGestureHandlerPackage(),
-                    new RNScreensPackage(),
-                    new NetInfoPackage(),
-                    new RNCWebViewPackage(),
-                    new ReactVideoPackage(),
-                    new ReanimatedPackage(),
-                    new ModuleRegistryAdapter(mModuleRegistryProvider)
-            );
-        }
-        @Override
-        protected String getJSMainModuleName() {
-            return "index";
-        }
-    };
-
     @Override
-    public ReactNativeHost getReactNativeHost() {
-        return mReactNativeHost;
+    public void onLowMemory() {
+        forceGC();
+        super.onLowMemory();
     }
 }

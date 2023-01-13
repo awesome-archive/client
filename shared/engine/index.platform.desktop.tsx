@@ -1,32 +1,36 @@
-import net from 'net'
 import logger from '../logger'
 import {TransportShared, sharedCreateClient, rpcLog} from './transport-shared'
-import {isWindows, socketPath} from '../constants/platform.desktop'
-import {createClientType, incomingRPCCallbackType, connectDisconnectCB} from './index.platform'
+import {socketPath} from '../constants/platform.desktop'
 import {printRPCBytes} from '../local-debug'
+import type {SendArg, createClientType, incomingRPCCallbackType, connectDisconnectCB} from './index.platform'
+import KB2 from '../util/electron.desktop'
+import {Buffer} from 'buffer/'
 
+const {engineSend, mainWindowDispatch, ipcRendererOn} = KB2.functions
+const {isRenderer} = KB2.constants
+
+// used by node
 class NativeTransport extends TransportShared {
-  constructor(incomingRPCCallback, connectCallback, disconnectCallback) {
-    console.log('Transport using', socketPath)
+  constructor(
+    incomingRPCCallback: incomingRPCCallbackType,
+    connectCallback?: connectDisconnectCB,
+    disconnectCallback?: connectDisconnectCB
+  ) {
     super({path: socketPath}, connectCallback, disconnectCallback, incomingRPCCallback)
     this.needsConnect = true
   }
 
-  _connect_critical_section(cb: any) {
-    // eslint-disable-line camelcase
-    // @ts-ignore codemode issue
+  _connect_critical_section(cb: unknown) {
     super._connect_critical_section(cb)
-    windowsHack()
   }
 
   // Override Transport._raw_write -- see transport.iced in
   // framed-msgpack-rpc.
-  _raw_write(msg, encoding) {
+  _raw_write(msg: string, encoding: 'binary') {
     if (printRPCBytes) {
       const b = Buffer.from(msg, encoding)
       logger.debug('[RPC] Writing', b.length, 'bytes:', b.toString('hex'))
     }
-    // @ts-ignore codemode issue
     super._raw_write(msg, encoding)
   }
 
@@ -36,26 +40,42 @@ class NativeTransport extends TransportShared {
     if (printRPCBytes) {
       logger.debug('[RPC] Read', m.length, 'bytes:', m.toString('hex'))
     }
-    super.packetize_data(m)
+    // @ts-ignore this isn't a typical redux action
+    mainWindowDispatch({payload: m}, 'engineIncoming')
   }
 }
 
-function windowsHack() {
-  // This net.connect() is a heinous hack.
-  //
-  // On Windows, but *only* in the renderer thread, our RPC connection
-  // hangs until other random net module operations, at which point it
-  // unblocks.  Could be Electron, could be a node-framed-msgpack-rpc
-  // bug, who knows.
-  if (!isWindows || process.type !== 'renderer') {
-    return
+class ProxyNativeTransport extends TransportShared {
+  constructor(
+    incomingRPCCallback: incomingRPCCallbackType,
+    connectCallback?: connectDisconnectCB,
+    disconnectCallback?: connectDisconnectCB
+  ) {
+    super({}, connectCallback, disconnectCallback, incomingRPCCallback)
+
+    // We're connected locally so we never get disconnected
+    this.needsConnect = false
   }
 
-  // @ts-ignore codemode issue
-  var fake = net.connect({})
-  // net.connect({}) throws; we don't need to see the error, but we
-  // do need it not to raise up to the main thread.
-  fake.on('error', function() {})
+  // We're always connected, so call the callback
+  connect(cb: (err?: any) => void) {
+    cb()
+  }
+  is_connected() {
+    return true
+  }
+
+  // Override and disable some built in stuff in TransportShared
+  reset() {}
+  close() {}
+  get_generation() {
+    return 1
+  }
+
+  send(msg: SendArg) {
+    engineSend?.(msg)
+    return true
+  }
 }
 
 function createClient(
@@ -63,7 +83,24 @@ function createClient(
   connectCallback: connectDisconnectCB,
   disconnectCallback: connectDisconnectCB
 ) {
-  return sharedCreateClient(new NativeTransport(incomingRPCCallback, connectCallback, disconnectCallback))
+  if (!isRenderer) {
+    return sharedCreateClient(new NativeTransport(incomingRPCCallback, connectCallback, disconnectCallback))
+  } else {
+    const client = sharedCreateClient(
+      new ProxyNativeTransport(incomingRPCCallback, connectCallback, disconnectCallback)
+    )
+
+    // plumb back data from the node side
+    ipcRendererOn?.('engineIncoming', (_e, action) => {
+      try {
+        client.transport.packetize_data(new Buffer(action.payload))
+      } catch (e) {
+        logger.error('>>>> rpcOnJs JS thrown!', e)
+      }
+    })
+
+    return client
+  }
 }
 
 function resetClient(client: createClientType) {

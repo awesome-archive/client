@@ -1,12 +1,14 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.2 (https://github.com/keybase/node-avdl-compiler)
+// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
 //   Input file: avdl/chat1/common.avdl
 
 package chat1
 
 import (
 	"errors"
+	"fmt"
 	gregor1 "github.com/keybase/client/go/protocol/gregor1"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
+	stellar1 "github.com/keybase/client/go/protocol/stellar1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
@@ -169,7 +171,7 @@ func (e ConversationExistence) String() string {
 	if v, ok := ConversationExistenceRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type ConversationMembersType int
@@ -201,7 +203,7 @@ func (e ConversationMembersType) String() string {
 	if v, ok := ConversationMembersTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type SyncInboxResType int
@@ -230,7 +232,7 @@ func (e SyncInboxResType) String() string {
 	if v, ok := SyncInboxResTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type MessageType int
@@ -310,6 +312,8 @@ const (
 	TopicType_CHAT         TopicType = 1
 	TopicType_DEV          TopicType = 2
 	TopicType_KBFSFILEEDIT TopicType = 3
+	TopicType_EMOJI        TopicType = 4
+	TopicType_EMOJICROSS   TopicType = 5
 )
 
 func (o TopicType) DeepCopy() TopicType { return o }
@@ -319,6 +323,8 @@ var TopicTypeMap = map[string]TopicType{
 	"CHAT":         1,
 	"DEV":          2,
 	"KBFSFILEEDIT": 3,
+	"EMOJI":        4,
+	"EMOJICROSS":   5,
 }
 
 var TopicTypeRevMap = map[TopicType]string{
@@ -326,6 +332,8 @@ var TopicTypeRevMap = map[TopicType]string{
 	1: "CHAT",
 	2: "DEV",
 	3: "KBFSFILEEDIT",
+	4: "EMOJI",
+	5: "EMOJICROSS",
 }
 
 type TeamType int
@@ -354,7 +362,7 @@ func (e TeamType) String() string {
 	if v, ok := TeamTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type NotificationKind int
@@ -408,7 +416,7 @@ func (e GlobalAppNotificationSetting) String() string {
 	if v, ok := GlobalAppNotificationSettingRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type GlobalAppNotificationSettings struct {
@@ -467,7 +475,7 @@ func (e ConversationStatus) String() string {
 	if v, ok := ConversationStatusRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type ConversationMember struct {
@@ -579,7 +587,7 @@ func (e ConversationMemberStatus) String() string {
 	if v, ok := ConversationMemberStatusRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type Pagination struct {
@@ -626,6 +634,32 @@ func (o RateLimit) DeepCopy() RateLimit {
 	}
 }
 
+type InboxParticipantsMode int
+
+const (
+	InboxParticipantsMode_ALL        InboxParticipantsMode = 0
+	InboxParticipantsMode_SKIP_TEAMS InboxParticipantsMode = 1
+)
+
+func (o InboxParticipantsMode) DeepCopy() InboxParticipantsMode { return o }
+
+var InboxParticipantsModeMap = map[string]InboxParticipantsMode{
+	"ALL":        0,
+	"SKIP_TEAMS": 1,
+}
+
+var InboxParticipantsModeRevMap = map[InboxParticipantsMode]string{
+	0: "ALL",
+	1: "SKIP_TEAMS",
+}
+
+func (e InboxParticipantsMode) String() string {
+	if v, ok := InboxParticipantsModeRevMap[e]; ok {
+		return v
+	}
+	return fmt.Sprintf("%v", int(e))
+}
+
 type GetInboxQuery struct {
 	ConvID            *ConversationID            `codec:"convID,omitempty" json:"convID,omitempty"`
 	TopicType         *TopicType                 `codec:"topicType,omitempty" json:"topicType,omitempty"`
@@ -644,7 +678,9 @@ type GetInboxQuery struct {
 	ReadOnly          bool                       `codec:"readOnly" json:"readOnly"`
 	ComputeActiveList bool                       `codec:"computeActiveList" json:"computeActiveList"`
 	SummarizeMaxMsgs  bool                       `codec:"summarizeMaxMsgs" json:"summarizeMaxMsgs"`
+	ParticipantsMode  InboxParticipantsMode      `codec:"participantsMode" json:"participantsMode"`
 	SkipBgLoads       bool                       `codec:"skipBgLoads" json:"skipBgLoads"`
+	AllowUnseenQuery  bool                       `codec:"allowUnseenQuery" json:"allowUnseenQuery"`
 }
 
 func (o GetInboxQuery) DeepCopy() GetInboxQuery {
@@ -764,7 +800,9 @@ func (o GetInboxQuery) DeepCopy() GetInboxQuery {
 		ReadOnly:          o.ReadOnly,
 		ComputeActiveList: o.ComputeActiveList,
 		SummarizeMaxMsgs:  o.SummarizeMaxMsgs,
+		ParticipantsMode:  o.ParticipantsMode.DeepCopy(),
 		SkipBgLoads:       o.SkipBgLoads,
+		AllowUnseenQuery:  o.AllowUnseenQuery,
 	}
 }
 
@@ -836,6 +874,7 @@ type ConversationMetadata struct {
 	ActiveList     []gregor1.UID             `codec:"activeList" json:"activeList"`
 	AllList        []gregor1.UID             `codec:"allList" json:"allList"`
 	ResetList      []gregor1.UID             `codec:"resetList" json:"resetList"`
+	IsDefaultConv  bool                      `codec:"d" json:"isDefaultConv"`
 }
 
 func (o ConversationMetadata) DeepCopy() ConversationMetadata {
@@ -911,6 +950,7 @@ func (o ConversationMetadata) DeepCopy() ConversationMetadata {
 			}
 			return ret
 		})(o.ResetList),
+		IsDefaultConv: o.IsDefaultConv,
 	}
 }
 
@@ -949,18 +989,40 @@ func (o ConversationNotificationInfo) DeepCopy() ConversationNotificationInfo {
 }
 
 type ConversationReaderInfo struct {
-	Mtime     gregor1.Time             `codec:"mtime" json:"mtime"`
-	ReadMsgid MessageID                `codec:"readMsgid" json:"readMsgid"`
-	MaxMsgid  MessageID                `codec:"maxMsgid" json:"maxMsgid"`
-	Status    ConversationMemberStatus `codec:"status" json:"status"`
+	Mtime             gregor1.Time                 `codec:"mtime" json:"mtime"`
+	ReadMsgid         MessageID                    `codec:"readMsgid" json:"readMsgid"`
+	MaxMsgid          MessageID                    `codec:"maxMsgid" json:"maxMsgid"`
+	Status            ConversationMemberStatus     `codec:"status" json:"status"`
+	UntrustedTeamRole keybase1.TeamRole            `codec:"untrustedTeamRole" json:"untrustedTeamRole"`
+	LastSendTime      gregor1.Time                 `codec:"l" json:"l"`
+	Journeycard       *ConversationJourneycardInfo `codec:"jc,omitempty" json:"jc,omitempty"`
 }
 
 func (o ConversationReaderInfo) DeepCopy() ConversationReaderInfo {
 	return ConversationReaderInfo{
-		Mtime:     o.Mtime.DeepCopy(),
-		ReadMsgid: o.ReadMsgid.DeepCopy(),
-		MaxMsgid:  o.MaxMsgid.DeepCopy(),
-		Status:    o.Status.DeepCopy(),
+		Mtime:             o.Mtime.DeepCopy(),
+		ReadMsgid:         o.ReadMsgid.DeepCopy(),
+		MaxMsgid:          o.MaxMsgid.DeepCopy(),
+		Status:            o.Status.DeepCopy(),
+		UntrustedTeamRole: o.UntrustedTeamRole.DeepCopy(),
+		LastSendTime:      o.LastSendTime.DeepCopy(),
+		Journeycard: (func(x *ConversationJourneycardInfo) *ConversationJourneycardInfo {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.Journeycard),
+	}
+}
+
+type ConversationJourneycardInfo struct {
+	WelcomeEligible bool `codec:"w" json:"w"`
+}
+
+func (o ConversationJourneycardInfo) DeepCopy() ConversationJourneycardInfo {
+	return ConversationJourneycardInfo{
+		WelcomeEligible: o.WelcomeEligible,
 	}
 }
 
@@ -1308,6 +1370,7 @@ type MessageClientHeader struct {
 	EphemeralMetadata *MsgEphemeralMetadata    `codec:"em,omitempty" json:"em,omitempty"`
 	PairwiseMacs      map[keybase1.KID][]byte  `codec:"pm" json:"pm"`
 	BotUID            *gregor1.UID             `codec:"b,omitempty" json:"b,omitempty"`
+	TxID              *stellar1.TransactionID  `codec:"t,omitempty" json:"t,omitempty"`
 }
 
 func (o MessageClientHeader) DeepCopy() MessageClientHeader {
@@ -1407,6 +1470,13 @@ func (o MessageClientHeader) DeepCopy() MessageClientHeader {
 			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.BotUID),
+		TxID: (func(x *stellar1.TransactionID) *stellar1.TransactionID {
+			if x == nil {
+				return nil
+			}
+			tmp := (*x).DeepCopy()
+			return &tmp
+		})(o.TxID),
 	}
 }
 
@@ -1630,7 +1700,7 @@ func (e InboxResType) String() string {
 	if v, ok := InboxResTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type InboxViewFull struct {
@@ -1747,7 +1817,7 @@ func (e RetentionPolicyType) String() string {
 	if v, ok := RetentionPolicyTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type RetentionPolicy struct {
@@ -1934,6 +2004,9 @@ const (
 	GetThreadReason_KBFSFILEACTIVITY   GetThreadReason = 8
 	GetThreadReason_COINFLIP           GetThreadReason = 9
 	GetThreadReason_BOTCOMMANDS        GetThreadReason = 10
+	GetThreadReason_EMOJISOURCE        GetThreadReason = 11
+	GetThreadReason_FORWARDMSG         GetThreadReason = 12
+	GetThreadReason_LOCALIZE           GetThreadReason = 13
 )
 
 func (o GetThreadReason) DeepCopy() GetThreadReason { return o }
@@ -1950,6 +2023,9 @@ var GetThreadReasonMap = map[string]GetThreadReason{
 	"KBFSFILEACTIVITY":   8,
 	"COINFLIP":           9,
 	"BOTCOMMANDS":        10,
+	"EMOJISOURCE":        11,
+	"FORWARDMSG":         12,
+	"LOCALIZE":           13,
 }
 
 var GetThreadReasonRevMap = map[GetThreadReason]string{
@@ -1964,13 +2040,16 @@ var GetThreadReasonRevMap = map[GetThreadReason]string{
 	8:  "KBFSFILEACTIVITY",
 	9:  "COINFLIP",
 	10: "BOTCOMMANDS",
+	11: "EMOJISOURCE",
+	12: "FORWARDMSG",
+	13: "LOCALIZE",
 }
 
 func (e GetThreadReason) String() string {
 	if v, ok := GetThreadReasonRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type ReIndexingMode int
@@ -1999,7 +2078,7 @@ func (e ReIndexingMode) String() string {
 	if v, ok := ReIndexingModeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type SearchOpts struct {
@@ -2019,6 +2098,9 @@ type SearchOpts struct {
 	MaxConvsHit       int             `codec:"maxConvsHit" json:"maxConvsHit"`
 	ConvID            *ConversationID `codec:"convID,omitempty" json:"convID,omitempty"`
 	MaxNameConvs      int             `codec:"maxNameConvs" json:"maxNameConvs"`
+	MaxTeams          int             `codec:"maxTeams" json:"maxTeams"`
+	MaxBots           int             `codec:"maxBots" json:"maxBots"`
+	SkipBotCache      bool            `codec:"skipBotCache" json:"skipBotCache"`
 }
 
 func (o SearchOpts) DeepCopy() SearchOpts {
@@ -2051,6 +2133,9 @@ func (o SearchOpts) DeepCopy() SearchOpts {
 			return &tmp
 		})(o.ConvID),
 		MaxNameConvs: o.MaxNameConvs,
+		MaxTeams:     o.MaxTeams,
+		MaxBots:      o.MaxBots,
+		SkipBotCache: o.SkipBotCache,
 	}
 }
 
@@ -2200,21 +2285,34 @@ func (o ChatSearchIndexStatus) DeepCopy() ChatSearchIndexStatus {
 }
 
 type AssetMetadataImage struct {
-	Width  int `codec:"width" json:"width"`
-	Height int `codec:"height" json:"height"`
+	Width     int       `codec:"width" json:"width"`
+	Height    int       `codec:"height" json:"height"`
+	AudioAmps []float64 `codec:"audioAmps" json:"audioAmps"`
 }
 
 func (o AssetMetadataImage) DeepCopy() AssetMetadataImage {
 	return AssetMetadataImage{
 		Width:  o.Width,
 		Height: o.Height,
+		AudioAmps: (func(x []float64) []float64 {
+			if x == nil {
+				return nil
+			}
+			ret := make([]float64, len(x))
+			for i, v := range x {
+				vCopy := v
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.AudioAmps),
 	}
 }
 
 type AssetMetadataVideo struct {
-	Width      int `codec:"width" json:"width"`
-	Height     int `codec:"height" json:"height"`
-	DurationMs int `codec:"durationMs" json:"durationMs"`
+	Width      int  `codec:"width" json:"width"`
+	Height     int  `codec:"height" json:"height"`
+	DurationMs int  `codec:"durationMs" json:"durationMs"`
+	IsAudio    bool `codec:"isAudio" json:"isAudio"`
 }
 
 func (o AssetMetadataVideo) DeepCopy() AssetMetadataVideo {
@@ -2222,16 +2320,7 @@ func (o AssetMetadataVideo) DeepCopy() AssetMetadataVideo {
 		Width:      o.Width,
 		Height:     o.Height,
 		DurationMs: o.DurationMs,
-	}
-}
-
-type AssetMetadataAudio struct {
-	DurationMs int `codec:"durationMs" json:"durationMs"`
-}
-
-func (o AssetMetadataAudio) DeepCopy() AssetMetadataAudio {
-	return AssetMetadataAudio{
-		DurationMs: o.DurationMs,
+		IsAudio:    o.IsAudio,
 	}
 }
 
@@ -2241,7 +2330,6 @@ const (
 	AssetMetadataType_NONE  AssetMetadataType = 0
 	AssetMetadataType_IMAGE AssetMetadataType = 1
 	AssetMetadataType_VIDEO AssetMetadataType = 2
-	AssetMetadataType_AUDIO AssetMetadataType = 3
 )
 
 func (o AssetMetadataType) DeepCopy() AssetMetadataType { return o }
@@ -2250,21 +2338,18 @@ var AssetMetadataTypeMap = map[string]AssetMetadataType{
 	"NONE":  0,
 	"IMAGE": 1,
 	"VIDEO": 2,
-	"AUDIO": 3,
 }
 
 var AssetMetadataTypeRevMap = map[AssetMetadataType]string{
 	0: "NONE",
 	1: "IMAGE",
 	2: "VIDEO",
-	3: "AUDIO",
 }
 
 type AssetMetadata struct {
 	AssetType__ AssetMetadataType   `codec:"assetType" json:"assetType"`
 	Image__     *AssetMetadataImage `codec:"image,omitempty" json:"image,omitempty"`
 	Video__     *AssetMetadataVideo `codec:"video,omitempty" json:"video,omitempty"`
-	Audio__     *AssetMetadataAudio `codec:"audio,omitempty" json:"audio,omitempty"`
 }
 
 func (o *AssetMetadata) AssetType() (ret AssetMetadataType, err error) {
@@ -2277,11 +2362,6 @@ func (o *AssetMetadata) AssetType() (ret AssetMetadataType, err error) {
 	case AssetMetadataType_VIDEO:
 		if o.Video__ == nil {
 			err = errors.New("unexpected nil value for Video__")
-			return ret, err
-		}
-	case AssetMetadataType_AUDIO:
-		if o.Audio__ == nil {
-			err = errors.New("unexpected nil value for Audio__")
 			return ret, err
 		}
 	}
@@ -2308,16 +2388,6 @@ func (o AssetMetadata) Video() (res AssetMetadataVideo) {
 	return *o.Video__
 }
 
-func (o AssetMetadata) Audio() (res AssetMetadataAudio) {
-	if o.AssetType__ != AssetMetadataType_AUDIO {
-		panic("wrong case accessed")
-	}
-	if o.Audio__ == nil {
-		return
-	}
-	return *o.Audio__
-}
-
 func NewAssetMetadataWithImage(v AssetMetadataImage) AssetMetadata {
 	return AssetMetadata{
 		AssetType__: AssetMetadataType_IMAGE,
@@ -2329,13 +2399,6 @@ func NewAssetMetadataWithVideo(v AssetMetadataVideo) AssetMetadata {
 	return AssetMetadata{
 		AssetType__: AssetMetadataType_VIDEO,
 		Video__:     &v,
-	}
-}
-
-func NewAssetMetadataWithAudio(v AssetMetadataAudio) AssetMetadata {
-	return AssetMetadata{
-		AssetType__: AssetMetadataType_AUDIO,
-		Audio__:     &v,
 	}
 }
 
@@ -2356,13 +2419,6 @@ func (o AssetMetadata) DeepCopy() AssetMetadata {
 			tmp := (*x).DeepCopy()
 			return &tmp
 		})(o.Video__),
-		Audio__: (func(x *AssetMetadataAudio) *AssetMetadataAudio {
-			if x == nil {
-				return nil
-			}
-			tmp := (*x).DeepCopy()
-			return &tmp
-		})(o.Audio__),
 	}
 }
 
@@ -2391,6 +2447,7 @@ type Asset struct {
 	Size      int64         `codec:"size" json:"size"`
 	MimeType  string        `codec:"mimeType" json:"mimeType"`
 	EncHash   Hash          `codec:"encHash" json:"encHash"`
+	PtHash    Hash          `codec:"ptHash" json:"ptHash"`
 	Key       []byte        `codec:"key" json:"key"`
 	VerifyKey []byte        `codec:"verifyKey" json:"verifyKey"`
 	Title     string        `codec:"title" json:"title"`
@@ -2409,6 +2466,7 @@ func (o Asset) DeepCopy() Asset {
 		Size:     o.Size,
 		MimeType: o.MimeType,
 		EncHash:  o.EncHash.DeepCopy(),
+		PtHash:   o.PtHash.DeepCopy(),
 		Key: (func(x []byte) []byte {
 			if x == nil {
 				return nil
@@ -2439,6 +2497,7 @@ const (
 	BotCommandsAdvertisementTyp_PUBLIC        BotCommandsAdvertisementTyp = 0
 	BotCommandsAdvertisementTyp_TLFID_MEMBERS BotCommandsAdvertisementTyp = 1
 	BotCommandsAdvertisementTyp_TLFID_CONVS   BotCommandsAdvertisementTyp = 2
+	BotCommandsAdvertisementTyp_CONV          BotCommandsAdvertisementTyp = 3
 )
 
 func (o BotCommandsAdvertisementTyp) DeepCopy() BotCommandsAdvertisementTyp { return o }
@@ -2447,19 +2506,21 @@ var BotCommandsAdvertisementTypMap = map[string]BotCommandsAdvertisementTyp{
 	"PUBLIC":        0,
 	"TLFID_MEMBERS": 1,
 	"TLFID_CONVS":   2,
+	"CONV":          3,
 }
 
 var BotCommandsAdvertisementTypRevMap = map[BotCommandsAdvertisementTyp]string{
 	0: "PUBLIC",
 	1: "TLFID_MEMBERS",
 	2: "TLFID_CONVS",
+	3: "CONV",
 }
 
 func (e BotCommandsAdvertisementTyp) String() string {
 	if v, ok := BotCommandsAdvertisementTypRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type TeamMember struct {
@@ -2473,6 +2534,129 @@ func (o TeamMember) DeepCopy() TeamMember {
 		Uid:    o.Uid.DeepCopy(),
 		Role:   o.Role.DeepCopy(),
 		Status: o.Status.DeepCopy(),
+	}
+}
+
+type LastActiveStatus int
+
+const (
+	LastActiveStatus_NONE            LastActiveStatus = 0
+	LastActiveStatus_ACTIVE          LastActiveStatus = 1
+	LastActiveStatus_RECENTLY_ACTIVE LastActiveStatus = 2
+)
+
+func (o LastActiveStatus) DeepCopy() LastActiveStatus { return o }
+
+var LastActiveStatusMap = map[string]LastActiveStatus{
+	"NONE":            0,
+	"ACTIVE":          1,
+	"RECENTLY_ACTIVE": 2,
+}
+
+var LastActiveStatusRevMap = map[LastActiveStatus]string{
+	0: "NONE",
+	1: "ACTIVE",
+	2: "RECENTLY_ACTIVE",
+}
+
+func (e LastActiveStatus) String() string {
+	if v, ok := LastActiveStatusRevMap[e]; ok {
+		return v
+	}
+	return fmt.Sprintf("%v", int(e))
+}
+
+type ChatMemberDetails struct {
+	Uid      keybase1.UID      `codec:"uid" json:"uid"`
+	Username string            `codec:"username" json:"username"`
+	FullName keybase1.FullName `codec:"fullName" json:"fullName"`
+}
+
+func (o ChatMemberDetails) DeepCopy() ChatMemberDetails {
+	return ChatMemberDetails{
+		Uid:      o.Uid.DeepCopy(),
+		Username: o.Username,
+		FullName: o.FullName.DeepCopy(),
+	}
+}
+
+type ChatMembersDetails struct {
+	Owners         []ChatMemberDetails `codec:"owners" json:"owners"`
+	Admins         []ChatMemberDetails `codec:"admins" json:"admins"`
+	Writers        []ChatMemberDetails `codec:"writers" json:"writers"`
+	Readers        []ChatMemberDetails `codec:"readers" json:"readers"`
+	Bots           []ChatMemberDetails `codec:"bots" json:"bots"`
+	RestrictedBots []ChatMemberDetails `codec:"restrictedBots" json:"restrictedBots"`
+}
+
+func (o ChatMembersDetails) DeepCopy() ChatMembersDetails {
+	return ChatMembersDetails{
+		Owners: (func(x []ChatMemberDetails) []ChatMemberDetails {
+			if x == nil {
+				return nil
+			}
+			ret := make([]ChatMemberDetails, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Owners),
+		Admins: (func(x []ChatMemberDetails) []ChatMemberDetails {
+			if x == nil {
+				return nil
+			}
+			ret := make([]ChatMemberDetails, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Admins),
+		Writers: (func(x []ChatMemberDetails) []ChatMemberDetails {
+			if x == nil {
+				return nil
+			}
+			ret := make([]ChatMemberDetails, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Writers),
+		Readers: (func(x []ChatMemberDetails) []ChatMemberDetails {
+			if x == nil {
+				return nil
+			}
+			ret := make([]ChatMemberDetails, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Readers),
+		Bots: (func(x []ChatMemberDetails) []ChatMemberDetails {
+			if x == nil {
+				return nil
+			}
+			ret := make([]ChatMemberDetails, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.Bots),
+		RestrictedBots: (func(x []ChatMemberDetails) []ChatMemberDetails {
+			if x == nil {
+				return nil
+			}
+			ret := make([]ChatMemberDetails, len(x))
+			for i, v := range x {
+				vCopy := v.DeepCopy()
+				ret[i] = vCopy
+			}
+			return ret
+		})(o.RestrictedBots),
 	}
 }
 

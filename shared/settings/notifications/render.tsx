@@ -1,23 +1,24 @@
-import * as React from 'react'
+import * as Container from '../../util/container'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import * as Types from '../../constants/types/settings'
-import {isLinux} from '../../constants/platform'
-import {Props} from './index'
+import type * as Types from '../../constants/types/settings'
+import type {Props} from './index'
 
-const Group = (props: {
+type GroupProps = {
   allowEdit: boolean
   groupName: string
   label?: string
   onToggle: (groupName: string, name: string) => void
   onToggleUnsubscribeAll?: () => void
-  settings: Array<Types._NotificationsSettingsState> | null
-  title: string
+  settings: Array<Types.NotificationsSettingsState> | null
+  title?: string
   unsub?: string
   unsubscribedFromAll: boolean
-}) => (
+}
+
+export const Group = (props: GroupProps) => (
   <Kb.Box2 direction="vertical" fullWidth={true}>
-    <Kb.Text type="Header">{props.title}</Kb.Text>
+    {!!props.title && <Kb.Text type="Header">{props.title}</Kb.Text>}
     {!!props.label && (
       <Kb.Text type="BodySmall" style={styles.label}>
         {props.label}
@@ -43,14 +44,14 @@ const Group = (props: {
         ))}
     </Kb.Box2>
     {!!props.unsub && (
-      <Kb.Box2 direction="vertical" alignSelf="flex-start">
+      <Kb.Box2 direction="vertical" alignSelf="flex-start" fullWidth={true}>
         <Kb.Text type="BodySmall">Or</Kb.Text>
         <Kb.Checkbox
           style={{marginTop: Styles.globalMargins.xtiny}}
           onCheck={props.onToggleUnsubscribeAll || null}
           disabled={!props.allowEdit}
           checked={!!props.unsubscribedFromAll}
-          label={`Unsubscribe me from all ${props.unsub} notifications`}
+          label={`Unsubscribe from all ${props.unsub} notifications`}
         />
       </Kb.Box2>
     )}
@@ -64,9 +65,9 @@ const EmailSection = (props: Props) => (
     onToggle={props.onToggle}
     onToggleUnsubscribeAll={() => props.onToggleUnsubscribeAll('email')}
     title="Email notifications"
-    unsub="mail"
-    settings={props.groups.email && props.groups.email.settings}
-    unsubscribedFromAll={props.groups.email && props.groups.email.unsubscribedFromAll}
+    unsub="email"
+    settings={props.groups.get('email')!.settings}
+    unsubscribedFromAll={props.groups.get('email')!.unsub}
   />
 )
 const PhoneSection = (props: Props) => (
@@ -78,12 +79,13 @@ const PhoneSection = (props: Props) => (
     onToggleUnsubscribeAll={() => props.onToggleUnsubscribeAll('app_push')}
     title="Phone notifications"
     unsub="phone"
-    settings={props.groups.app_push.settings}
-    unsubscribedFromAll={props.groups.app_push.unsubscribedFromAll}
+    settings={props.groups.get('app_push')!.settings}
+    unsubscribedFromAll={props.groups.get('app_push')!.unsub}
   />
 )
-const Notifications = (props: Props) =>
-  !props.groups || !props.groups.email || !props.groups.email.settings ? (
+const Notifications = (props: Props) => {
+  const mobileHasPermissions = Container.useSelector(state => state.push.hasPermissions)
+  return !props.groups || !props.groups.get('email')?.settings ? (
     <Kb.Box2 direction="vertical" style={styles.loading}>
       <Kb.ProgressIndicator type="Small" style={{width: Styles.globalMargins.medium}} />
     </Kb.Box2>
@@ -103,53 +105,15 @@ const Notifications = (props: Props) =>
           </Kb.Text>
         </Kb.Box2>
       )}
-      <Kb.Divider style={styles.divider} />
-      {(!Styles.isMobile || props.mobileHasPermissions) &&
-      !!props.groups.app_push &&
-      !!props.groups.app_push.settings ? (
+      {(!Styles.isMobile || mobileHasPermissions) && !!props.groups.get('app_push')?.settings ? (
         <>
+          <Kb.Divider style={styles.divider} />
           <PhoneSection {...props} />
-          <Kb.Divider style={styles.divider} />
         </>
-      ) : (
-        !Styles.isMobile /* TODO: display something if the user needs to enable push? */ && (
-          <Kb.Box2 direction="vertical" fullWidth={true}>
-            <Kb.Text type="Header">Phone notifications</Kb.Text>
-            <Kb.Text type="BodySmall">Install the Keybase app on your phone.</Kb.Text>
-            <Kb.Divider style={styles.divider} />
-          </Kb.Box2>
-        )
-      )}
-
-      {(!Styles.isMobile || props.mobileHasPermissions) &&
-        !!props.groups.security &&
-        !!props.groups.security.settings && (
-          <Group
-            allowEdit={props.allowEdit}
-            groupName="security"
-            onToggle={props.onToggle}
-            title="Security"
-            settings={props.groups.security.settings}
-            unsubscribedFromAll={false}
-          />
-        )}
-
-      {!Styles.isMobile && !isLinux && (
-        <Kb.Box2 direction="vertical" fullWidth={true}>
-          <Kb.Divider style={styles.divider} />
-          <Kb.Text type="Header">Sound</Kb.Text>
-          <Kb.Checkbox
-            style={styles.checkbox}
-            onCheck={props.onToggleSound || null}
-            checked={!!props.sound}
-            label="Desktop chat notification sound"
-          />
-        </Kb.Box2>
-      )}
+      ) : null}
     </Kb.Box>
   )
-
-export default Notifications
+}
 
 const styles = Styles.styleSheetCreate(
   () =>
@@ -163,8 +127,10 @@ const styles = Styles.styleSheetCreate(
       label: {marginBottom: Styles.globalMargins.xtiny, marginTop: Styles.globalMargins.xtiny},
       loading: {alignItems: 'center', flex: 1, justifyContent: 'center'},
       main: Styles.platformStyles({
-        common: {flex: 1, padding: Styles.globalMargins.small, width: '100%'},
+        common: {flex: 1, padding: Styles.globalMargins.small, paddingRight: 0, width: '100%'},
         isElectron: Styles.desktopStyles.scrollable,
       }),
     } as const)
 )
+
+export default Notifications

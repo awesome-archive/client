@@ -2,32 +2,31 @@ import logger from '../../logger'
 import * as FsGen from '../fs-gen'
 import * as Types from '../../constants/types/fs'
 import * as Constants from '../../constants/fs'
-import * as Saga from '../../util/saga'
-import {TypedState} from '../../constants/reducer'
+import * as Container from '../../util/container'
 import {parseUri, launchImageLibraryAsync} from '../../util/expo-image-picker'
-import {makeRetriableErrorHandler} from './shared'
-import {saveAttachmentToCameraRoll, showShareActionSheetFromURL} from '../platform-specific'
+import {errorToActionOrThrow} from './shared'
+import {saveAttachmentToCameraRoll, showShareActionSheet} from '../platform-specific'
 
-const pickAndUploadToPromise = async (_: TypedState, action: FsGen.PickAndUploadPayload) => {
+const pickAndUploadToPromise = async (_: Container.TypedState, action: FsGen.PickAndUploadPayload) => {
   try {
     const result = await launchImageLibraryAsync(action.payload.type)
-    return result.cancelled === true
+    return result.canceled || (result.assets?.length ?? 0) === 0
       ? null
       : FsGen.createUpload({
-          localPath: parseUri(result),
+          localPath: parseUri(result.assets[0]),
           parentPath: action.payload.parentPath,
         })
   } catch (e) {
-    return makeRetriableErrorHandler(action)(e)
+    return errorToActionOrThrow(e)
   }
 }
 
 const finishedDownloadWithIntent = async (
-  state: TypedState,
+  state: Container.TypedState,
   action: FsGen.FinishedDownloadWithIntentPayload
 ) => {
   const {downloadID, downloadIntent, mimeType} = action.payload
-  const downloadState = state.fs.downloads.state.get(downloadID, Constants.emptyDownloadState)
+  const downloadState = state.fs.downloads.state.get(downloadID) || Constants.emptyDownloadState
   if (downloadState === Constants.emptyDownloadState) {
     logger.warn('missing download', downloadID)
     return
@@ -35,9 +34,8 @@ const finishedDownloadWithIntent = async (
   if (downloadState.error) {
     return [
       FsGen.createDismissDownload({downloadID}),
-      FsGen.createFsError({
-        error: Constants.makeError({error: downloadState.error, erroredAction: action}),
-        expectedIfOffline: false,
+      FsGen.createRedbar({
+        error: downloadState.error,
       }),
     ]
   }
@@ -48,8 +46,7 @@ const finishedDownloadWithIntent = async (
         await saveAttachmentToCameraRoll(localPath, mimeType)
         return FsGen.createDismissDownload({downloadID})
       case Types.DownloadIntent.Share:
-        // @ts-ignore codemod-issue probably a real issue
-        await showShareActionSheetFromURL({mimeType, url: localPath})
+        await showShareActionSheet({filePath: localPath, mimeType})
         return FsGen.createDismissDownload({downloadID})
       case Types.DownloadIntent.None:
         return null
@@ -57,11 +54,11 @@ const finishedDownloadWithIntent = async (
         return null
     }
   } catch (err) {
-    return makeRetriableErrorHandler(action)(err)
+    return errorToActionOrThrow(err)
   }
 }
 
-export default function* nativeSaga() {
-  yield* Saga.chainAction2(FsGen.pickAndUpload, pickAndUploadToPromise)
-  yield* Saga.chainAction2(FsGen.finishedDownloadWithIntent, finishedDownloadWithIntent)
+export default function initNative() {
+  Container.listenAction(FsGen.pickAndUpload, pickAndUploadToPromise)
+  Container.listenAction(FsGen.finishedDownloadWithIntent, finishedDownloadWithIntent)
 }

@@ -1,24 +1,38 @@
 // Entry point to the chrome part of the app
-import '../../util/user-timings'
 import Main from '../../app/main.desktop'
 // order of the above 2 must NOT change. needed for patching / hot loading to be correct
 import * as NotificationsGen from '../../actions/notifications-gen'
 import * as React from 'react'
-import * as ConfigGen from '../../actions/config-gen'
-import ReactDOM from 'react-dom'
+import * as ReactDOM from 'react-dom/client'
 import RemoteProxies from '../remote/proxies.desktop'
 import Root from './container.desktop'
-import configureStore from '../../store/configure-store'
-import * as SafeElectron from '../../util/safe-electron.desktop'
+import makeStore from '../../store/configure-store'
 import {makeEngine} from '../../engine'
 import {disable as disableDragDrop} from '../../util/drag-drop'
 import flags from '../../util/feature-flags'
 import {dumpLogs} from '../../actions/platform-specific/index.desktop'
 import {initDesktopStyles} from '../../styles/index.desktop'
-import {isDarwin} from '../../constants/platform'
+import {_setDarkModePreference} from '../../styles/dark-mode'
+import {isWindows} from '../../constants/platform'
 import {useSelector} from '../../util/container'
 import {isDarkMode} from '../../constants/config'
-import {TypedActions} from '../../actions/typed-actions-gen'
+import type {TypedActions} from '../../actions/typed-actions-gen'
+import KB2 from '../../util/electron.desktop'
+
+const {ipcRendererOn, requestWindowsStartService, appStartedUp} = KB2.functions
+
+// node side plumbs through initial pref so we avoid flashes
+const darkModeFromNode = window.location.search.match(/darkModePreference=(alwaysLight|alwaysDark|system)/)
+
+if (darkModeFromNode) {
+  const dm = darkModeFromNode[1]
+  switch (dm) {
+    case 'alwaysLight':
+    case 'alwaysDark':
+    case 'system':
+      _setDarkModePreference(dm)
+  }
+}
 
 // Top level HMR accept
 if (module.hot) {
@@ -29,11 +43,11 @@ let _store: any
 
 const setupStore = () => {
   let store = _store
-  let runSagas: any
+  let initListeners: any
   if (!_store) {
-    const configured = configureStore()
+    const configured = makeStore()
     store = configured.store
-    runSagas = configured.runSagas
+    initListeners = configured.initListeners
 
     _store = store
     if (__DEV__ && flags.admin) {
@@ -42,44 +56,46 @@ const setupStore = () => {
     }
   }
 
-  return {runSagas, store}
+  return {initListeners, store}
 }
 
-const setupApp = (store, runSagas) => {
+const setupApp = (store, initListeners) => {
   disableDragDrop()
-  const eng = makeEngine(store.dispatch, store.getState)
-  runSagas && runSagas()
-  eng.sagasAreReady()
+  const eng = makeEngine(store.dispatch)
+  initListeners()
+  eng.listenersAreReady()
 
-  SafeElectron.getApp().on('KBdispatchAction' as any, (_: string, action: TypedActions) => {
+  ipcRendererOn?.('KBdispatchAction', (_: any, action: TypedActions) => {
     // we MUST convert this else we'll run into issues with redux. See https://github.com/rackt/redux/issues/830
     // This is because this is touched due to the remote proxying. We get a __proto__ which causes the _.isPlainObject check to fail. We use
-    setImmediate(() => {
+    setTimeout(() => {
       try {
         store.dispatch({
           payload: action.payload,
           type: action.type,
         })
       } catch (_) {}
-    })
+    }, 0)
   })
 
   // See if we're connected, and try starting keybase if not
-  setImmediate(() => {
-    if (!eng.hasEverConnected()) {
-      SafeElectron.getApp().emit('KBkeybase', '', {type: 'requestStartService'})
-    }
-  })
+  if (isWindows) {
+    setTimeout(() => {
+      requestWindowsStartService?.()
+    }, 0)
+  }
 
   // After a delay dump logs in case some startup stuff happened
   setTimeout(() => {
     dumpLogs()
+      .then(() => {})
+      .catch(() => {})
   }, 5 * 1000)
 
   // Handle notifications from the service
   store.dispatch(NotificationsGen.createListenForNotifications())
 
-  SafeElectron.getApp().emit('KBkeybase', '', {type: 'appStartedUp'})
+  appStartedUp?.()
 }
 
 const FontLoader = () => (
@@ -99,11 +115,17 @@ const FontLoader = () => (
 let store
 
 const DarkCSSInjector = () => {
-  const className = useSelector(state => isDarkMode(state.config)) ? 'darkMode' : ''
+  const isDark = useSelector(state => isDarkMode(state.config))
   React.useEffect(() => {
     // inject it in body so modals get darkMode also
-    document.body.className = className
-  }, [className])
+    if (isDark) {
+      document.body.classList.add('darkMode')
+      document.body.classList.remove('lightMode')
+    } else {
+      document.body.classList.remove('darkMode')
+      document.body.classList.add('lightMode')
+    }
+  }, [isDark])
   return null
 }
 
@@ -113,7 +135,7 @@ const render = (Component = Main) => {
     throw new Error('No root element?')
   }
 
-  ReactDOM.render(
+  ReactDOM.createRoot(root).render(
     <Root store={store}>
       <DarkCSSInjector />
       <RemoteProxies />
@@ -121,8 +143,7 @@ const render = (Component = Main) => {
       <div style={{display: 'flex', flex: 1}}>
         <Component />
       </div>
-    </Root>,
-    root
+    </Root>
   )
 }
 
@@ -143,21 +164,6 @@ const setupHMR = _ => {
   accept('../../common-adapters/index.js', () => {})
 }
 
-const setupDarkMode = () => {
-  if (isDarwin && SafeElectron.getSystemPreferences().subscribeNotification) {
-    SafeElectron.getSystemPreferences().subscribeNotification(
-      'AppleInterfaceThemeChangedNotification',
-      () => {
-        store.dispatch(
-          ConfigGen.createSetSystemDarkMode({
-            dark: isDarwin && SafeElectron.getSystemPreferences().isDarkMode(),
-          })
-        )
-      }
-    )
-  }
-}
-
 const load = () => {
   if (global.DEBUGLoaded) {
     // only load once
@@ -167,12 +173,29 @@ const load = () => {
   global.DEBUGLoaded = true
   initDesktopStyles()
   const temp = setupStore()
-  const {runSagas} = temp
+  const {initListeners} = temp
   store = temp.store
-  setupApp(store, runSagas)
+  setupApp(store, initListeners)
   setupHMR(store)
-  setupDarkMode()
-  render()
+
+  if (__DEV__) {
+    // let us load devtools first
+    const DEBUG_DEFER = false
+    if (DEBUG_DEFER) {
+      for (let i = 0; i < 10; ++i) {
+        console.log('DEBUG_DEFER on!!!')
+      }
+      const e: any = <div>temp</div>
+      ReactDOM.createRoot(document.getElementById('root')!, e)
+      setTimeout(() => {
+        render()
+      }, 5000)
+    } else {
+      render()
+    }
+  } else {
+    render()
+  }
 }
 
 load()

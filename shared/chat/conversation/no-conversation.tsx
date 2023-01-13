@@ -1,12 +1,11 @@
-import * as React from 'react'
-import {Box2, Icon, Text} from '../../common-adapters'
+import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 
 const NoConversation = () => (
-  <Box2 direction="vertical" gap="xsmall" centerChildren={true} style={styles.noConvoText}>
-    <Icon type="icon-fancy-encrypted-computer-desktop-150-72" />
-    <Text type="BodySmall">All conversations are end-to-end encrypted.</Text>
-  </Box2>
+  <Kb.Box2 direction="vertical" gap="xsmall" centerChildren={true} style={styles.noConvoText}>
+    <Kb.Icon type="icon-fancy-encrypted-computer-desktop-150-72" />
+    <Kb.Text type="BodySmall">All conversations are end-to-end encrypted.</Kb.Text>
+  </Kb.Box2>
 )
 
 const styles = Styles.styleSheetCreate(

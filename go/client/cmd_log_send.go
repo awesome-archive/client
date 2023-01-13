@@ -84,12 +84,38 @@ func (c *CmdLogSend) Run() error {
 		}
 		statusJSON = fmt.Sprintf("{\"pid\":%d, \"Error\":%q}", pid, err)
 	} else {
-		json, err := json.Marshal(fstatus)
+		b, err := json.Marshal(fstatus)
 		if err != nil {
 			c.G().Log.Info("ignoring status json marshal error: %s", err)
 			statusJSON = c.errJSON(err)
 		} else {
-			statusJSON = string(json)
+			statusJSON = string(b)
+		}
+	}
+
+	var networkStatsJSON string
+	localNetworkStatsCmd := &CmdNetworkStats{Contextified: libkb.NewContextified(c.G()), networkSrc: keybase1.NetworkSource_LOCAL}
+	localNetworkStats, err := localNetworkStatsCmd.load()
+	if err != nil {
+		c.G().Log.Info("ignoring error getting keybase local network stats: %s", err)
+		localNetworkStats = nil
+	}
+	remoteNetworkStatsCmd := &CmdNetworkStats{Contextified: libkb.NewContextified(c.G()), networkSrc: keybase1.NetworkSource_REMOTE}
+	remoteNetworkStats, err := remoteNetworkStatsCmd.load()
+	if err != nil {
+		c.G().Log.Info("ignoring error getting keybase remote network stats: %s", err)
+		remoteNetworkStats = nil
+	}
+	if localNetworkStats != nil || remoteNetworkStats != nil {
+		b, err := json.Marshal(libkb.NetworkStatsJSON{
+			Local:  localNetworkStats,
+			Remote: remoteNetworkStats,
+		})
+		if err != nil {
+			c.G().Log.Info("ignoring network stats json marshal error: %s", err)
+			networkStatsJSON = c.errJSON(err)
+		} else {
+			networkStatsJSON = string(b)
 		}
 	}
 
@@ -97,8 +123,8 @@ func (c *CmdLogSend) Run() error {
 		c.G().Log.Info("ignoring UI logs: %s", err)
 	}
 
-	logSendContext := status.NewLogSendContext(c.G(), fstatus, statusJSON, c.feedback)
-	id, err := logSendContext.LogSend(true /* sendLogs */, c.numBytes, false /* mergeExtendedStatus */)
+	logSendContext := status.NewLogSendContext(c.G(), fstatus, statusJSON, networkStatsJSON, c.feedback)
+	id, err := logSendContext.LogSend(true /* sendLogs */, c.numBytes, false /* mergeExtendedStatus */, false /* addNetworkStats */)
 	if err != nil {
 		return err
 	}

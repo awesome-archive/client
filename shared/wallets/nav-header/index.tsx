@@ -1,15 +1,12 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
-import * as Types from '../../constants/types/wallets'
+import type * as Types from '../../constants/types/wallets'
 import {SmallAccountID, SendButton} from '../common'
-import AddAccount from './add-account'
+import {HeaderRightActions as ConnectedHeaderRightActions} from './container'
 
 type HeaderTitleProps = {
   accountID: Types.AccountID
   accountName: string
-  airdropSelected: boolean
-  isInAirdrop: boolean
   isDefault: boolean
   loading: boolean
   noDisclaimer: boolean
@@ -18,19 +15,11 @@ type HeaderTitleProps = {
 
 export const HeaderTitle = (props: HeaderTitleProps) =>
   props.noDisclaimer ? null : (
-    <Kb.Box2 direction="horizontal">
-      <Kb.Box2 alignItems="flex-end" direction="horizontal" style={styles.left}>
-        <AddAccount />
-      </Kb.Box2>
+    <Kb.Box2 direction="horizontal" style={styles.accountArea}>
+      <Kb.Box2 alignItems="flex-end" direction="horizontal" style={styles.left}></Kb.Box2>
       <Kb.Box2 direction="vertical" alignItems="flex-start" style={styles.accountInfo}>
-        {props.loading && !props.airdropSelected ? (
+        {props.loading ? (
           <Kb.ProgressIndicator type="Small" style={styles.loading} />
-        ) : props.airdropSelected ? (
-          <Kb.Box2 direction="horizontal">
-            <Kb.Text selectable={false} type="Header">
-              {props.isInAirdrop ? 'Airdrop' : 'Join the airdrop'}
-            </Kb.Text>
-          </Kb.Box2>
         ) : (
           <>
             <Kb.Box2
@@ -48,11 +37,11 @@ export const HeaderTitle = (props: HeaderTitleProps) =>
           </>
         )}
       </Kb.Box2>
+      {Styles.isTablet && <ConnectedHeaderRightActions />}
     </Kb.Box2>
   )
 
 type HeaderRightActionsProps = {
-  airdropSelected: boolean
   loading: boolean
   noDisclaimer: boolean
   onReceive: () => void
@@ -60,7 +49,7 @@ type HeaderRightActionsProps = {
 }
 
 export const HeaderRightActions = (props: HeaderRightActionsProps) =>
-  props.noDisclaimer || props.airdropSelected ? null : (
+  props.noDisclaimer ? null : (
     <Kb.Box2 alignItems="flex-end" direction="horizontal" gap="tiny" style={styles.rightActions}>
       <SendButton small={true} />
       <Kb.Button
@@ -86,20 +75,29 @@ export const HeaderRightActions = (props: HeaderRightActionsProps) =>
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      accountID: Styles.platformStyles({
-        isElectron: Styles.desktopStyles.windowDraggingClickable,
+      accountArea: Styles.platformStyles({
+        isTablet: {flexGrow: 1},
       }),
-      accountInfo: {
-        paddingBottom: Styles.globalMargins.xtiny,
-        paddingLeft: Styles.globalMargins.xsmall,
-      },
-      accountNameContainer: Styles.platformStyles({
+      accountID: Styles.platformStyles({
+        isElectron: {...Styles.desktopStyles.windowDraggingClickable},
+      }),
+      accountInfo: Styles.platformStyles({
         common: {
-          alignSelf: 'flex-start',
+          maxHeight: 39,
+          paddingBottom: Styles.globalMargins.xtiny,
+          paddingLeft: Styles.globalMargins.xsmall,
         },
+        isTablet: {
+          flex: 1,
+          flexGrow: 1,
+          flexShrink: 0,
+        },
+      }),
+      accountNameContainer: Styles.platformStyles({
+        common: {alignSelf: 'flex-start'},
         isElectron: {
           ...Styles.desktopStyles.windowDraggingClickable,
-          marginTop: -Styles.globalMargins.xtiny,
+          marginTop: -Styles.globalMargins.xxtiny,
         },
       }),
       gear: {
@@ -108,11 +106,12 @@ const styles = Styles.styleSheetCreate(
       },
       left: Styles.platformStyles({
         common: {
-          minWidth: 240,
+          minWidth: Styles.globalStyles.mediumSubNavWidth,
           paddingLeft: Styles.globalMargins.xsmall,
           paddingRight: Styles.globalMargins.xsmall,
+          width: Styles.globalStyles.mediumSubNavWidth,
         },
-        isElectron: Styles.desktopStyles.windowDraggingClickable,
+        isElectron: {...Styles.desktopStyles.windowDraggingClickable},
       }),
       loading: {
         height: 16,
@@ -124,7 +123,11 @@ const styles = Styles.styleSheetCreate(
           paddingBottom: 6,
           paddingRight: Styles.globalMargins.xsmall,
         },
-        isElectron: Styles.desktopStyles.windowDraggingClickable,
+        isElectron: {...Styles.desktopStyles.windowDraggingClickable},
+        isTablet: {
+          alignSelf: 'flex-end',
+          paddingRight: 0,
+        },
       }),
     } as const)
 )

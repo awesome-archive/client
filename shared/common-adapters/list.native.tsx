@@ -1,9 +1,13 @@
-import React, {PureComponent} from 'react'
+import * as React from 'react'
 import {FlatList, View} from 'react-native'
 import * as Styles from '../styles'
-import {Props} from './list'
+import type {Props} from './list'
+import {createAnimatedComponent} from './reanimated'
+import noop from 'lodash/noop'
 
-class List<Item> extends PureComponent<Props<Item>> {
+const AnimatedFlatList = createAnimatedComponent(FlatList)
+
+class List<Item> extends React.PureComponent<Props<Item>> {
   static defaultProps = {
     keyboardShouldPersistTaps: 'handled',
   }
@@ -11,7 +15,7 @@ class List<Item> extends PureComponent<Props<Item>> {
     return this.props.renderItem(index, item)
   }
 
-  _getItemLayout = (_: Array<Item> | null, index: number) => ({
+  _getItemLayout = (_: Array<Item> | null | undefined, index: number) => ({
     index,
     length: this.props.fixedHeight || 0,
     offset: (this.props.fixedHeight || 0) * index,
@@ -23,10 +27,11 @@ class List<Item> extends PureComponent<Props<Item>> {
     }
 
     const keyProp = this.props.keyProperty || 'key'
-    return item[keyProp]
+    return item[keyProp] ?? String(index)
   }
 
   render() {
+    const List = this.props.reAnimated ? AnimatedFlatList : FlatList
     return (
       <View style={Styles.collapseStyles([styles.outerView, this.props.style])}>
         {/* need windowSize so iphone 6 doesn't have OOM issues */}
@@ -39,9 +44,10 @@ class List<Item> extends PureComponent<Props<Item>> {
           end of the list is at the bottom.
        */}
         <View style={Styles.globalStyles.fillAbsolute}>
-          <FlatList
+          <List
+            overScrollMode="never"
+            onScrollToIndexFailed={noop}
             bounces={this.props.bounces}
-            // @ts-ignore TODO styles
             contentContainerStyle={this.props.contentContainerStyle}
             renderItem={this._itemRender}
             data={this.props.items}
@@ -53,6 +59,7 @@ class List<Item> extends PureComponent<Props<Item>> {
             onEndReachedThreshold={this.props.onEndReachedThreshold}
             windowSize={this.props.windowSize || 10}
             debug={false /* set to true to debug the list */}
+            onScroll={this.props.onScroll}
           />
         </View>
       </View>

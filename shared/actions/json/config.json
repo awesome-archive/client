@@ -1,10 +1,11 @@
 {
   "prelude": [
-    "import * as Types from '../constants/types/config'",
-    "import * as Tabs from '../constants/tabs'",
-    "import * as ChatTypes from '../constants/types/chat2'",
-    "import * as FsTypes from '../constants/types/fs'",
-    "import {RPCError} from '../util/errors'"
+    "import type * as Types from '../constants/types/config'",
+    "import type * as Tabs from '../constants/tabs'",
+    "import type * as ChatTypes from '../constants/types/chat2'",
+    "import type * as FsTypes from '../constants/types/fs'",
+    "import type HiddenString from '../util/hidden-string'",
+    "import type {RPCError} from '../util/errors'"
   ],
   "actions": {
     "startHandshake": {
@@ -35,6 +36,13 @@
     },
     "logout": {
       "_description": "someone wants to log out"
+    },
+    "logoutAndTryToLogInAs": {
+      "_description": [
+        "Log out the current user, keeping secrets stored.",
+        "Then prefill the username for provisioned another user to log in."
+      ],
+      "username": "string"
     },
     "logoutHandshake": {
       "_description": "starting the logout process. Things that need to happen before we see the app should call logoutHandshakeWait",
@@ -73,8 +81,8 @@
       "followees": "Array<string>"
     },
     "daemonError": {"daemonError?": "Error"},
-    "setAccounts": { "configuredAccounts": "Array<RPCTypes.ConfiguredAccount>" },
-    "setDefaultUsername": { "username": "string" },
+    "setAccounts": {"configuredAccounts": "Array<RPCTypes.ConfiguredAccount>"},
+    "setDefaultUsername": {"username": "string"},
     "globalError": {"globalError?": "Error | RPCError"},
     "pushLoaded": {"pushLoaded": "boolean"},
     "setStartupDetails": {
@@ -83,18 +91,30 @@
       "startupLink": "string",
       "startupTab?": "Tabs.Tab",
       "startupFollowUser": "string",
-      "startupSharePath?": "FsTypes.LocalPath"
+      "startupSharePath?": "FsTypes.LocalPath",
+      "startupShareText?": "string",
+      "startupPushPayload?": "string"
     },
-    "setOpenAtLogin": { "openAtLogin": "boolean", },
-    "setNotifySound": { "notifySound": "boolean", },
+    "setStartupFile": {
+      "_description": "Stores the startup file path when launching Keybase from a cold start beofre log in",
+      "startupFile": "HiddenString"
+    },
+    "setOpenAtLogin": {"openAtLogin": "boolean"},
+    "setNotifySound": {"notifySound": "boolean"},
     "setDeletedSelf": {"deletedUsername": "string"},
-    "persistRoute": {"path": "Array<any>"},
+    "persistRoute": {"path?": "Array<any>"},
     "setNavigator": {"navigator": "any"},
     "loggedOut": {},
     "loggedIn": {
-      "_description": "Used internally to know we were logged in. if you want to react to being logged in likely you want bootstrapStatusLoaded",
+      "_description": [
+        "Used internally to know we were logged in.",
+        "If you want to react to being logged in likely you want bootstrapStatusLoaded"
+      ],
       "causedBySignup": "boolean",
       "causedByStartup": "boolean"
+    },
+    "setUserSwitching": {
+      "userSwitching": "boolean"
     },
     "updateMenubarWindowID": {"id": "number"},
     "copyToClipboard": {"text": "string"},
@@ -115,9 +135,9 @@
       "isInit?": "boolean"
     },
     "setDarkModePreference": {
-      "preference": ["'system'", "'alwaysDark'", "'alwaysLight'", "undefined"]
+      "preference": ["'system'", "'alwaysDark'", "'alwaysLight'"]
     },
-    "setSystemDarkMode": { "dark": "boolean" },
+    "setSystemDarkMode": {"dark": "boolean"},
     "updateHTTPSrvInfo": {
       "address": "string",
       "token": "string"
@@ -127,12 +147,60 @@
       "component": "string",
       "param": "string"
     },
+    "updateWindowShown": {
+      "_description": "a window was shown",
+      "component": "string"
+    },
+    "updateWindowMaxState": {
+      "_description": "main electron window changed max/min",
+      "max": "boolean"
+    },
     "updateWindowState": {
       "_description": "main electron window wants to store its state",
-      "windowState": "Types.WindowState",
+      "windowState": "Types.WindowState"
     },
     "setUseNativeFrame": {
       "useNativeFrame": "boolean"
-    }
+    },
+    "setWhatsNewLastSeenVersion": {
+      "_description": [
+        "Set the latest version number that a user has seen from Gregor.",
+        "This is used to set the badged state of the 'What's New' radio icon"
+      ],
+      "lastSeenVersion": "string"
+    },
+    "toggleRuntimeStats": {},
+    "loadOnLoginStartup": {},
+    "loadedOnLoginStartup": {
+      "status": "boolean | null"
+    },
+    "loadOnStart": {
+      "_description": [
+        "This action is dispatched multiple times with various flags.",
+        "If you want to do something as a result of startup or login listen to this."
+      ],
+      "phase": "'initialStartupAsEarlyAsPossible' | 'connectedToDaemonForFirstTime' | 'reloggedIn' | 'startupOrReloginButNotInARush'"
+    },
+    "showShareActionSheet": {
+      "filePath?": "string",
+      "message?": "string",
+      "mimeType": "string"
+    },
+    "androidShare": {
+      "_description": "Intent fired with a share url",
+      "url?": "string",
+      "text?": "string"
+    },
+    "setIncomingShareUseOriginal": {
+      "useOriginal": "boolean"
+    },
+    "initListenerLoops": {
+        "_description": "Internal action just to start saga-like spawn processes"
+    },
+    "powerMonitorEvent": {
+        "_description": "Plumb power monitor events from node",
+        "event": "string"
+    },
+
   }
 }

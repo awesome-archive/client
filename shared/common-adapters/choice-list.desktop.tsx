@@ -1,7 +1,6 @@
-import * as React from 'react'
-import {Box, Text, Icon, IconType} from '.'
+import {Box, Text, Icon, type IconType} from '.'
 import * as Styles from '../styles'
-import {Props} from './choice-list'
+import type {Props} from './choice-list'
 import './choice-list.css'
 
 const ChoiceList = ({options}: Props) => {
@@ -16,7 +15,7 @@ const ChoiceList = ({options}: Props) => {
               Styles.globalStyles.flexBoxRow,
               Styles.desktopStyles.clickable,
               styles.entry,
-            ])}
+            ] as any)}
             key={idx}
             className="cl-entry"
             onClick={() => op.onClick()}

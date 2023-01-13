@@ -1,17 +1,17 @@
 import * as React from 'react'
-import * as Types from '../constants/types/people'
-import * as Kb from '../common-adapters'
-import * as Styles from '../styles'
 import * as Container from '../util/container'
+import * as Kb from '../common-adapters'
 import * as PeopleGen from '../actions/people-gen'
 import * as SignupGen from '../actions/signup-gen'
-import {noEmail} from '../constants/signup'
-import Todo from './todo/container'
-import FollowNotification from './follow-notification'
+import * as Styles from '../styles'
+import type * as Types from '../constants/types/people'
 import Announcement from './announcement/container'
+import FollowNotification from './follow-notification'
 import FollowSuggestions from './follow-suggestions'
-import {Props} from '.'
-import AirdropBanner from '../wallets/airdrop/banner/container'
+import {noEmail} from '../constants/signup'
+import type {Props} from '.'
+import Todo from './todo/container'
+import WotTask from './wot-task'
 
 export const itemToComponent: (item: Types.PeopleScreenItem, props: Props) => React.ReactNode = (
   item,
@@ -63,14 +63,16 @@ export const itemToComponent: (item: Types.PeopleScreenItem, props: Props) => Re
 
 const EmailVerificationBanner = () => {
   const dispatch = Container.useDispatch()
+  const signupEmail = Container.useSelector(s => s.signup.justSignedUpEmail)
   React.useEffect(
     () =>
       // Only have a cleanup function
-      () => dispatch(SignupGen.createClearJustSignedUpEmail()),
-    [dispatch]
+      () => {
+        signupEmail && dispatch(SignupGen.createClearJustSignedUpEmail())
+      },
+    [dispatch, signupEmail]
   )
 
-  const signupEmail = Container.useSelector(s => s.signup.justSignedUpEmail)
   if (!signupEmail) {
     return null
   }
@@ -85,19 +87,17 @@ const EmailVerificationBanner = () => {
 
 const ResentEmailVerificationBanner = () => {
   const dispatch = Container.useDispatch()
+  const resentEmail = Container.useSelector(s => s.people.resentEmail)
+
   React.useEffect(
     () =>
       // Only have a cleanup function
-      () =>
-        dispatch(
-          PeopleGen.createSetResentEmail({
-            email: '',
-          })
-        ),
-    []
+      () => {
+        resentEmail && dispatch(PeopleGen.createSetResentEmail({email: ''}))
+      },
+    [dispatch, resentEmail]
   )
 
-  const resentEmail = Container.useSelector(s => s.people.resentEmail)
   if (!resentEmail) {
     return null
   }
@@ -112,15 +112,26 @@ const ResentEmailVerificationBanner = () => {
   )
 }
 
-export const PeoplePageList = (props: Props) => (
-  <Kb.Box style={{...Styles.globalStyles.flexBoxColumn, position: 'relative', width: '100%'}}>
-    {Styles.isMobile && <AirdropBanner showSystemButtons={false} />}
-    <EmailVerificationBanner />
-    <ResentEmailVerificationBanner />
-    {props.newItems
-      .filter(item => item.type !== 'todo' || item.todoType !== 'verifyAllEmail' || !props.signupEmail)
-      .map(item => itemToComponent(item, props))}
-    <FollowSuggestions suggestions={props.followSuggestions} />
-    {props.oldItems.map(item => itemToComponent(item, props))}
-  </Kb.Box>
-)
+export const PeoplePageList = React.memo(function PeoplePageList(props: Props) {
+  return (
+    <Kb.Box style={{...Styles.globalStyles.flexBoxColumn, position: 'relative', width: '100%'}}>
+      <EmailVerificationBanner />
+      <ResentEmailVerificationBanner />
+      {props.newItems
+        .filter(item => item.type !== 'todo' || item.todoType !== 'verifyAllEmail' || !props.signupEmail)
+        .map(item => itemToComponent(item, props))}
+      {Array.from(props.wotUpdates, ([key, item]) => (
+        <WotTask
+          key={key}
+          voucher={item.voucher}
+          vouchee={item.vouchee}
+          status={item.status}
+          onClickUser={props.onClickUser}
+        />
+      ))}
+
+      <FollowSuggestions suggestions={props.followSuggestions} />
+      {props.oldItems.map(item => itemToComponent(item, props))}
+    </Kb.Box>
+  )
+})

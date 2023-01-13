@@ -1,19 +1,25 @@
-import Icon from './icon'
+import Animation from './animation'
 import * as React from 'react'
-import {Props} from './progress-indicator'
+import type {Props} from './progress-indicator'
 import * as Styles from '../styles'
 
-const ProgressIndicator = ({white, style, type}: Props) => (
-  <Icon
-    style={Styles.collapseStyles([
-      type === 'Small' && styles.small,
-      type === 'Large' && styles.large,
-      type === 'Huge' && styles.huge,
-      style,
-    ])}
-    type={white ? 'icon-progress-white-animated' : 'icon-progress-grey-animated'}
-  />
-)
+const Kb = {
+  Animation,
+}
+
+const ProgressIndicator = React.memo(function ProgressIndicator({white, style, type}: Props) {
+  return (
+    <Kb.Animation
+      animationType={white ? 'spinnerWhite' : 'spinner'}
+      style={Styles.collapseStyles([
+        type === 'Small' && styles.small,
+        type === 'Large' && styles.large,
+        type === 'Huge' && styles.huge,
+        style,
+      ])}
+    />
+  )
+})
 
 const styles = Styles.styleSheetCreate(() => ({
   huge: {

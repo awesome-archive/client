@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
 
@@ -40,4 +39,4 @@ const styles = Styles.styleSheetCreate(
     } as const)
 )
 
-export default Kb.HeaderOnMobile(ConversationError)
+export default ConversationError

@@ -75,7 +75,7 @@ func PurgeResolverTeamID(ctx context.Context, g *libkb.GlobalContext, teamID key
 func ResolveImplicitTeamDisplayName(ctx context.Context, g *libkb.GlobalContext,
 	name string, public bool) (res keybase1.ImplicitTeamDisplayName, err error) {
 
-	defer g.CTraceTimed(ctx, fmt.Sprintf("ResolveImplicitTeamDisplayName(%v, public:%v)", name, public), func() error { return err })()
+	defer g.CTrace(ctx, fmt.Sprintf("ResolveImplicitTeamDisplayName(%v, public:%v)", name, public), &err)()
 
 	split1 := strings.SplitN(name, " ", 2) // split1: [assertions, ?conflict]
 	assertions := split1[0]
@@ -141,8 +141,9 @@ func shouldPreventTeamCreation(err error) bool {
 // Try to resolve implicit team members.
 // Modifies the arguments `resSet` and appends to `resolvedAssertions`.
 // For each assertion in `sourceAssertions`, try to resolve them.
-//   If they resolve, add the username to `resSet` and the assertion to `resolvedAssertions`.
-//   If they don't resolve, add the SocialAssertion to `resSet`, but nothing to `resolvedAssertions`.
+//
+//	If they resolve, add the username to `resSet` and the assertion to `resolvedAssertions`.
+//	If they don't resolve, add the SocialAssertion to `resSet`, but nothing to `resolvedAssertions`.
 func ResolveImplicitTeamSetUntrusted(ctx context.Context, g *libkb.GlobalContext,
 	sourceAssertions []libkb.AssertionExpression, resSet *keybase1.ImplicitTeamUserSet, resolvedAssertions *[]libkb.ResolvedAssertion) error {
 
@@ -183,7 +184,7 @@ func ResolveImplicitTeamSetUntrusted(ctx context.Context, g *libkb.GlobalContext
 func verifyResolveResult(ctx context.Context, g *libkb.GlobalContext, resolvedAssertion libkb.ResolvedAssertion) (err error) {
 
 	defer g.CTrace(ctx, fmt.Sprintf("verifyResolveResult ID user [%s] %s", resolvedAssertion.UID, resolvedAssertion.Assertion.String()),
-		func() error { return err })()
+		&err)()
 
 	if resolvedAssertion.ResolveResult.WasKBAssertion() {
 		// The resolver does not use server-trust for these sorts of assertions.

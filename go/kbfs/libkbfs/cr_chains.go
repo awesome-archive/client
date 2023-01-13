@@ -37,10 +37,11 @@ type crChain struct {
 // collapse finds complementary pairs of operations that cancel each
 // other out, and remove the relevant operations from the chain.
 // Examples include:
-//  * A create followed by a remove for the same name (delete both ops)
-//  * A create followed by a create (renamed == true) for the same name
-//    (delete the create op)
-//  * A remove that only unreferences blocks created within this branch
+//   - A create followed by a remove for the same name (delete both ops)
+//   - A create followed by a create (renamed == true) for the same name
+//     (delete the create op)
+//   - A remove that only unreferences blocks created within this branch
+//
 // This function returns the list of pointers that should be unreferenced
 // as part of an eventual resolution of the corresponding branch.
 func (cc *crChain) collapse(createdOriginals map[data.BlockPointer]bool,
@@ -1177,11 +1178,9 @@ func (ccs *crChains) changeOriginal(oldOriginal data.BlockPointer,
 		delete(ccs.deletedOriginals, oldOriginal)
 		ccs.deletedOriginals[newOriginal] = true
 	}
-	if _, ok := ccs.createdOriginals[oldOriginal]; ok {
-		delete(ccs.createdOriginals, oldOriginal)
-		// We're swapping in an original made on some other branch, so
-		// it shouldn't go in the `createdOriginals` map.
-	}
+	delete(ccs.createdOriginals, oldOriginal)
+	// We're swapping in an original made on some other branch, so
+	// it shouldn't go in the `createdOriginals` map.
 	if ri, ok := ccs.renamedOriginals[oldOriginal]; ok {
 		delete(ccs.renamedOriginals, oldOriginal)
 		ccs.renamedOriginals[newOriginal] = ri
@@ -1443,7 +1442,7 @@ func (ccs *crChains) remove(ctx context.Context, log logger.Logger,
 	return chainsWithRemovals
 }
 
-func (ccs *crChains) revertRenames(oldOps []op) {
+func (ccs *crChains) revertRenames(oldOps []op) error {
 	for _, oldOp := range oldOps {
 		if rop, ok := oldOp.(*renameOp); ok {
 			// Replace the corresponding createOp, and remove the
@@ -1452,10 +1451,12 @@ func (ccs *crChains) revertRenames(oldOps []op) {
 			if !ok {
 				continue
 			}
+			found := false
 			for i, oldOp := range oldChain.ops {
 				if rmop, ok := oldOp.(*rmOp); ok &&
 					rmop.OldName == rop.OldName {
 					rop.oldFinalPath = rmop.getFinalPath()
+					found = true
 					oldChain.ops = append(
 						oldChain.ops[:i], oldChain.ops[i+1:]...)
 					// The first rm should be the one that matches, as
@@ -1465,7 +1466,7 @@ func (ccs *crChains) revertRenames(oldOps []op) {
 				}
 			}
 
-			if !rop.oldFinalPath.IsValid() {
+			if !found || !rop.oldFinalPath.IsValid() {
 				// We don't need to revert any renames without an
 				// rmOp, because it was probably just created and
 				// renamed within a single journal update.
@@ -1474,7 +1475,16 @@ func (ccs *crChains) revertRenames(oldOps []op) {
 
 			newChain := oldChain
 			if rop.NewDir != (blockUpdate{}) {
-				newChain = ccs.byMostRecent[rop.NewDir.Ref]
+				newChain, ok = ccs.byMostRecent[rop.NewDir.Ref]
+				if !ok {
+					// There was a corresponding rmOp, and the node
+					// was renamed across directories, but for some
+					// unknown reason we can't find the chain for the
+					// new directory.
+					return errors.Errorf(
+						"Cannot find new directory %s for rename op: %s",
+						rop.NewDir.Ref, rop)
+				}
 			}
 
 			added := false
@@ -1492,12 +1502,21 @@ func (ccs *crChains) revertRenames(oldOps []op) {
 				// If we didn't find the create op to replace, then
 				// this node may have been renamed and then removed,
 				// with the create op being eliminated in the process.
-				// We need to keep the rename op there though, so that
-				// any remove operations within the renamed directory
-				// are processed correctly (see HOTPOT-616).
-				ropCopy := rop.deepCopy()
-				newChain.ops = append([]op{ropCopy}, newChain.ops...)
+				// We need to keep the rename op there though if there
+				// is a remove operation, so that any remove
+				// operations within the renamed directory are
+				// processed correctly (see HOTPOT-616).
+				for _, newOp := range newChain.ops {
+					if rmop, ok := newOp.(*rmOp); ok &&
+						rop.NewName == rmop.OldName {
+						ropCopy := rop.deepCopy()
+						ropCopy.setFinalPath(rmop.getFinalPath())
+						newChain.ops = append([]op{ropCopy}, newChain.ops...)
+						break
+					}
+				}
 			}
 		}
 	}
+	return nil
 }

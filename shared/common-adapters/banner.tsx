@@ -4,7 +4,7 @@ import Icon from './icon'
 import Text from './text'
 import * as Styles from '../styles'
 
-type Color = 'blue' | 'red' | 'yellow' | 'green' | 'grey'
+type Color = 'blue' | 'red' | 'yellow' | 'green' | 'grey' | 'white'
 
 type _Segment = {
   onClick?: () => void
@@ -82,7 +82,7 @@ export const Banner = (props: BannerProps) => (
       props.inline && styles.containerInline,
       props.small && styles.containerSmall,
       props.style,
-    ])}
+    ] as const)}
   >
     <Box2
       key="textBox"
@@ -190,12 +190,12 @@ const styles = Styles.styleSheetCreate(
           paddingTop: Styles.globalMargins.tiny,
         },
         isElectron: {
-          paddingLeft: Styles.globalMargins.xlarge,
-          paddingRight: Styles.globalMargins.xlarge,
-        },
-        isMobile: {
           paddingLeft: Styles.globalMargins.medium,
           paddingRight: Styles.globalMargins.medium,
+        },
+        isMobile: {
+          paddingLeft: Styles.globalMargins.small,
+          paddingRight: Styles.globalMargins.small,
         },
       }),
       underline: Styles.platformStyles({
@@ -207,8 +207,9 @@ const styles = Styles.styleSheetCreate(
 const colorToBackgroundColorStyles = Styles.styleSheetCreate(() => ({
   blue: {backgroundColor: Styles.globalColors.blue},
   green: {backgroundColor: Styles.globalColors.green},
-  grey: {backgroundColor: Styles.globalColors.grey},
+  grey: {backgroundColor: Styles.globalColors.blueGreyLight},
   red: {backgroundColor: Styles.globalColors.red},
+  white: {backgroundColor: Styles.globalColors.white},
   yellow: {backgroundColor: Styles.globalColors.yellow},
 }))
 
@@ -217,6 +218,7 @@ const colorToTextColorStyles = Styles.styleSheetCreate(() => ({
   green: {color: Styles.globalColors.white},
   grey: {color: Styles.globalColors.black_50},
   red: {color: Styles.globalColors.white},
+  white: {color: Styles.globalColors.black_50},
   yellow: {color: Styles.globalColors.brown_75},
 }))
 
@@ -225,6 +227,7 @@ const colorToIconColor = () => ({
   green: Styles.globalColors.white_90,
   grey: Styles.globalColors.black_50,
   red: Styles.globalColors.white_90,
+  white: Styles.globalColors.black_50,
   yellow: Styles.globalColors.brown_75,
 })
 
@@ -233,5 +236,6 @@ const colorToIconHoverColor = () => ({
   green: Styles.globalColors.white,
   grey: Styles.globalColors.black,
   red: Styles.globalColors.white,
+  white: Styles.globalColors.black,
   yellow: Styles.globalColors.brown,
 })

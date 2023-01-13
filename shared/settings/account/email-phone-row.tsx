@@ -37,100 +37,129 @@ const badge = (backgroundColor: string, menuItem: boolean = false) => (
   />
 )
 
-const _EmailPhoneRow = (props: Kb.PropsWithOverlay<Props>) => {
+const EmailPhoneRow = (props: Props) => {
+  const {
+    address,
+    onDelete,
+    onMakePrimary,
+    onToggleSearchable,
+    onVerify,
+    primary,
+    searchable,
+    superseded,
+    type,
+    verified,
+    lastVerifyEmailDate,
+    moreThanOneEmail,
+  } = props
+
+  const {showingPopup, toggleShowingPopup, popup, popupAnchor} = Kb.usePopup(attachTo => (
+    <Kb.FloatingMenu
+      attachTo={attachTo}
+      closeText="Cancel"
+      visible={showingPopup}
+      position="bottom right"
+      header={Styles.isMobile ? header : undefined}
+      onHidden={toggleShowingPopup}
+      items={menuItems}
+      closeOnSelect={true}
+    />
+  ))
+
   // Short circuit superseded phone numbers - they get their own banner instead
-  if (props.superseded) {
+  if (superseded) {
     return null
   }
 
   // less than 30 minutes ago
   const hasRecentVerifyEmail =
-    props.lastVerifyEmailDate && new Date().getTime() / 1000 - props.lastVerifyEmailDate < 30 * 60
+    lastVerifyEmailDate && new Date().getTime() / 1000 - lastVerifyEmailDate < 30 * 60
 
   let subtitle = ''
 
-  if (isMobile && hasRecentVerifyEmail && !props.verified) {
+  if (isMobile && hasRecentVerifyEmail && !verified) {
     subtitle = 'Check your inbox'
   } else {
-    if (hasRecentVerifyEmail && !props.verified) {
+    if (hasRecentVerifyEmail && !verified) {
       subtitle = addSpacer(subtitle, 'Check your inbox')
     }
-    if (props.type === 'email' && props.primary) {
+    if (type === 'email' && primary) {
       subtitle = addSpacer(subtitle, 'Primary')
     }
-    if (!props.searchable) {
+    if (!searchable) {
       subtitle = addSpacer(subtitle, 'Not searchable')
     }
   }
 
   const menuItems: Kb.MenuItems = []
-  if (!props.verified) {
+  if (!verified) {
     menuItems.push({
-      decoration: props.verified ? undefined : badge(Styles.globalColors.orange, true),
-      onClick: props.onVerify,
+      decoration: verified ? undefined : badge(Styles.globalColors.orange, true),
+      icon: 'iconfont-lock',
+      onClick: onVerify,
       title: 'Verify',
     })
   }
-  if (props.type === 'email' && !props.primary) {
+  if (type === 'email' && !primary) {
     menuItems.push({
-      onClick: props.onMakePrimary,
+      icon: 'iconfont-star',
+      onClick: onMakePrimary,
       subTitle: 'Use this email for important notifications.',
       title: 'Make primary',
     })
   }
-  if (props.verified) {
-    const copyType = props.type === 'email' ? 'email' : 'number'
+  if (verified) {
+    const copyType = type === 'email' ? 'email' : 'number'
     menuItems.push({
-      decoration: props.searchable ? undefined : badge(Styles.globalColors.blue, true),
-      onClick: props.onToggleSearchable,
-      subTitle: props.searchable
+      decoration: searchable ? undefined : badge(Styles.globalColors.blue, true),
+      icon: searchable ? 'iconfont-hide' : 'iconfont-unhide',
+      onClick: onToggleSearchable,
+      subTitle: searchable
         ? `Don't let friends find you by this ${copyType}.`
         : `${Styles.isMobile ? '' : '(Recommended) '}Let friends find you by this ${copyType}.`,
-      title: props.searchable ? 'Make unsearchable' : 'Make searchable',
+      title: searchable ? 'Make unsearchable' : 'Make searchable',
     })
   }
 
   if (menuItems.length > 0) {
     menuItems.push('Divider')
   }
-  const isUndeletableEmail = props.type === 'email' && props.moreThanOneEmail && props.primary
-  const deleteItem = isUndeletableEmail
+  const isUndeletableEmail = type === 'email' && moreThanOneEmail && primary
+  const deleteItem: Kb.MenuItem = isUndeletableEmail
     ? {
         disabled: true,
+        icon: 'iconfont-trash',
         onClick: null,
         subTitle:
           'You need to delete your other emails, or make another one primary, before you can delete this email.',
         title: 'Delete',
       }
-    : {danger: true, onClick: props.onDelete, title: 'Delete'}
+    : {danger: true, icon: 'iconfont-trash', onClick: onDelete, title: 'Delete'}
   menuItems.push(deleteItem)
 
   let gearIconBadge: React.ReactNode | null = null
-  if (!props.verified) {
+  if (!verified) {
     gearIconBadge = badge(Styles.globalColors.orange)
-  } else if (!props.searchable) {
+  } else if (!searchable) {
     gearIconBadge = badge(Styles.globalColors.blue)
   }
 
-  const header = {
-    title: 'emailPhoneHeader',
-    view: (
-      <Kb.Box2 direction="vertical" centerChildren={true} style={styles.menuHeader}>
-        <Kb.Text type="BodySmallSemibold">{props.address}</Kb.Text>
-        {props.primary && <Kb.Text type="BodySmall">Primary</Kb.Text>}
-      </Kb.Box2>
-    ),
-  }
+  const header = (
+    <Kb.Box2 direction="vertical" centerChildren={true} style={styles.menuHeader}>
+      <Kb.Text type="BodySmallSemibold">{address}</Kb.Text>
+      {primary && <Kb.Text type="BodySmall">Primary</Kb.Text>}
+    </Kb.Box2>
+  )
 
   return (
     <Kb.Box2 direction="horizontal" alignItems="center" fullWidth={true} style={styles.container}>
       <Kb.Box2 alignItems="flex-start" direction="vertical" style={{...Styles.globalStyles.flexOne}}>
         <Kb.Text type="BodySemibold" selectable={true} lineClamp={1}>
-          {props.address}
+          {address}
         </Kb.Text>
-        {(!!subtitle || !props.verified) && (
+        {(!!subtitle || !verified) && (
           <Kb.Box2 direction="horizontal" alignItems="flex-start" gap="xtiny" fullWidth={true}>
-            {!props.verified && <Kb.Meta backgroundColor={Styles.globalColors.red} title="UNVERIFIED" />}
+            {!verified && <Kb.Meta backgroundColor={Styles.globalColors.red} title="UNVERIFIED" />}
             {!!subtitle && <Kb.Text type="BodySmall">{subtitle}</Kb.Text>}
           </Kb.Box2>
         )}
@@ -139,34 +168,19 @@ const _EmailPhoneRow = (props: Kb.PropsWithOverlay<Props>) => {
         <>
           <Kb.ClickableBox
             className="hover_container"
-            onClick={props.toggleShowingMenu}
+            onClick={toggleShowingPopup}
+            ref={popupAnchor}
             style={styles.gearIconContainer}
           >
-            <Kb.Icon
-              className="hover_contained_color_black"
-              type="iconfont-gear"
-              ref={props.setAttachmentRef}
-              style={styles.gearIcon}
-            />
+            <Kb.Icon className="hover_contained_color_black" type="iconfont-gear" style={styles.gearIcon} />
             {gearIconBadge}
           </Kb.ClickableBox>
-          <Kb.FloatingMenu
-            attachTo={props.getAttachmentRef}
-            closeText="Cancel"
-            containerStyle={styles.menuNoGrow}
-            visible={props.showingMenu}
-            position="bottom right"
-            header={Styles.isMobile ? header : undefined}
-            items={menuItems}
-            closeOnSelect={true}
-            onHidden={props.toggleShowingMenu}
-          />
+          {popup}
         </>
       )}
     </Kb.Box2>
   )
 }
-const EmailPhoneRow = Kb.OverlayParentHOC(_EmailPhoneRow)
 
 const styles = Styles.styleSheetCreate(
   () =>
@@ -198,7 +212,6 @@ const styles = Styles.styleSheetCreate(
       menuHeader: {
         height: 64,
       },
-      menuNoGrow: Styles.platformStyles({isElectron: {width: 220}}),
     } as const)
 )
 
@@ -207,69 +220,66 @@ export type OwnProps = {
   contactKey: string
 }
 
-const mapStateToProps = (state: Container.TypedState, ownProps: OwnProps) => ({
-  _emailRow: (state.settings.email.emails && state.settings.email.emails.get(ownProps.contactKey)) || null,
-  _phoneRow:
-    (state.settings.phoneNumbers.phones && state.settings.phoneNumbers.phones.get(ownProps.contactKey)) ||
-    null,
-  moreThanOneEmail: state.settings.email.emails && state.settings.email.emails.size > 1,
-})
-
-const mapDispatchToProps = (dispatch: Container.TypedDispatch, ownProps: OwnProps) => ({
-  _onMakeNotSearchable: () =>
-    dispatch(SettingsGen.createEditEmail({email: ownProps.contactKey, makeSearchable: false})),
-  _onMakeSearchable: () =>
-    dispatch(SettingsGen.createEditEmail({email: ownProps.contactKey, makeSearchable: true})),
-  email: {
-    _onDelete: (address: string, searchable: boolean, lastEmail: boolean) =>
-      dispatch(
-        RouteTreeGen.createNavigateAppend({
-          path: [
-            {
-              props: {
-                address,
-                lastEmail,
-                searchable,
-                type: 'email',
+const ConnectedEmailPhoneRow = Container.connect(
+  (state, ownProps: OwnProps) => ({
+    _emailRow: (state.settings.email.emails && state.settings.email.emails.get(ownProps.contactKey)) || null,
+    _phoneRow:
+      (state.settings.phoneNumbers.phones && state.settings.phoneNumbers.phones.get(ownProps.contactKey)) ||
+      null,
+    moreThanOneEmail: state.settings.email.emails && state.settings.email.emails.size > 1,
+  }),
+  (dispatch, ownProps: OwnProps) => ({
+    _onMakeNotSearchable: () =>
+      dispatch(SettingsGen.createEditEmail({email: ownProps.contactKey, makeSearchable: false})),
+    _onMakeSearchable: () =>
+      dispatch(SettingsGen.createEditEmail({email: ownProps.contactKey, makeSearchable: true})),
+    email: {
+      _onDelete: (address: string, searchable: boolean, lastEmail: boolean) =>
+        dispatch(
+          RouteTreeGen.createNavigateAppend({
+            path: [
+              {
+                props: {
+                  address,
+                  lastEmail,
+                  searchable,
+                  type: 'email',
+                },
+                selected: 'settingsDeleteAddress',
               },
-              selected: 'settingsDeleteAddress',
-            },
-          ],
-        })
-      ),
-    onMakePrimary: () =>
-      dispatch(SettingsGen.createEditEmail({email: ownProps.contactKey, makePrimary: true})),
-    onVerify: () => dispatch(SettingsGen.createEditEmail({email: ownProps.contactKey, verify: true})),
-  },
-  phone: {
-    _onDelete: (address: string, searchable: boolean) =>
-      dispatch(
-        RouteTreeGen.createNavigateAppend({
-          path: [
-            {
-              props: {
-                address,
-                searchable,
-                type: 'phone',
-              },
-              selected: 'settingsDeleteAddress',
-            },
-          ],
-        })
-      ),
-    _onToggleSearchable: (setSearchable: boolean) =>
-      dispatch(SettingsGen.createEditPhone({phone: ownProps.contactKey, setSearchable})),
-    _onVerify: phoneNumber => {
-      dispatch(SettingsGen.createResendVerificationForPhoneNumber({phoneNumber}))
-      dispatch(RouteTreeGen.createNavigateAppend({path: ['settingsVerifyPhone']}))
+            ],
+          })
+        ),
+      onMakePrimary: () =>
+        dispatch(SettingsGen.createEditEmail({email: ownProps.contactKey, makePrimary: true})),
+      onVerify: () => dispatch(SettingsGen.createEditEmail({email: ownProps.contactKey, verify: true})),
     },
-    onMakePrimary: () => {}, // this is not a supported phone action
-  },
-})
+    phone: {
+      _onDelete: (address: string, searchable: boolean) =>
+        dispatch(
+          RouteTreeGen.createNavigateAppend({
+            path: [
+              {
+                props: {
+                  address,
+                  searchable,
+                  type: 'phone',
+                },
+                selected: 'settingsDeleteAddress',
+              },
+            ],
+          })
+        ),
+      _onToggleSearchable: (setSearchable: boolean) =>
+        dispatch(SettingsGen.createEditPhone({phone: ownProps.contactKey, setSearchable})),
+      _onVerify: phoneNumber => {
+        dispatch(SettingsGen.createResendVerificationForPhoneNumber({phoneNumber}))
+        dispatch(RouteTreeGen.createNavigateAppend({path: ['settingsVerifyPhone']}))
+      },
+      onMakePrimary: () => {}, // this is not a supported phone action
+    },
+  }),
 
-const ConnectedEmailPhoneRow = Container.namedConnect(
-  mapStateToProps,
-  mapDispatchToProps,
   (stateProps, dispatchProps, ownProps: OwnProps) => {
     if (stateProps._phoneRow) {
       const pr = stateProps._phoneRow
@@ -299,6 +309,7 @@ const ConnectedEmailPhoneRow = Container.namedConnect(
         onVerify: dispatchProps.email.onVerify,
         primary: stateProps._emailRow.isPrimary,
         searchable,
+        superseded: false,
         type: 'email' as const,
         verified: stateProps._emailRow.isVerified,
       }
@@ -311,11 +322,11 @@ const ConnectedEmailPhoneRow = Container.namedConnect(
         onVerify: () => {},
         primary: false,
         searchable: false,
+        superseded: false,
         type: 'phone' as const,
         verified: false,
       }
-  },
-  'ConnectedEmailPhoneRow'
+  }
 )(EmailPhoneRow)
 
 export default ConnectedEmailPhoneRow

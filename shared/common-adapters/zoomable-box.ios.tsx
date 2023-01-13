@@ -1,6 +1,5 @@
-import * as React from 'react'
 import ScrollView from './scroll-view'
-import {Props} from './zoomable-box'
+import type {Props} from './zoomable-box'
 
 const Kb = {
   ScrollView,

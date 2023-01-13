@@ -801,7 +801,7 @@ func (ro *renameOp) StringWithRefs(indent string) string {
 		res += indent + fmt.Sprintf("NewDir: %v -> %v\n",
 			ro.NewDir.Unref, ro.NewDir.Ref)
 	} else {
-		res += indent + fmt.Sprintf("NewDir: same as above\n")
+		res += indent + "NewDir: same as above\n"
 	}
 	res += indent + fmt.Sprintf("Renamed: %v\n", ro.Renamed)
 	res += ro.stringWithRefs(indent)
@@ -859,10 +859,10 @@ func (w WriteRange) End() uint64 {
 // operation and `other` overlap in some way.  Specifically, it
 // returns true if:
 //
-// - both operations are writes and their write ranges overlap;
-// - one operation is a write and one is a truncate, and the truncate is
-//   within the write's range or before it; or
-// - both operations are truncates.
+//   - both operations are writes and their write ranges overlap;
+//   - one operation is a write and one is a truncate, and the truncate is
+//     within the write's range or before it; or
+//   - both operations are truncates.
 func (w WriteRange) Affects(other WriteRange) bool {
 	if w.isTruncate() {
 		if other.isTruncate() {

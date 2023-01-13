@@ -2,11 +2,17 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 //
+//go:build !darwin && !windows
 // +build !darwin,!windows
 
 package libfuse
 
-import "bazil.org/fuse"
+import (
+	"context"
+
+	"bazil.org/fuse"
+	"github.com/keybase/client/go/logger"
+)
 
 func getPlatformSpecificMountOptions(dir string, platformParams PlatformParams) ([]fuse.MountOption, error) {
 	options := []fuse.MountOption{}
@@ -26,4 +32,12 @@ func translatePlatformSpecificError(err error, platformParams PlatformParams) er
 
 func (m *mounter) reinstallMountDirIfPossible() {
 	// no-op
+}
+
+var noop = func() {}
+
+func wrapCtxWithShorterTimeoutForUnmount(
+	ctx context.Context, _ logger.Logger, _ int) (
+	newCtx context.Context, maybeUnmounting bool, cancel context.CancelFunc) {
+	return ctx, false, noop
 }

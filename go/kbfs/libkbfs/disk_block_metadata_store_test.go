@@ -6,7 +6,7 @@ package libkbfs
 
 import (
 	"context"
-	"io/ioutil"
+
 	"os"
 	"testing"
 
@@ -40,14 +40,15 @@ func (t *testBlockMetadataStoreConfig) Mode() InitMode {
 
 func makeBlockMetadataStoreForTest(t *testing.T) (
 	blockMetadataStore BlockMetadataStore, tempdir string) {
-	tempdir, err := ioutil.TempDir(os.TempDir(), "xattr_test")
+	tempdir, err := os.MkdirTemp(os.TempDir(), "xattr_test")
 	require.NoError(t, err)
 	config := testBlockMetadataStoreConfig{
 		codec:       kbfscodec.NewMsgpack(),
 		log:         logger.NewTestLogger(t),
 		storageRoot: tempdir,
 	}
-	s, err := newDiskBlockMetadataStore(&config, modeTest{modeDefault{}})
+	s, err := newDiskBlockMetadataStore(
+		&config, modeTest{modeDefault{}}, config.StorageRoot())
 	require.NoError(t, err)
 	return s, tempdir
 }

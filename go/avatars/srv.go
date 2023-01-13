@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/keybase/client/go/kbhttp/manager"
 	"github.com/keybase/client/go/protocol/keybase1"
@@ -18,14 +19,27 @@ import (
 	"github.com/keybase/client/go/libkb"
 )
 
+var avatarTransport = &http.Transport{
+	DialContext: (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}).DialContext,
+	MaxConnsPerHost:       10,
+	MaxIdleConns:          100,
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+}
+
 type Srv struct {
 	libkb.Contextified
 
 	httpSrv *manager.Srv
-	source  Source
+	source  libkb.AvatarLoaderSource
 }
 
-func NewSrv(g *libkb.GlobalContext, httpSrv *manager.Srv, source Source) *Srv {
+func NewSrv(g *libkb.GlobalContext, httpSrv *manager.Srv, source libkb.AvatarLoaderSource) *Srv {
 	s := &Srv{
 		Contextified: libkb.NewContextified(g),
 		httpSrv:      httpSrv,
@@ -67,7 +81,13 @@ func (s *Srv) loadFromURL(raw string) (io.ReadCloser, error) {
 	}
 	switch parsed.Scheme {
 	case "http", "https":
-		resp, err := libkb.ProxyHTTPGet(s.G().GetEnv(), raw)
+		avatarTransport.Proxy = libkb.MakeProxy(s.G().GetEnv())
+		xprt := libkb.NewInstrumentedRoundTripper(s.G(), func(*http.Request) string { return "AvatarSrv" },
+			libkb.NewClosingRoundTripper(avatarTransport))
+		cli := &http.Client{
+			Transport: xprt,
+		}
+		resp, err := cli.Get(raw)
 		if err != nil {
 			return nil, err
 		}
@@ -95,6 +115,7 @@ func (s *Srv) serve(w http.ResponseWriter, req *http.Request) {
 	typ := req.URL.Query().Get("typ")
 	name := req.URL.Query().Get("name")
 	format := keybase1.AvatarFormat(req.URL.Query().Get("format"))
+	mode := req.URL.Query().Get("mode")
 	mctx := libkb.NewMetaContextBackground(s.G())
 
 	var loadFn func(libkb.MetaContext, []string, []keybase1.AvatarFormat) (keybase1.LoadAvatarsRes, error)
@@ -103,9 +124,15 @@ func (s *Srv) serve(w http.ResponseWriter, req *http.Request) {
 	case "user":
 		loadFn = s.source.LoadUsers
 		placeholderMap = userPlaceholders
+		if mode == "dark" {
+			placeholderMap = userPlaceholdersDark
+		}
 	case "team":
 		loadFn = s.source.LoadTeams
 		placeholderMap = teamPlaceholders
+		if mode == "dark" {
+			placeholderMap = teamPlaceholdersDark
+		}
 	default:
 		s.makeError(w, http.StatusBadRequest, "unknown avatar type: %s", typ)
 		return
@@ -128,7 +155,7 @@ func (s *Srv) serve(w http.ResponseWriter, req *http.Request) {
 			s.makeError(w, http.StatusInternalServerError, "failed to load placeholder: %s", err)
 			return
 		}
-		reader = ioutil.NopCloser(bytes.NewReader(placeholder))
+		reader = io.NopCloser(bytes.NewReader(placeholder))
 	} else {
 		if reader, err = s.loadFromURL(url.String()); err != nil {
 			s.makeError(w, http.StatusInternalServerError, "failed to get URL reader: %s", err)

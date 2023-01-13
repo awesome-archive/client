@@ -1,43 +1,36 @@
-import * as React from 'react'
-import * as I from 'immutable'
 import * as Types from '../../../constants/types/fs'
 import * as Constants from '../../../constants/fs'
-import {namedConnect} from '../../../util/container'
-import OpenHOC from '../../common/open-hoc'
+import * as Container from '../../../util/container'
+import {useOpen} from '../../common/use-open'
 import Tlf from './tlf'
-import flags from '../../../util/feature-flags'
 
 export type OwnProps = {
   destinationPickerIndex?: number
+  disabled: boolean
   mixedMode?: boolean
   name: string
   tlfType: Types.TlfType
 }
 
-const mapStateToProps = (state, {tlfType, name}: OwnProps) => ({
-  _tlf: Constants.getTlfFromTlfs(state.fs.tlfs, tlfType, name),
-  _username: state.config.username,
-})
-
-const mergeProps = (stateProps, _, {tlfType, name, mixedMode, destinationPickerIndex}: OwnProps) => {
-  const shouldBadge = Constants.tlfIsBadged(stateProps._tlf)
+const TLFContainer = (p: OwnProps) => {
+  const {tlfType, name, mixedMode, destinationPickerIndex, disabled} = p
+  const tlf = Container.useSelector(state => Constants.getTlfFromTlfs(state.fs.tlfs, tlfType, name))
+  const username = Container.useSelector(state => state.config.username)
   const path = Constants.tlfTypeAndNameToPath(tlfType, name)
-  const usernames = Constants.getUsernamesFromTlfName(name).filter(name => name !== stateProps._username)
-  return {
+  const usernames = Constants.getUsernamesFromTlfName(name).filter(name => name !== username)
+  const onOpen = useOpen({destinationPickerIndex, path})
+  const np = {
     destinationPickerIndex,
-    isIgnored: stateProps._tlf.isIgnored,
-    isNew: shouldBadge && stateProps._tlf.isNew,
-    loadPathMetadata:
-      flags.kbfsOfflineMode &&
-      stateProps._tlf.syncConfig &&
-      stateProps._tlf.syncConfig.mode !== Types.TlfSyncMode.Disabled,
+    disabled,
+    isIgnored: tlf.isIgnored,
+    loadPathMetadata: tlf.syncConfig && tlf.syncConfig.mode !== Types.TlfSyncMode.Disabled,
     mixedMode,
     name,
+    onOpen,
     path,
     // Only include the user if they're the only one
-    usernames: usernames.isEmpty() ? I.List([stateProps._username]) : usernames,
+    usernames: !usernames.length ? [username] : usernames,
   }
+  return <Tlf {...np} />
 }
-
-export default ((ComposedComponent: React.ComponentType<any>) =>
-  namedConnect(mapStateToProps, () => ({}), mergeProps, 'ConnectedTlfRow')(OpenHOC(ComposedComponent)))(Tlf)
+export default TLFContainer

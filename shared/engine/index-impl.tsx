@@ -1,18 +1,25 @@
 // Handles sending requests to the daemon
 import logger from '../logger'
-import Session, {CancelHandlerType} from './session'
-import {initEngine, initEngineSaga} from './require'
-import {RPCError, convertToError} from '../util/errors'
+import Session, {type CancelHandlerType} from './session'
+import {initEngine, initEngineListener} from './require'
+import {type RPCError, convertToError} from '../util/errors'
 import {isMobile} from '../constants/platform'
 import {localLog} from '../util/forward-logs'
 import {printOutstandingRPCs, isTesting} from '../local-debug'
-import {resetClient, createClient, rpcLog, createClientType} from './index.platform'
+import {resetClient, createClient, rpcLog, type createClientType} from './index.platform'
 import {createBatchChangeWaiting} from '../actions/waiting-gen'
-import engineSaga from './saga'
-import {throttle} from 'lodash-es'
-import {CustomResponseIncomingCallMapType, IncomingCallMapType} from '.'
-import {SessionID, SessionIDKey, WaitingHandlerType, MethodKey} from './types'
-import {TypedState, Dispatch} from '../util/container'
+import engineListener from './listener'
+import throttle from 'lodash/throttle'
+import type {CustomResponseIncomingCallMapType, IncomingCallMapType} from '.'
+import type {SessionID, SessionIDKey, WaitingHandlerType, MethodKey} from './types'
+import type {TypedDispatch} from '../util/container'
+
+// delay incoming to stop react from queueing too many setState calls and stopping rendering
+// only while debugging for now
+const DEFER_INCOMING_DURING_DEBUG = __DEV__ && false
+if (DEFER_INCOMING_DURING_DEBUG) {
+  console.log(new Array(1000).fill('DEFER_INCOMING_DURING_DEBUG is On!!!!!!!!!!!!!!!!!!!!!').join('\n'))
+}
 
 type WaitingKey = string | Array<string>
 
@@ -27,19 +34,16 @@ class Engine {
   _sessionsMap: {[K in SessionIDKey]: Session} = {}
   // Helper we delegate actual calls to
   _rpcClient: createClientType
-  // Set which actions we don't auto respond with so sagas can themselves
+  // Set which actions we don't auto respond with so listeners can themselves
   _customResponseAction: {[K in MethodKey]: true} = {}
   // We generate sessionIDs monotonically
   _nextSessionID: number = 123
   // We call onDisconnect handlers only if we've actually disconnected (ie connected once)
   _hasConnected: boolean = isMobile // mobile is always connected
-  // App tells us when the sagas are done loading so we can start emitting events
-  _sagasAreReady: boolean = false
+  // App tells us when the listeners are done loading so we can start emitting events
+  _listenersAreReady: boolean = false
 
-  static _dispatch: Dispatch
-
-  // Temporary helper for incoming call maps
-  static _getState: () => TypedState
+  _dispatch: TypedDispatch
 
   _queuedChanges: Array<{error: RPCError; increment: boolean; key: WaitingKey}> = []
   dispatchWaitingAction = (key: WaitingKey, waiting: boolean, error: RPCError) => {
@@ -50,22 +54,16 @@ class Engine {
   _throttledDispatchWaitingAction = throttle(() => {
     const changes = this._queuedChanges
     this._queuedChanges = []
-    Engine._dispatch(createBatchChangeWaiting({changes}))
+    this._dispatch(createBatchChangeWaiting({changes}))
   }, 500)
 
-  // TODO deprecate
-  deprecatedGetDispatch = () => {
-    return Engine._dispatch
-  }
-  // TODO deprecate
-  deprecatedGetGetState = () => {
-    return Engine._getState
-  }
-
-  constructor(dispatch: Dispatch, getState: () => TypedState) {
+  constructor(dispatch: TypedDispatch) {
     // setup some static vars
-    Engine._dispatch = dispatch
-    Engine._getState = getState
+    if (DEFER_INCOMING_DURING_DEBUG) {
+      this._dispatch = a => setTimeout(() => dispatch(a), 1)
+    } else {
+      this._dispatch = dispatch
+    }
     this._rpcClient = createClient(
       payload => this._rpcIncoming(payload),
       () => this._onConnected(),
@@ -101,26 +99,27 @@ class Engine {
   }
 
   _onDisconnect() {
-    Engine._dispatch({payload: undefined, type: 'engine-gen:disconnected'})
+    this._dispatch({payload: undefined, type: 'engine-gen:disconnected'})
   }
 
-  // We want to dispatch the connect action but only after sagas boot up
-  sagasAreReady = () => {
-    this._sagasAreReady = true
+  // We want to dispatch the connect action but only after listeners boot up
+  listenersAreReady = () => {
+    this._listenersAreReady = true
     if (this._hasConnected) {
       // dispatch the action version
-      Engine._dispatch({payload: undefined, type: 'engine-gen:connected'})
+      this._dispatch({payload: undefined, type: 'engine-gen:connected'})
     }
+    this._dispatch({payload: {phase: 'initialStartupAsEarlyAsPossible'}, type: 'config:loadOnStart'})
   }
 
   // Called when we reconnect to the server
   _onConnected() {
     this._hasConnected = true
 
-    // Sagas already booted so they can get this
-    if (this._sagasAreReady) {
+    // listeners already booted so they can get this
+    if (this._listenersAreReady) {
       // dispatch the action version
-      Engine._dispatch({payload: undefined, type: 'engine-gen:connected'})
+      this._dispatch({payload: undefined, type: 'engine-gen:connected'})
     }
   }
 
@@ -186,7 +185,7 @@ class Engine {
           .map((p, idx) => (idx ? capitalize(p) : p))
           .join('')
         // @ts-ignore can't really type this easily
-        Engine._dispatch({payload: {params: param, ...extra}, type: `engine-gen:${type}`})
+        this._dispatch({payload: {params: param, ...extra}, type: `engine-gen:${type}`})
       }
     }
   }
@@ -206,10 +205,7 @@ class Engine {
       incomingCallMap: p.incomingCallMap,
       waitingKey: p.waitingKey,
     })
-    // Don't make outgoing calls immediately since components can do this when they mount
-    setImmediate(() => {
-      session.start(p.method, p.params, p.callback)
-    })
+    session.start(p.method, p.params, p.callback)
     return session.getId()
   }
 
@@ -228,16 +224,19 @@ class Engine {
       cancelHandler,
       customResponseIncomingCallMap,
       dangling,
+      dispatch: this._dispatch,
       endHandler: (session: Session) => this._sessionEnded(session),
       incomingCallMap,
       invoke: (method, param, cb) => {
-        const callback = method => (...args) => {
-          // If first argument is set, convert it to an Error type
-          if (args.length > 0 && !!args[0]) {
-            args[0] = convertToError(args[0], method)
+        const callback =
+          method =>
+          (...args) => {
+            // If first argument is set, convert it to an Error type
+            if (args.length > 0 && !!args[0]) {
+              args[0] = convertToError(args[0], method)
+            }
+            cb(...args)
           }
-          cb(...args)
-        }
         this._rpcClient.invoke(method, param || [{}], callback(method))
       },
       sessionID,
@@ -280,22 +279,17 @@ class Engine {
   }
 
   registerCustomResponse = (method: string) => {
-    if (this._customResponseAction[method]) {
-      throw new Error('Dupe custom response handler registered: ' + method)
-    }
+    // TODO change how this global thing works. not nice w/ hot reload
+    // if (this._customResponseAction[method]) {
+    //     throw new Error('Dupe custom response handler registered: ' + method)
+    // }
 
     this._customResponseAction[method] = true
-  }
-
-  // Register a named callback when we fail to connect. Call if we're already disconnected
-  hasEverConnected() {
-    // If we've actually failed to connect already let's call this immediately
-    return this._hasConnected
   }
 }
 
 // Dummy engine for snapshotting
-class FakeEngine {
+export class FakeEngine {
   _deadSessionsMap: {[K in SessionIDKey]: Session} = {} // just to bookkeep
   _sessionsMap: {[K in SessionIDKey]: Session} = {}
   constructor() {
@@ -306,7 +300,6 @@ class FakeEngine {
   cancelSession(_: SessionID) {}
   rpc() {}
   setFailOnError() {}
-  hasEverConnected() {}
   setIncomingActionCreator(
     _: MethodKey,
     __: (arg0: {param: Object; response: Object | null; state: any}) => any | null
@@ -318,6 +311,7 @@ class FakeEngine {
     ____: boolean = false
   ) {
     return new Session({
+      dispatch: () => {},
       endHandler: () => {},
       incomingCallMap: null,
       invoke: () => {},
@@ -343,21 +337,18 @@ if (__DEV__) {
   engine = global.DEBUGEngine
 }
 
-const makeEngine = (dispatch: Dispatch, getState: () => TypedState) => {
+const makeEngine = (dispatch: TypedDispatch) => {
   if (__DEV__ && engine) {
     logger.warn('makeEngine called multiple times')
   }
 
   if (!engine) {
-    engine =
-      process.env.KEYBASE_NO_ENGINE || isTesting
-        ? ((new FakeEngine() as unknown) as Engine)
-        : new Engine(dispatch, getState)
+    engine = isTesting ? (new FakeEngine() as unknown as Engine) : new Engine(dispatch)
     if (__DEV__) {
       global.DEBUGEngine = engine
     }
     initEngine(engine as any)
-    initEngineSaga(engineSaga)
+    initEngineListener(engineListener)
   }
   return engine
 }

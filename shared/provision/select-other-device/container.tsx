@@ -1,46 +1,38 @@
+import * as React from 'react'
 import * as ProvisionGen from '../../actions/provision-gen'
 import * as RouteTreeGen from '../../actions/route-tree-gen'
-import * as LoginGen from '../../actions/login-gen'
-import SelectOtherDevice from '.'
 import * as Container from '../../util/container'
-import HiddenString from '../../util/hidden-string'
+import * as Constants from '../../constants/provision'
+import * as AutoresetGen from '../../actions/autoreset-gen'
+import SelectOtherDevice from '.'
 
-type OwnProps = {}
+const SelectOtherDeviceContainer = () => {
+  const devices = Container.useSelector(state => state.provision.devices)
+  const username = Container.useSelector(state => state.provision.username)
+  const waiting = Container.useSelector(state => Container.anyWaiting(state, Constants.waitingKey))
 
-const mapStateToProps = (state: Container.TypedState) => ({
-  configuredAccounts: state.config.configuredAccounts,
-  devices: state.provision.devices,
-})
-
-const mapDispatchToProps = (dispatch: Container.TypedDispatch) => ({
-  _onBack: () => {
+  const dispatch = Container.useDispatch()
+  const _onBack = React.useCallback(() => {
     dispatch(RouteTreeGen.createNavigateUp())
-  },
-  onLogIn: (username: string) => dispatch(LoginGen.createLogin({password: new HiddenString(''), username})),
-  onResetAccount: () => {
-    dispatch(LoginGen.createLaunchAccountResetWebPage())
-    dispatch(RouteTreeGen.createNavigateUp())
-  },
-  onSelect: (name: string) => {
-    dispatch(ProvisionGen.createSubmitDeviceSelect({name}))
-  },
-})
-
-export default Container.connect(
-  mapStateToProps,
-  mapDispatchToProps,
-  (stateProps, dispatchProps, _: OwnProps) => {
-    const loggedInAccounts = stateProps.configuredAccounts
-      .filter(account => account.hasStoredSecret)
-      .map(account => account.username)
-    return {
-      devices: stateProps.devices.toArray(),
-      onBack:
-        loggedInAccounts.length > 0
-          ? () => dispatchProps.onLogIn(loggedInAccounts[0] || '')
-          : dispatchProps._onBack,
-      onResetAccount: dispatchProps.onResetAccount,
-      onSelect: dispatchProps.onSelect,
-    }
-  }
-)(Container.safeSubmitPerMount(['onSelect', 'onBack'])(SelectOtherDevice))
+  }, [dispatch])
+  const onBack = Container.useSafeSubmit(_onBack, false)
+  const onResetAccount = React.useCallback(() => {
+    dispatch(AutoresetGen.createStartAccountReset({skipPassword: false, username}))
+  }, [dispatch, username])
+  const _onSelect = React.useCallback(
+    (name: string) => {
+      !waiting && dispatch(ProvisionGen.createSubmitDeviceSelect({name}))
+    },
+    [dispatch, waiting]
+  )
+  const onSelect = Container.useSafeSubmit(_onSelect, false)
+  return (
+    <SelectOtherDevice
+      devices={devices}
+      onBack={onBack}
+      onSelect={onSelect}
+      onResetAccount={onResetAccount}
+    />
+  )
+}
+export default SelectOtherDeviceContainer

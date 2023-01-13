@@ -41,9 +41,8 @@ const PaperKey = () => {
               {paperkey}
             </Kb.Text>
           ) : (
-            <Kb.ProgressIndicator type="Small" />
+            <Kb.ProgressIndicator type="Large" />
           )}
-          <Kb.Icon type="icon-paper-key-corner" style={Kb.iconCastPlatformStyles(styles.keyBoxCorner)} />
         </Kb.Box2>
         <Kb.Checkbox
           label="Yes, I wrote this down."
@@ -60,6 +59,11 @@ const PaperKey = () => {
       </Kb.Box2>
     </Kb.Box2>
   )
+}
+PaperKey.navigationOptions = {
+  gesturesEnabled: false,
+  modal2: true,
+  modal2NoClose: true,
 }
 
 const borderWidth = 3
@@ -82,12 +86,6 @@ const styles = Styles.styleSheetCreate(
         borderWidth,
         minHeight: 100,
         padding: Styles.globalMargins.medium,
-        position: 'relative',
-      },
-      keyBoxCorner: {
-        position: 'absolute',
-        right: -borderWidth,
-        top: -borderWidth,
       },
       text: {
         ...Styles.globalStyles.fontTerminal,

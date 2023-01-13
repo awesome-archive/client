@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
 import * as RPCChatTypes from '../../../constants/types/rpc-chat-gen'
@@ -51,7 +50,7 @@ const CommandStatus = (props: Props) => {
         <Kb.Icon
           onClick={props.onCancel}
           type="iconfont-remove"
-          style={Kb.iconCastPlatformStyles(styles.close)}
+          style={styles.close}
           color={textColor(props.displayType)}
           boxStyle={styles.close}
         />

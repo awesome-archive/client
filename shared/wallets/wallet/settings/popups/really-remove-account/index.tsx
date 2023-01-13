@@ -1,7 +1,7 @@
-import React from 'react'
+import * as React from 'react'
 import * as Kb from '../../../../../common-adapters'
 import * as Styles from '../../../../../styles'
-import * as Types from '../../../../../constants/types/wallets'
+import type * as Types from '../../../../../constants/types/wallets'
 import * as WalletsGen from '../../../../../actions/wallets-gen'
 import * as Container from '../../../../../util/container'
 import {WalletPopup} from '../../../../common'
@@ -20,16 +20,16 @@ const ReallyRemoveAccountPopup = (props: Props) => {
   const {accountID, onCopyKey} = props
   const dispatch = Container.useDispatch()
   const [showingToast, setShowToast] = React.useState(false)
-  const attachmentRef = React.useRef<Kb.Button>(null)
+  const attachmentRef = React.useRef<Kb.ClickableBox>(null)
   const setShowToastFalseLater = Kb.useTimeout(() => setShowToast(false), 2000)
   const onLoadSecretKey = React.useCallback(
     () => dispatch(WalletsGen.createExportSecretKey({accountID: accountID})),
     [dispatch, accountID]
   )
-  const onSecretKeySeen = React.useCallback(() => dispatch(WalletsGen.createSecretKeySeen({accountID})), [
-    accountID,
-    dispatch,
-  ])
+  const onSecretKeySeen = React.useCallback(
+    () => dispatch(WalletsGen.createSecretKeySeen({accountID})),
+    [accountID, dispatch]
+  )
   React.useEffect(() => {
     onLoadSecretKey()
     return () => {
@@ -74,7 +74,7 @@ const ReallyRemoveAccountPopup = (props: Props) => {
       <Kb.Box2 centerChildren={true} direction="vertical" style={styles.flexOne} fullWidth={true}>
         <Kb.Icon
           type={Styles.isMobile ? 'icon-wallet-secret-key-64' : 'icon-wallet-secret-key-48'}
-          style={Kb.iconCastPlatformStyles(styles.icon)}
+          style={styles.icon}
         />
         <Kb.Box2 direction="vertical">
           <Kb.Text center={true} style={styles.warningText} type="Header">
@@ -83,7 +83,7 @@ const ReallyRemoveAccountPopup = (props: Props) => {
           <Kb.Text
             center={true}
             type="HeaderItalic"
-            style={Styles.collapseStyles([styles.warningText, styles.mainText])}
+            style={Styles.collapseStyles([styles.warningText, styles.mainText] as const)}
           >
             {props.name}.
           </Kb.Text>
@@ -94,7 +94,7 @@ const ReallyRemoveAccountPopup = (props: Props) => {
         </Kb.Text>
 
         <Kb.Toast visible={showingToast} attachTo={() => attachmentRef.current} position="top center">
-          {Styles.isMobile && <Kb.Icon type="iconfont-clipboard" color="white" fontSize={22} />}
+          {Styles.isMobile && <Kb.Icon type="iconfont-clipboard" color="white" />}
           <Kb.Text center={true} type="BodySmall" style={styles.toastText}>
             Copied to clipboard
           </Kb.Text>

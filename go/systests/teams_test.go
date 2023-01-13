@@ -15,6 +15,7 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/protocol/stellar1"
+	"github.com/keybase/client/go/service"
 	"github.com/keybase/client/go/teams"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/require"
@@ -145,7 +146,7 @@ func TestTeamRotateOnRevoke(t *testing.T) {
 	tt.users[0].waitForTeamChangedGregor(teamID, keybase1.Seqno(2))
 
 	tt.users[1].revokePaperKey()
-	tt.users[0].waitForRotateByID(teamID, keybase1.Seqno(3))
+	tt.users[0].waitForAnyRotateByID(teamID, keybase1.Seqno(2) /* toSeqno */, keybase1.Seqno(1) /* toHiddenSeqno */)
 
 	// check that key was rotated for team
 	after, err := GetTeamForTestByStringName(context.TODO(), tt.users[0].tc.G, teamName.String())
@@ -261,6 +262,10 @@ func (tt *teamTester) addUserHelper(pre string, puk bool, paper bool) *userPlusD
 	})
 	require.NoError(tt.t, err)
 
+	// register fake teams UI for tests
+	err = srv.Register(keybase1.TeamsUiProtocol(&teamsUI{}))
+	require.NoError(tt.t, err)
+
 	u.teamsClient = keybase1.TeamsClient{Cli: cli}
 	u.userClient = keybase1.UserClient{Cli: cli}
 	u.stellarClient = newStellarRetryClient(cli)
@@ -341,9 +346,9 @@ func (u *userPlusDevice) createTeam2() (teamID keybase1.TeamID, teamName keybase
 	return team.ID, team.Name()
 }
 
-func (u *userPlusDevice) teamSetSettings(teamName string, settings keybase1.TeamSettings) {
+func (u *userPlusDevice) teamSetSettings(id keybase1.TeamID, settings keybase1.TeamSettings) {
 	err := u.teamsClient.TeamSetSettings(context.Background(), keybase1.TeamSetSettingsArg{
-		Name:     teamName,
+		TeamID:   id,
 		Settings: settings,
 	})
 	require.NoError(u.tc.T, err)
@@ -398,7 +403,7 @@ func (u *userPlusDevice) addTeamMember(team, username string, role keybase1.Team
 func (u *userPlusDevice) removeTeamMember(team, username string) {
 	rm := client.NewCmdTeamRemoveMemberRunner(u.tc.G)
 	rm.Team = team
-	rm.Username = username
+	rm.Assertion = username
 	rm.Force = true
 	err := rm.Run()
 	require.NoError(u.tc.T, err)
@@ -415,7 +420,7 @@ func (u *userPlusDevice) changeTeamMember(team, username string, role keybase1.T
 	change := client.NewCmdTeamEditMemberRunner(u.tc.G)
 	change.Team = team
 	change.Username = username
-	change.Role = keybase1.TeamRole_OWNER
+	change.Role = role
 	err := change.Run()
 	require.NoError(u.tc.T, err)
 }
@@ -498,7 +503,8 @@ func (u *userPlusDevice) acceptEmailInvite(token string) {
 }
 
 func (u *userPlusDevice) acceptInviteOrRequestAccess(tokenOrName string) keybase1.TeamAcceptOrRequestResult {
-	ret, err := teams.TeamAcceptInviteOrRequestAccess(context.TODO(), u.tc.G, tokenOrName)
+	tui := &teamsUI{}
+	ret, err := teams.TeamAcceptInviteOrRequestAccess(context.TODO(), u.tc.G, tui, tokenOrName)
 	require.NoError(u.tc.T, err)
 	return ret
 }
@@ -539,7 +545,7 @@ func (u *userPlusDevice) userVersion() keybase1.UserVersion {
 
 func (u *userPlusDevice) paperKeyID() keybase1.DeviceID {
 	for _, d := range u.devices() {
-		if d.Type == libkb.DeviceTypePaper {
+		if d.Type == keybase1.DeviceTypeV2_PAPER {
 			return d.DeviceID
 		}
 	}
@@ -562,6 +568,19 @@ func (u *userPlusDevice) waitForTeamChangedGregor(teamID keybase1.TeamID, toSeqn
 		}
 	}
 	require.Fail(u.tc.T, fmt.Sprintf("timed out waiting for team rotate %s", teamID))
+}
+
+func (u *userPlusDevice) waitForMetadataUpdateGregor(reason string) {
+	// process 10 team rotations or 10s worth of time
+	for i := 0; i < 10; i++ {
+		select {
+		case <-u.notifications.metadataUpdateCh:
+			u.tc.T.Logf("metadata update received for reason %q", reason)
+			return
+		case <-time.After(1 * time.Second * libkb.CITimeMultiplier(u.tc.G)):
+		}
+	}
+	require.Fail(u.tc.T, fmt.Sprintf("timed out waiting for metadata update for reason %q", reason))
 }
 
 func (u *userPlusDevice) waitForBadgeStateWithReset(numReset int) keybase1.BadgeState {
@@ -608,25 +627,28 @@ func (u *userPlusDevice) waitForAnyRotateByID(teamID keybase1.TeamID, toSeqno ke
 	// jump start the clkr queue processing loop
 	u.kickTeamRekeyd()
 
-	// process 10 team rotations or 10s worth of time
-	for i := 0; i < 10; i++ {
+	// process 20 team rotate notifications or 10s worth of time
+	timeout := time.After(10 * time.Second * libkb.CITimeMultiplier(u.tc.G))
+	for i := 0; i < 20; i++ {
 		select {
 		case arg := <-u.notifications.changeCh:
-			u.tc.T.Logf("rotate received: %+v", arg)
+			u.tc.T.Logf("rotate received: %s", spew.Sdump(arg))
 			if arg.TeamID.Eq(teamID) && arg.Changes.KeyRotated && arg.LatestSeqno == toSeqno && (toHiddenSeqno == keybase1.Seqno(0) || toHiddenSeqno == arg.LatestHiddenSeqno) {
 				u.tc.T.Logf("rotate matched!")
 				return
 			}
 			u.tc.T.Logf("ignoring rotate message")
-		case <-time.After(1 * time.Second * libkb.CITimeMultiplier(u.tc.G)):
+		case <-timeout:
+			require.Fail(u.tc.T, fmt.Sprintf("timed out waiting for team rotate %s", teamID))
+			return
 		}
 	}
-	require.Fail(u.tc.T, fmt.Sprintf("timed out waiting for team rotate %s", teamID))
 }
 
 func (u *userPlusDevice) waitForTeamChangedAndRotated(teamID keybase1.TeamID, toSeqno keybase1.Seqno) {
-	// process 10 team rotations or 10s worth of time
-	for i := 0; i < 10; i++ {
+	// process 20 team rotate notifications or 10s worth of time
+	timeout := time.After(10 * time.Second * libkb.CITimeMultiplier(u.tc.G))
+	for i := 0; i < 20; i++ {
 		select {
 		case arg := <-u.notifications.changeCh:
 			u.tc.T.Logf("membership change received: %+v", arg)
@@ -635,10 +657,11 @@ func (u *userPlusDevice) waitForTeamChangedAndRotated(teamID keybase1.TeamID, to
 				return
 			}
 			u.tc.T.Logf("ignoring change message (expected team = %v, seqno = %d)", teamID, toSeqno)
-		case <-time.After(1 * time.Second * libkb.CITimeMultiplier(u.tc.G)):
+		case <-timeout:
+			require.Fail(u.tc.T, fmt.Sprintf("timed out waiting for team rotate %s", teamID))
+			return
 		}
 	}
-	require.Fail(u.tc.T, fmt.Sprintf("timed out waiting for team rotate %s", teamID))
 }
 
 func (u *userPlusDevice) waitForTeamChangeRenamed(teamID keybase1.TeamID) {
@@ -735,11 +758,44 @@ func (u *userPlusDevice) proveGubbleSocial() {
 	proveGubbleUniverse(u.tc, "gubble.social", "gubble_social", u.username, u.newSecretUI())
 }
 
+func (u *userPlusDevice) revokeServiceProof(serviceType string) {
+	tctx := u.tc
+	arg := libkb.NewLoadUserArg(tctx.G).WithUID(u.uid).WithForcePoll(true)
+	user, err := libkb.LoadUser(arg)
+	require.NoError(tctx.T, err)
+	require.NotNil(tctx.T, user)
+
+	st := tctx.G.GetProofServices().GetServiceType(context.TODO(), "rooter")
+	ret := user.IDTable().GetActiveProofsFor(st)
+	require.Len(tctx.T, ret, 1)
+	sigID := ret[0].GetSigID()
+
+	revokeClient := keybase1.RevokeClient{Cli: u.teamsClient.Cli}
+	err = revokeClient.RevokeSigs(context.TODO(), keybase1.RevokeSigsArg{
+		SigIDQueries: []string{sigID.String()},
+	})
+	require.NoError(tctx.T, err)
+}
+
 func (u *userPlusDevice) track(username string) {
 	trackCmd := client.NewCmdTrackRunner(u.tc.G)
 	trackCmd.SetUser(username)
 	trackCmd.SetOptions(keybase1.TrackOptions{BypassConfirm: true})
 	err := trackCmd.Run()
+	require.NoError(u.tc.T, err)
+}
+
+func (u *userPlusDevice) block(username string, chat bool, follow bool) {
+	arg := keybase1.SetUserBlocksArg{
+		Blocks: []keybase1.UserBlockArg{
+			{
+				Username:       username,
+				SetChatBlock:   &chat,
+				SetFollowBlock: &follow,
+			},
+		},
+	}
+	err := u.device.userClient.SetUserBlocks(context.TODO(), arg)
 	require.NoError(u.tc.T, err)
 }
 
@@ -791,7 +847,7 @@ func (u *userPlusDevice) newSecretUI() *libkb.TestSecretUI {
 	return &libkb.TestSecretUI{Passphrase: u.passphrase}
 }
 
-func (u *userPlusDevice) provisionNewDevice() *deviceWrapper {
+func (u *userPlusDevice) provisionNewDevice() (d *deviceWrapper, cleanup func()) {
 	tc := setupTest(u.tc.T, "sub")
 	t := tc.T
 	g := tc.G
@@ -832,7 +888,16 @@ func (u *userPlusDevice) provisionNewDevice() *deviceWrapper {
 	device.deviceKey.DeviceID = g.ActiveDevice.DeviceID()
 	require.True(t, device.deviceKey.DeviceID.Exists())
 
-	return device
+	cleanup = func() {
+		device.tctx.Cleanup()
+		if device.service != nil {
+			device.service.Stop(0)
+			err := device.stop()
+			require.NoError(tc.T, err)
+		}
+	}
+
+	return device, cleanup
 }
 
 func (u *userPlusDevice) reset() {
@@ -860,7 +925,7 @@ func (u *userPlusDevice) delete() {
 }
 
 func (u *userPlusDevice) logout() {
-	err := u.tc.G.Logout(context.TODO())
+	err := u.tc.Logout()
 	require.NoError(u.tc.T, err)
 }
 
@@ -872,7 +937,7 @@ func (u *userPlusDevice) login() {
 		SecretUI:    u.newSecretUI(),
 		LoginUI:     &libkb.TestLoginUI{Username: u.username},
 	}
-	li := engine.NewLogin(u.tc.G, libkb.DeviceTypeDesktop, u.username, keybase1.ClientType_CLI)
+	li := engine.NewLogin(u.tc.G, keybase1.DeviceTypeV2_DESKTOP, u.username, keybase1.ClientType_CLI)
 	mctx := libkb.NewMetaContextTODO(u.tc.G).WithUIs(uis)
 	err := engine.RunEngine2(mctx, li)
 	require.NoError(u.tc.T, err)
@@ -945,6 +1010,14 @@ func (u *userPlusDevice) perUserKeyUpgrade() {
 	require.NoError(t, err, "Run engine.NewPerUserKeyUpgrade")
 }
 
+func (u *userPlusDevice) disableTOFUSearch() {
+	mctx := u.MetaContext()
+	arg := libkb.NewAPIArg("test/disable_tofu_search_for_uid")
+	arg.SessionType = libkb.APISessionTypeREQUIRED
+	_, err := u.tc.G.API.Post(mctx, arg)
+	require.NoError(u.tc.T, err)
+}
+
 func (u *userPlusDevice) MetaContext() libkb.MetaContext {
 	return libkb.NewMetaContextForTest(*u.tc)
 }
@@ -1008,28 +1081,36 @@ func GetTeamForTestByID(ctx context.Context, g *libkb.GlobalContext, id keybase1
 }
 
 type teamNotifyHandler struct {
-	changeCh           chan keybase1.TeamChangedByIDArg
-	abandonCh          chan keybase1.TeamID
-	badgeCh            chan keybase1.BadgeState
-	newTeamEKCh        chan keybase1.NewTeamEkArg
-	newTeambotEKCh     chan keybase1.NewTeambotEkArg
-	teambotEKNeededCh  chan keybase1.TeambotEkNeededArg
-	newTeambotKeyCh    chan keybase1.NewTeambotKeyArg
-	teambotKeyNeededCh chan keybase1.TeambotKeyNeededArg
-	newlyAddedToTeam   chan keybase1.TeamID
+	changeCh                     chan keybase1.TeamChangedByIDArg
+	abandonCh                    chan keybase1.TeamID
+	badgeCh                      chan keybase1.BadgeState
+	newTeamEKCh                  chan keybase1.NewTeamEkArg
+	newTeambotEKCh               chan keybase1.NewTeambotEkArg
+	teambotEKNeededCh            chan keybase1.TeambotEkNeededArg
+	newTeambotKeyCh              chan keybase1.NewTeambotKeyArg
+	teambotKeyNeededCh           chan keybase1.TeambotKeyNeededArg
+	newlyAddedToTeam             chan keybase1.TeamID
+	teamRoleMapCh                chan keybase1.UserTeamVersion
+	metadataUpdateCh             chan struct{}
+	teamTreeMembershipsPartialCh chan keybase1.TeamTreeMembership
+	teamTreeMembershipsDoneCh    chan keybase1.TeamTreeMembershipsDoneResult
 }
 
 func newTeamNotifyHandler() *teamNotifyHandler {
 	return &teamNotifyHandler{
-		changeCh:           make(chan keybase1.TeamChangedByIDArg, 10),
-		abandonCh:          make(chan keybase1.TeamID, 10),
-		badgeCh:            make(chan keybase1.BadgeState, 10),
-		newTeamEKCh:        make(chan keybase1.NewTeamEkArg, 10),
-		newTeambotEKCh:     make(chan keybase1.NewTeambotEkArg, 10),
-		teambotEKNeededCh:  make(chan keybase1.TeambotEkNeededArg, 10),
-		newTeambotKeyCh:    make(chan keybase1.NewTeambotKeyArg, 10),
-		teambotKeyNeededCh: make(chan keybase1.TeambotKeyNeededArg, 10),
-		newlyAddedToTeam:   make(chan keybase1.TeamID, 10),
+		changeCh:                     make(chan keybase1.TeamChangedByIDArg, 10),
+		abandonCh:                    make(chan keybase1.TeamID, 10),
+		badgeCh:                      make(chan keybase1.BadgeState, 10),
+		newTeamEKCh:                  make(chan keybase1.NewTeamEkArg, 10),
+		newTeambotEKCh:               make(chan keybase1.NewTeambotEkArg, 10),
+		teambotEKNeededCh:            make(chan keybase1.TeambotEkNeededArg, 10),
+		newTeambotKeyCh:              make(chan keybase1.NewTeambotKeyArg, 10),
+		teambotKeyNeededCh:           make(chan keybase1.TeambotKeyNeededArg, 10),
+		newlyAddedToTeam:             make(chan keybase1.TeamID, 10),
+		teamRoleMapCh:                make(chan keybase1.UserTeamVersion, 100),
+		metadataUpdateCh:             make(chan struct{}, 10),
+		teamTreeMembershipsPartialCh: make(chan keybase1.TeamTreeMembership, 10),
+		teamTreeMembershipsDoneCh:    make(chan keybase1.TeamTreeMembershipsDoneResult, 10),
 	}
 }
 
@@ -1052,6 +1133,11 @@ func (n *teamNotifyHandler) TeamExit(ctx context.Context, teamID keybase1.TeamID
 
 func (n *teamNotifyHandler) NewlyAddedToTeam(ctx context.Context, teamID keybase1.TeamID) error {
 	n.newlyAddedToTeam <- teamID
+	return nil
+}
+
+func (n *teamNotifyHandler) TeamMetadataUpdate(ctx context.Context) error {
+	n.metadataUpdateCh <- struct{}{}
 	return nil
 }
 
@@ -1091,6 +1177,25 @@ func (n *teamNotifyHandler) TeambotKeyNeeded(ctx context.Context, arg keybase1.T
 }
 
 func (n *teamNotifyHandler) AvatarUpdated(ctx context.Context, arg keybase1.AvatarUpdatedArg) error {
+	return nil
+}
+
+func (n *teamNotifyHandler) TeamRoleMapChanged(ctx context.Context, version keybase1.UserTeamVersion) error {
+	n.teamRoleMapCh <- version
+	return nil
+}
+
+func (n *teamNotifyHandler) TeamTreeMembershipsPartial(ctx context.Context,
+	arg keybase1.TeamTreeMembership) error {
+
+	n.teamTreeMembershipsPartialCh <- arg
+	return nil
+}
+
+func (n *teamNotifyHandler) TeamTreeMembershipsDone(ctx context.Context,
+	arg keybase1.TeamTreeMembershipsDoneResult) error {
+
+	n.teamTreeMembershipsDoneCh <- arg
 	return nil
 }
 
@@ -1150,7 +1255,7 @@ func TestTeamSignedByRevokedDevice(t *testing.T) {
 		devices, _ := getActiveDevicesAndKeys(alice.tc, alice.username)
 		var target *libkb.Device
 		for _, device := range devices {
-			if device.Type != libkb.DeviceTypePaper {
+			if device.Type != keybase1.DeviceTypeV2_PAPER {
 				target = device
 			}
 		}
@@ -1218,7 +1323,8 @@ func TestTeamSignedByRevokedDevice2(t *testing.T) {
 
 	// the signer
 	alice := tt.addUserWithPaper("alice")
-	aliced2 := alice.provisionNewDevice()
+	aliced2, cleanup := alice.provisionNewDevice()
+	defer cleanup()
 
 	// the loader
 	bob := tt.addUser("bob")
@@ -1574,35 +1680,52 @@ func TestBatchAddMembersCLI(t *testing.T) {
 
 	alice := tt.addUser("alice")
 	bob := tt.addUser("bob")
+	ciara := tt.addUser("ciara")
 	dodo := tt.addUser("dodo")
 	botua := tt.addUser("botua")
 	restrictedBotua := tt.addUser("rbot")
 	john := tt.addPuklessUser("john")
 	tt.logUserNames()
-	teamID, teamName := alice.createTeam2()
+	teamID, _ := alice.createTeam2()
+
+	handler := service.NewAccountHandler(nil, ciara.tc.G)
+
+	// ciara doesn't allow alice to add them to team
+	err := handler.UserSetContactSettings(context.Background(), keybase1.ContactSettings{
+		Enabled:              true,
+		AllowFolloweeDegrees: 0,
+	})
+	require.NoError(t, err)
 
 	dodo.proveRooter()
 	users := []keybase1.UserRolePair{
-		{AssertionOrEmail: bob.username, Role: keybase1.TeamRole_ADMIN},
-		{AssertionOrEmail: dodo.username + "+" + dodo.username + "@rooter", Role: keybase1.TeamRole_WRITER},
-		{AssertionOrEmail: john.username + "@rooter", Role: keybase1.TeamRole_ADMIN},
-		{AssertionOrEmail: "[rob@gmail.com]@email", Role: keybase1.TeamRole_READER},
-		{AssertionOrEmail: botua.username, Role: keybase1.TeamRole_BOT},
-		{AssertionOrEmail: restrictedBotua.username, Role: keybase1.TeamRole_RESTRICTEDBOT, BotSettings: &keybase1.TeamBotSettings{}},
+		{Assertion: bob.username, Role: keybase1.TeamRole_ADMIN},
+		{Assertion: ciara.username, Role: keybase1.TeamRole_WRITER},
+		{Assertion: dodo.username + "+" + dodo.username + "@rooter", Role: keybase1.TeamRole_WRITER},
+		{Assertion: john.username + "@rooter", Role: keybase1.TeamRole_ADMIN},
+		{Assertion: john.username + "@keybase", Role: keybase1.TeamRole_READER},
+		{Assertion: "[rob@gmail.com]@email", Role: keybase1.TeamRole_READER},
+		{Assertion: botua.username, Role: keybase1.TeamRole_BOT},
+		{Assertion: restrictedBotua.username, Role: keybase1.TeamRole_RESTRICTEDBOT, BotSettings: &keybase1.TeamBotSettings{}},
 	}
-	_, err := teams.AddMembers(context.Background(), alice.tc.G, teamName.String(), users)
+	added, notAdded, err := teams.AddMembers(context.Background(), alice.tc.G, teamID, users, nil /* emailInviteMsg */)
 	require.NoError(t, err)
+	require.Len(t, added, 7)
+	require.Len(t, notAdded, 1)
+	require.Equal(t, keybase1.User{
+		Uid:      ciara.uid,
+		Username: ciara.username,
+	}, notAdded[0])
 
 	team := alice.loadTeamByID(teamID, true /* admin */)
 	members, err := team.Members()
 	require.NoError(t, err)
-	require.Equal(t, members.Owners, []keybase1.UserVersion{{Uid: alice.uid, EldestSeqno: 1}})
-	require.Equal(t, members.Admins, []keybase1.UserVersion{{Uid: bob.uid, EldestSeqno: 1}})
-	require.Equal(t, members.Writers, []keybase1.UserVersion{{Uid: dodo.uid, EldestSeqno: 1}})
+	require.Equal(t, []keybase1.UserVersion{{Uid: alice.uid, EldestSeqno: 1}}, members.Owners)
+	require.Equal(t, []keybase1.UserVersion{{Uid: bob.uid, EldestSeqno: 1}}, members.Admins)
+	require.Equal(t, []keybase1.UserVersion{{Uid: dodo.uid, EldestSeqno: 1}}, members.Writers)
 	require.Len(t, members.Readers, 0)
-	require.Equal(t, members.Bots, []keybase1.UserVersion{{Uid: botua.uid, EldestSeqno: 1}})
-	require.Equal(t, members.RestrictedBots, []keybase1.UserVersion{{Uid: restrictedBotua.uid, EldestSeqno: 1}})
-
+	require.Equal(t, []keybase1.UserVersion{{Uid: botua.uid, EldestSeqno: 1}}, members.Bots)
+	require.Equal(t, []keybase1.UserVersion{{Uid: restrictedBotua.uid, EldestSeqno: 1}}, members.RestrictedBots)
 	invites := team.GetActiveAndObsoleteInvites()
 	t.Logf("invites: %s", spew.Sdump(invites))
 	for _, invite := range invites {
@@ -1614,6 +1737,9 @@ func TestBatchAddMembersCLI(t *testing.T) {
 		case keybase1.TeamInviteCategory_EMAIL:
 			require.Equal(t, invite.Name, keybase1.TeamInviteName("rob@gmail.com"))
 			require.Equal(t, invite.Role, keybase1.TeamRole_READER)
+		case keybase1.TeamInviteCategory_KEYBASE:
+			require.Equal(t, invite.Name, keybase1.TeamInviteName(john.userVersion().PercentForm()))
+			require.Equal(t, invite.Role, keybase1.TeamRole_READER)
 		default:
 			require.FailNowf(t, "unexpected invite type", "%v", spew.Sdump(invite))
 		}
@@ -1621,18 +1747,17 @@ func TestBatchAddMembersCLI(t *testing.T) {
 
 	// It should fail to combine assertions with email addresses
 	users = []keybase1.UserRolePair{
-		{AssertionOrEmail: "[job@gmail.com]@email+job33", Role: keybase1.TeamRole_READER},
+		{Assertion: "[job@gmail.com]@email+job33", Role: keybase1.TeamRole_READER},
 	}
-	_, err = teams.AddMembers(context.Background(), alice.tc.G, teamName.String(), users)
+	_, _, err = teams.AddMembers(context.Background(), alice.tc.G, teamID, users, nil /* emailInviteMsg */)
 	require.Error(t, err)
 	require.IsType(t, err, teams.AddMembersError{})
 	require.IsType(t, err.(teams.AddMembersError).Err, teams.MixedServerTrustAssertionError{})
-
 	// It should also fail to combine invites with other assertions
 	users = []keybase1.UserRolePair{
-		{AssertionOrEmail: "xxffee22ee@twitter+jjjejiei3i@rooter", Role: keybase1.TeamRole_READER},
+		{Assertion: "xxffee22ee@twitter+jjjejiei3i@rooter", Role: keybase1.TeamRole_READER},
 	}
-	_, err = teams.AddMembers(context.Background(), alice.tc.G, teamName.String(), users)
+	_, _, err = teams.AddMembers(context.Background(), alice.tc.G, teamID, users, nil /* emailInviteMsg */)
 	require.Error(t, err)
 	require.IsType(t, err, teams.AddMembersError{})
 	require.IsType(t, err.(teams.AddMembersError).Err, teams.CompoundInviteError{})
@@ -1648,7 +1773,7 @@ func TestBatchAddMembers(t *testing.T) {
 	rob := tt.addPuklessUser("rob")
 	tt.logUserNames()
 
-	teamID, teamName := alice.createTeam2()
+	teamID, _ := alice.createTeam2()
 
 	assertions := []string{
 		bob.username,
@@ -1664,16 +1789,16 @@ func TestBatchAddMembers(t *testing.T) {
 	makeUserRolePairs := func(v []string, role keybase1.TeamRole) []keybase1.UserRolePair {
 		var ret []keybase1.UserRolePair
 		for _, s := range v {
-			ret = append(ret, keybase1.UserRolePair{AssertionOrEmail: s, Role: role})
+			ret = append(ret, keybase1.UserRolePair{Assertion: s, Role: role})
 		}
 		return ret
 	}
 
-	res, err := teams.AddMembers(context.Background(), alice.tc.G, teamName.String(), makeUserRolePairs(assertions, role))
+	added, notAdded, err := teams.AddMembers(context.Background(), alice.tc.G, teamID, makeUserRolePairs(assertions, role), nil /* emailInviteMsg */)
 	require.Error(t, err, "can't invite assertions as owners")
 	require.IsType(t, teams.AttemptedInviteSocialOwnerError{}, err)
-	require.Nil(t, res)
-
+	require.Nil(t, added)
+	require.Nil(t, notAdded)
 	team := alice.loadTeamByID(teamID, true /* admin */)
 	members, err := team.Members()
 	require.NoError(t, err)
@@ -1684,10 +1809,11 @@ func TestBatchAddMembers(t *testing.T) {
 	require.Len(t, members.RestrictedBots, 0)
 
 	role = keybase1.TeamRole_ADMIN
-	res, err = teams.AddMembers(context.Background(), alice.tc.G, teamName.String(), makeUserRolePairs(assertions, role))
+	added, notAdded, err = teams.AddMembers(context.Background(), alice.tc.G, teamID, makeUserRolePairs(assertions, role), nil /* emailInviteMsg */)
 	require.NoError(t, err)
-	require.Len(t, res, len(assertions))
-	for i, r := range res {
+	require.Len(t, added, len(assertions))
+	require.Len(t, notAdded, 0)
+	for i, r := range added {
 		require.Equal(t, expectInvite[i], r.Invite, "invite %v", i)
 		if expectUsername[i] {
 			require.Equal(t, assertions[i], r.Username.String(), "expected username %v", i)
@@ -1735,6 +1861,30 @@ func TestBatchAddMembers(t *testing.T) {
 		}
 	}
 	require.Equal(t, 2, sbsCount, "sbs count")
+}
+
+func TestAddCompoundAssertion(t *testing.T) {
+	tt := newTeamTester(t)
+	defer tt.cleanup()
+
+	alice := tt.addUser("alice")
+	bob := tt.addUser("bob")
+
+	teamID, _ := alice.createTeam2()
+
+	bob.proveRooter()
+
+	assertion := fmt.Sprintf("%s@uid+%s@rooter", bob.uid, bob.username)
+
+	users := []keybase1.UserRolePair{
+		{Assertion: assertion, Role: keybase1.TeamRole_WRITER},
+	}
+	added, notAdded, err := teams.AddMembers(context.Background(), alice.tc.G, teamID, users, nil /* emailInviteMsg */)
+	require.NoError(t, err)
+	require.Len(t, notAdded, 0)
+	require.Len(t, added, 1)
+	require.False(t, added[0].Invite)
+	require.EqualValues(t, bob.username, added[0].Username)
 }
 
 func TestTeamBustResolverCacheOnSubteamRename(t *testing.T) {
@@ -1827,4 +1977,180 @@ func TestForceRepollState(t *testing.T) {
 		time.Sleep(w)
 	}
 	require.True(t, found)
+}
+
+func TestTeamMetadataUpdateNotifications(t *testing.T) {
+	tt := newTeamTester(t)
+	defer tt.cleanup()
+
+	tt.addUser("alf")
+	tt.addUser("bra")
+	tt.addUser("cha")
+
+	parentID, parentName := tt.users[0].createTeam2()
+	_, err := teams.CreateSubteam(context.TODO(), tt.users[0].tc.G, "bb", parentName, keybase1.TeamRole_NONE /* addSelfAs */)
+	require.NoError(t, err)
+	subteamName, err := parentName.Append("bb")
+	require.NoError(t, err)
+	subteamID, err := teams.CreateSubteam(context.TODO(), tt.users[0].tc.G, "cc", subteamName, keybase1.TeamRole_NONE /* addSelfAs */)
+	require.NoError(t, err)
+	subsubteamName, err := subteamName.Append("cc")
+	require.NoError(t, err)
+
+	t.Logf("Start testing metadata updates")
+
+	tt.users[0].addTeamMember(subsubteamName.String(), tt.users[2].username, keybase1.TeamRole_ADMIN)
+	tt.users[2].waitForMetadataUpdateGregor("added to team")
+
+	tt.users[0].addTeamMember(parentName.String(), tt.users[1].username, keybase1.TeamRole_ADMIN)
+	tt.users[1].waitForMetadataUpdateGregor("added to team")
+
+	subsubteamRename, err := subteamName.Append("cc2")
+	require.NoError(t, err)
+	err = teams.RenameSubteam(context.TODO(), tt.users[0].tc.G, subsubteamName, subsubteamRename)
+	require.NoError(t, err)
+	tt.users[1].waitForMetadataUpdateGregor("team user was an implicit admin of changed name")
+	tt.users[2].waitForMetadataUpdateGregor("team user was an implicit admin of changed name")
+
+	subteamRename, err := parentName.Append("bb2")
+	require.NoError(t, err)
+	err = teams.RenameSubteam(context.TODO(), tt.users[0].tc.G, subteamName, subteamRename)
+	require.NoError(t, err)
+	// Suboptimality - but it's fine since renames are rare.
+	tt.users[1].waitForMetadataUpdateGregor("team user was an implicit admin of changed name (subteam)")
+	tt.users[1].waitForMetadataUpdateGregor("team user was an implicit admin of changed name (subsubteam)")
+	tt.users[2].waitForMetadataUpdateGregor("parent team of subteam you're in changed name")
+
+	tt.users[0].changeTeamMember(parentName.String(), tt.users[1].username, keybase1.TeamRole_OWNER)
+	tt.users[1].waitForMetadataUpdateGregor("now an owner")
+
+	tt.users[0].teamSetSettings(*subteamID, keybase1.TeamSettings{Open: true, JoinAs: keybase1.TeamRole_READER})
+	tt.users[1].waitForMetadataUpdateGregor("settings change of subteam")
+
+	_, err = subteamRename.Append("cc2")
+	require.NoError(t, err)
+	tt.users[0].teamSetSettings(*subteamID, keybase1.TeamSettings{Open: true, JoinAs: keybase1.TeamRole_WRITER})
+	tt.users[1].waitForMetadataUpdateGregor("settings change of subsubteam")
+	tt.users[0].teamSetSettings(*subteamID, keybase1.TeamSettings{Open: true, JoinAs: keybase1.TeamRole_READER})
+	tt.users[1].waitForMetadataUpdateGregor("settings change of subsubteam")
+
+	val := true
+	err = tt.users[0].teamsClient.SetTeamShowcase(context.Background(), keybase1.SetTeamShowcaseArg{
+		TeamID:      *subteamID,
+		IsShowcased: &val,
+	})
+	require.NoError(tt.users[0].tc.T, err)
+	tt.users[1].waitForMetadataUpdateGregor("change showcase")
+
+	desc := "desc"
+	err = tt.users[0].teamsClient.SetTeamShowcase(context.Background(), keybase1.SetTeamShowcaseArg{
+		TeamID:      *subteamID,
+		IsShowcased: &val,
+		Description: &desc,
+	})
+	require.NoError(tt.users[0].tc.T, err)
+	tt.users[1].waitForMetadataUpdateGregor("change showcase")
+
+	err = tt.users[0].teamsClient.SetTeamShowcase(context.Background(), keybase1.SetTeamShowcaseArg{
+		TeamID:            *subteamID,
+		IsShowcased:       &val,
+		Description:       &desc,
+		AnyMemberShowcase: &val,
+	})
+	require.NoError(tt.users[0].tc.T, err)
+	tt.users[1].waitForMetadataUpdateGregor("change showcase")
+
+	newTeamID, newteamName := tt.users[1].createTeam2()
+	require.NoError(t, err)
+	tt.users[1].waitForMetadataUpdateGregor("new team")
+	tt.users[1].addTeamMember(newteamName.String(), tt.users[0].username, keybase1.TeamRole_OWNER)
+	tt.users[1].waitForMetadataUpdateGregor("added someone to team")
+
+	tui := &teamsUI{}
+	err = teams.Delete(context.Background(), tt.users[0].tc.G, tui, newTeamID)
+	require.NoError(tt.users[0].tc.T, err)
+	tt.users[1].waitForMetadataUpdateGregor("team deleted")
+
+	err = tt.users[1].teamsClient.SetTeamMemberShowcase(context.Background(), keybase1.SetTeamMemberShowcaseArg{
+		TeamID:      parentID,
+		IsShowcased: true,
+	})
+	require.NoError(tt.users[1].tc.T, err)
+	tt.users[1].waitForMetadataUpdateGregor("change member showcase")
+
+	tt.users[1].waitForMetadataUpdateGregor("change member count from TeamMemberCountCache")
+}
+
+func TestTeamLoadParentAfterRotateRace(t *testing.T) {
+	tt := newTeamTester(t)
+	defer tt.cleanup()
+
+	tt.addUser("alf")
+	tt.addUser("bra")
+
+	team := tt.users[0].createTeam()
+	parentName, err := keybase1.TeamNameFromString(team)
+	require.NoError(t, err)
+	_, err = teams.CreateSubteam(context.TODO(), tt.users[0].tc.G, "bb", parentName, keybase1.TeamRole_NONE /* addSelfAs */)
+	require.NoError(t, err)
+	subteamName, err := parentName.Append("bb")
+	require.NoError(t, err)
+	_, err = teams.CreateSubteam(context.TODO(), tt.users[0].tc.G, "cc", subteamName, keybase1.TeamRole_NONE /* addSelfAs */)
+	require.NoError(t, err)
+
+	tt.users[0].addTeamMember(parentName.String(), tt.users[1].username, keybase1.TeamRole_ADMIN)
+	tt.users[0].addTeamMember(subteamName.String(), tt.users[1].username, keybase1.TeamRole_ADMIN)
+
+	parentid, err := teams.ResolveNameToID(context.TODO(), tt.users[0].tc.G, parentName)
+	require.NoError(t, err)
+	err = teams.RotateKey(context.TODO(), tt.users[0].tc.G, keybase1.TeamRotateKeyArg{TeamID: parentid, Rt: keybase1.RotationType_HIDDEN})
+	require.NoError(t, err)
+
+	_, err = teams.Load(context.Background(), tt.users[1].tc.G, keybase1.LoadTeamArg{Name: subteamName.String()})
+	require.NoError(t, err)
+
+	_, err = teams.Load(context.Background(), tt.users[1].tc.G,
+		keybase1.LoadTeamArg{Name: parentName.String()})
+	require.NoError(t, err)
+}
+
+func TestTeamHiddenGenerationRotateRace(t *testing.T) {
+	tt := newTeamTester(t)
+	defer tt.cleanup()
+
+	tt.addUser("alf")
+	tt.addUser("bra")
+	tt.addUser("cha")
+
+	alice := tt.users[0]
+	bob := tt.users[1]
+	charlie := tt.users[2]
+
+	team := alice.createTeam()
+	parentName, err := keybase1.TeamNameFromString(team)
+	require.NoError(t, err)
+	_, err = teams.CreateSubteam(context.TODO(), alice.tc.G, "bb",
+		parentName, keybase1.TeamRole_NONE /* addSelfAs */)
+	require.NoError(t, err)
+	subteamName, err := parentName.Append("bb")
+	require.NoError(t, err)
+	_, err = teams.CreateSubteam(context.TODO(), alice.tc.G, "cc",
+		subteamName, keybase1.TeamRole_NONE /* addSelfAs */)
+	require.NoError(t, err)
+	subsubteamName, err := subteamName.Append("cc")
+	require.NoError(t, err)
+
+	t.Logf("Start testing")
+
+	alice.addTeamMember(subsubteamName.String(), charlie.username, keybase1.TeamRole_ADMIN)
+	charlie.waitForMetadataUpdateGregor("added to team")
+
+	alice.addTeamMember(parentName.String(), bob.username, keybase1.TeamRole_ADMIN)
+	bob.waitForMetadataUpdateGregor("added to team")
+
+	alice.removeTeamMember(parentName.String(), bob.username)
+	bob.waitForMetadataUpdateGregor("removed from team")
+
+	alice.addTeamMember(parentName.String(), bob.username, keybase1.TeamRole_ADMIN)
+	bob.waitForMetadataUpdateGregor("added back")
 }

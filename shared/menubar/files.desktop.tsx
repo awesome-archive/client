@@ -3,7 +3,6 @@ import * as Kb from '../common-adapters'
 import * as Styles from '../styles'
 import * as FsTypes from '../constants/types/fs'
 import {Filename} from '../fs/common'
-import ConnectedUsernames from '../common-adapters/usernames/remote-container'
 
 type FileUpdateProps = {
   path: FsTypes.Path
@@ -37,10 +36,10 @@ type FilesPreviewProps = {
 export const FileUpdate = (props: FileUpdateProps) => (
   <Kb.ClickableBox className="hover-underline-container" onClick={props.onClick} style={styles.fullWidth}>
     <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.fileUpdateRow} alignItems="flex-start">
-      <Kb.Icon type="icon-file-16" style={Kb.iconCastPlatformStyles(styles.iconStyle)} />
+      <Kb.Icon type="icon-file-16" style={styles.iconStyle} />
       {props.uploading && (
         <Kb.Box style={styles.iconBadgeBox}>
-          <Kb.Icon type="icon-addon-file-uploading" style={Kb.iconCastPlatformStyles(styles.iconBadge)} />
+          <Kb.Icon type="icon-addon-file-uploading" style={styles.iconBadge} />
         </Kb.Box>
       )}
       <Filename type="Body" path={props.path} />
@@ -112,12 +111,13 @@ const UserTlfUpdateRow = (props: UserTlfUpdateRowProps) => (
     <Kb.Avatar size={32} username={props.writer} style={styles.tlfRowAvatar} onClick={props.onClickAvatar} />
     <Kb.Box2 direction="vertical" fullWidth={true}>
       <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.tlfTopLine}>
-        <ConnectedUsernames
-          usernames={[props.writer]}
-          type="BodySemibold"
+        <Kb.ConnectedUsernames
+          usernames={props.writer}
+          type="BodyBold"
           underline={true}
           colorFollowing={true}
           colorBroken={true}
+          withProfileCardPopup={false /* part of store is not plumbed; also no space in widget*/}
         />
         <Kb.Text type="BodyTiny" style={styles.tlfTime}>
           {props.timestamp}

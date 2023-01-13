@@ -101,6 +101,14 @@
         },
         {
           "type": "boolean",
+          "name": "chatemoji"
+        },
+        {
+          "type": "boolean",
+          "name": "chatemojicross"
+        },
+        {
+          "type": "boolean",
           "name": "deviceclone"
         },
         {
@@ -118,6 +126,18 @@
         {
           "type": "boolean",
           "name": "runtimestats"
+        },
+        {
+          "type": "boolean",
+          "name": "featuredBots"
+        },
+        {
+          "type": "boolean",
+          "name": "saltpack"
+        },
+        {
+          "type": "boolean",
+          "name": "allowChatNotifySkips"
         }
       ]
     }

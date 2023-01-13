@@ -10,11 +10,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 
 	"github.com/keybase/client/go/kbconst"
 	"github.com/keybase/client/go/libkb"
+	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
@@ -29,6 +29,9 @@ type AppStateUpdater interface {
 	// NextAppStateUpdate returns a channel that app state changes
 	// are sent to.
 	NextAppStateUpdate(lastState *keybase1.MobileAppState) <-chan keybase1.MobileAppState
+	// NextNetworkStateUpdate returns a channel that mobile network
+	// state changes are sent to.
+	NextNetworkStateUpdate(lastState *keybase1.MobileNetworkState) <-chan keybase1.MobileNetworkState
 }
 
 // EmptyAppStateUpdater is an implementation of AppStateUpdater that
@@ -37,6 +40,13 @@ type EmptyAppStateUpdater struct{}
 
 // NextAppStateUpdate implements AppStateUpdater.
 func (easu EmptyAppStateUpdater) NextAppStateUpdate(lastState *keybase1.MobileAppState) <-chan keybase1.MobileAppState {
+	// Receiving on a nil channel blocks forever.
+	return nil
+}
+
+// NextNetworkStateUpdate implements AppStateUpdater.
+func (easu EmptyAppStateUpdater) NextNetworkStateUpdate(
+	lastState *keybase1.MobileNetworkState) <-chan keybase1.MobileNetworkState {
 	// Receiving on a nil channel blocks forever.
 	return nil
 }
@@ -53,9 +63,11 @@ type Context interface {
 	CheckService() error
 	GetSocket(clearError bool) (net.Conn, rpc.Transporter, bool, error)
 	NewRPCLogFactory() rpc.LogFactory
+	NewNetworkInstrumenter(keybase1.NetworkSource) rpc.NetworkInstrumenterStorage
 	GetKBFSSocket(clearError bool) (net.Conn, rpc.Transporter, bool, error)
 	BindToKBFSSocket() (net.Listener, error)
 	GetVDebugSetting() string
+	GetPerfLog() logger.Logger
 }
 
 // KBFSContext is an implementation for libkbfs.Context
@@ -85,10 +97,7 @@ func NewContextFromGlobalContext(g *libkb.GlobalContext) *KBFSContext {
 	return c
 }
 
-// NewContext constructs a context. This should only be called once in
-// main functions.
-func NewContext() *KBFSContext {
-	g := libkb.NewGlobalContextInit()
+func newContextFromG(g *libkb.GlobalContext) *KBFSContext {
 	err := g.ConfigureConfig()
 	if err != nil {
 		panic(err)
@@ -106,6 +115,28 @@ func NewContext() *KBFSContext {
 		panic(err)
 	}
 	return NewContextFromGlobalContext(g)
+}
+
+// NewContext constructs a context. This should only be called once in
+// main functions.
+func NewContext() *KBFSContext {
+	g := libkb.NewGlobalContextInit()
+	return newContextFromG(g)
+}
+
+// NewContextWithPerfLog constructs a context with a specific perf
+// log. This should only be called once in main functions.
+func NewContextWithPerfLog(logName string) *KBFSContext {
+	g := libkb.NewGlobalContextInit()
+
+	// Override the perf file for this process, before logging is
+	// initialized.
+	if os.Getenv("KEYBASE_PERF_LOG_FILE") == "" {
+		os.Setenv("KEYBASE_PERF_LOG_FILE", filepath.Join(
+			g.Env.GetLogDir(), logName))
+	}
+
+	return newContextFromG(g)
 }
 
 // GetLogDir returns log dir
@@ -133,9 +164,26 @@ func (c *KBFSContext) GetRunMode() kbconst.RunMode {
 	return c.g.GetRunMode()
 }
 
+// GetPerfLog returns the perf log.
+func (c *KBFSContext) GetPerfLog() logger.Logger {
+	return c.g.GetPerfLog()
+}
+
 // NextAppStateUpdate implements AppStateUpdater.
 func (c *KBFSContext) NextAppStateUpdate(lastState *keybase1.MobileAppState) <-chan keybase1.MobileAppState {
+	if c.g.MobileAppState == nil {
+		return nil
+	}
 	return c.g.MobileAppState.NextUpdate(lastState)
+}
+
+// NextNetworkStateUpdate implements AppStateUpdater.
+func (c *KBFSContext) NextNetworkStateUpdate(
+	lastState *keybase1.MobileNetworkState) <-chan keybase1.MobileNetworkState {
+	if c.g.MobileNetState == nil {
+		return nil
+	}
+	return c.g.MobileNetState.NextUpdate(lastState)
 }
 
 // CheckService checks if the service is running and returns nil if
@@ -151,12 +199,14 @@ func (c *KBFSContext) CheckService() error {
 	}
 	conn, err := s.DialSocket()
 	if err != nil {
-		if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		switch libkb.RuntimeGroup() {
+		case keybase1.RuntimeGroup_DARWINLIKE, keybase1.RuntimeGroup_WINDOWSLIKE:
 			return errors.New(
 				"keybase isn't running; open the Keybase app")
+		default:
+			return errors.New(
+				"keybase isn't running; try `run_keybase`")
 		}
-		return errors.New(
-			"keybase isn't running; try `run_keybase`")
 	}
 	err = conn.Close()
 	if err != nil {
@@ -181,6 +231,11 @@ func (c *KBFSContext) NewRPCLogFactory() rpc.LogFactory {
 	return &libkb.RPCLogFactory{Contextified: libkb.NewContextified(c.g)}
 }
 
+// NewNetworkInstrumenter constructs an RPC NetworkInstrumenterStorage
+func (c *KBFSContext) NewNetworkInstrumenter(src keybase1.NetworkSource) rpc.NetworkInstrumenterStorage {
+	return libkb.NetworkInstrumenterStorageFromSrc(c.g, src)
+}
+
 func (c *KBFSContext) getSandboxSocketFile() string {
 	sandboxDir := c.g.Env.HomeFinder.SandboxCacheDir()
 	if sandboxDir == "" {
@@ -200,7 +255,8 @@ func (c *KBFSContext) getKBFSSocketFile() string {
 }
 
 func (c *KBFSContext) newTransportFromSocket(s net.Conn) rpc.Transporter {
-	return rpc.NewTransport(s, c.NewRPCLogFactory(), libkb.WrapError, rpc.DefaultMaxFrameLength)
+	return rpc.NewTransport(s, c.NewRPCLogFactory(), c.NewNetworkInstrumenter(keybase1.NetworkSource_LOCAL),
+		libkb.WrapError, rpc.DefaultMaxFrameLength)
 }
 
 // GetKBFSSocket dials the socket configured in `c.kbfsSocket`.
@@ -208,7 +264,7 @@ func (c *KBFSContext) newTransportFromSocket(s net.Conn) rpc.Transporter {
 func (c *KBFSContext) GetKBFSSocket(clearError bool) (
 	net.Conn, rpc.Transporter, bool, error) {
 	var err error
-	c.g.Trace("GetSocket", func() error { return err })()
+	c.g.Trace("GetSocket", &err)()
 
 	// Protect all global socket wrapper manipulation with a
 	// lock to prevent race conditions.

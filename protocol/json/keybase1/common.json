@@ -22,6 +22,12 @@
     },
     {
       "type": "record",
+      "name": "DurationMsec",
+      "fields": [],
+      "typedef": "double"
+    },
+    {
+      "type": "record",
       "name": "StringKVPair",
       "fields": [
         {
@@ -67,6 +73,13 @@
     },
     {
       "type": "record",
+      "name": "VID",
+      "fields": [],
+      "typedef": "string",
+      "lint": "ignore"
+    },
+    {
+      "type": "record",
       "name": "DeviceID",
       "fields": [],
       "typedef": "string"
@@ -98,12 +111,6 @@
     {
       "type": "record",
       "name": "RawPhoneNumber",
-      "fields": [],
-      "typedef": "string"
-    },
-    {
-      "type": "record",
-      "name": "RegionCode",
       "fields": [],
       "typedef": "string"
     },
@@ -338,7 +345,7 @@
           "name": "deviceDescription"
         },
         {
-          "type": "string",
+          "type": "DeviceTypeV2",
           "name": "deviceType"
         },
         {
@@ -406,7 +413,7 @@
       "name": "Device",
       "fields": [
         {
-          "type": "string",
+          "type": "DeviceTypeV2",
           "name": "type"
         },
         {
@@ -416,6 +423,10 @@
         {
           "type": "DeviceID",
           "name": "deviceID"
+        },
+        {
+          "type": "int",
+          "name": "deviceNumberOfType"
         },
         {
           "type": "Time",
@@ -450,6 +461,12 @@
         "DESKTOP_0",
         "MOBILE_1"
       ]
+    },
+    {
+      "type": "record",
+      "name": "DeviceTypeV2",
+      "fields": [],
+      "typedef": "string"
     },
     {
       "type": "record",
@@ -837,9 +854,39 @@
     },
     {
       "type": "record",
+      "name": "UserReacji",
+      "fields": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "customAddr"
+        },
+        {
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "customAddrNoAnim"
+        }
+      ]
+    },
+    {
+      "type": "enum",
       "name": "ReacjiSkinTone",
-      "fields": [],
-      "typedef": "int"
+      "symbols": [
+        "NONE_0",
+        "SKINTONE1_1",
+        "SKINTONE2_2",
+        "SKINTONE3_3",
+        "SKINTONE4_4",
+        "SKINTONE5_5"
+      ]
     },
     {
       "type": "record",
@@ -848,7 +895,7 @@
         {
           "type": {
             "type": "array",
-            "items": "string"
+            "items": "UserReacji"
           },
           "name": "topReacjis"
         },
@@ -856,6 +903,17 @@
           "type": "ReacjiSkinTone",
           "name": "skinTone"
         }
+      ]
+    },
+    {
+      "type": "enum",
+      "name": "WotStatusType",
+      "symbols": [
+        "NONE_0",
+        "PROPOSED_1",
+        "ACCEPTED_2",
+        "REJECTED_3",
+        "REVOKED_4"
       ]
     }
   ],

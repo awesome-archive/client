@@ -1,12 +1,14 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.2 (https://github.com/keybase/node-avdl-compiler)
+// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
 //   Input file: avdl/keybase1/home.avdl
 
 package keybase1
 
 import (
 	"errors"
+	"fmt"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	context "golang.org/x/net/context"
+	"time"
 )
 
 type HomeScreenItemID string
@@ -41,7 +43,7 @@ func (e HomeScreenItemType) String() string {
 	if v, ok := HomeScreenItemTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type HomeScreenItemData struct {
@@ -252,7 +254,7 @@ func (e AppLinkType) String() string {
 	if v, ok := AppLinkTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type HomeScreenAnnouncementID int
@@ -299,19 +301,19 @@ const (
 	HomeScreenTodoType_PROOF                   HomeScreenTodoType = 2
 	HomeScreenTodoType_DEVICE                  HomeScreenTodoType = 3
 	HomeScreenTodoType_FOLLOW                  HomeScreenTodoType = 4
-	HomeScreenTodoType_CHAT                    HomeScreenTodoType = 5
 	HomeScreenTodoType_PAPERKEY                HomeScreenTodoType = 6
 	HomeScreenTodoType_TEAM                    HomeScreenTodoType = 7
 	HomeScreenTodoType_FOLDER                  HomeScreenTodoType = 8
 	HomeScreenTodoType_GIT_REPO                HomeScreenTodoType = 9
 	HomeScreenTodoType_TEAM_SHOWCASE           HomeScreenTodoType = 10
-	HomeScreenTodoType_AVATAR_USER             HomeScreenTodoType = 11
 	HomeScreenTodoType_AVATAR_TEAM             HomeScreenTodoType = 12
 	HomeScreenTodoType_ADD_PHONE_NUMBER        HomeScreenTodoType = 18
 	HomeScreenTodoType_VERIFY_ALL_PHONE_NUMBER HomeScreenTodoType = 19
 	HomeScreenTodoType_VERIFY_ALL_EMAIL        HomeScreenTodoType = 20
 	HomeScreenTodoType_LEGACY_EMAIL_VISIBILITY HomeScreenTodoType = 21
 	HomeScreenTodoType_ADD_EMAIL               HomeScreenTodoType = 22
+	HomeScreenTodoType_AVATAR_USER             HomeScreenTodoType = 23
+	HomeScreenTodoType_CHAT                    HomeScreenTodoType = 24
 	HomeScreenTodoType_ANNONCEMENT_PLACEHOLDER HomeScreenTodoType = 10000
 )
 
@@ -323,19 +325,19 @@ var HomeScreenTodoTypeMap = map[string]HomeScreenTodoType{
 	"PROOF":                   2,
 	"DEVICE":                  3,
 	"FOLLOW":                  4,
-	"CHAT":                    5,
 	"PAPERKEY":                6,
 	"TEAM":                    7,
 	"FOLDER":                  8,
 	"GIT_REPO":                9,
 	"TEAM_SHOWCASE":           10,
-	"AVATAR_USER":             11,
 	"AVATAR_TEAM":             12,
 	"ADD_PHONE_NUMBER":        18,
 	"VERIFY_ALL_PHONE_NUMBER": 19,
 	"VERIFY_ALL_EMAIL":        20,
 	"LEGACY_EMAIL_VISIBILITY": 21,
 	"ADD_EMAIL":               22,
+	"AVATAR_USER":             23,
+	"CHAT":                    24,
 	"ANNONCEMENT_PLACEHOLDER": 10000,
 }
 
@@ -345,19 +347,19 @@ var HomeScreenTodoTypeRevMap = map[HomeScreenTodoType]string{
 	2:     "PROOF",
 	3:     "DEVICE",
 	4:     "FOLLOW",
-	5:     "CHAT",
 	6:     "PAPERKEY",
 	7:     "TEAM",
 	8:     "FOLDER",
 	9:     "GIT_REPO",
 	10:    "TEAM_SHOWCASE",
-	11:    "AVATAR_USER",
 	12:    "AVATAR_TEAM",
 	18:    "ADD_PHONE_NUMBER",
 	19:    "VERIFY_ALL_PHONE_NUMBER",
 	20:    "VERIFY_ALL_EMAIL",
 	21:    "LEGACY_EMAIL_VISIBILITY",
 	22:    "ADD_EMAIL",
+	23:    "AVATAR_USER",
+	24:    "CHAT",
 	10000: "ANNONCEMENT_PLACEHOLDER",
 }
 
@@ -365,7 +367,7 @@ func (e HomeScreenTodoType) String() string {
 	if v, ok := HomeScreenTodoTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 // Most of TODO items do not carry additional data, but some do. e.g. TODO
@@ -579,7 +581,7 @@ func (e HomeScreenPeopleNotificationType) String() string {
 	if v, ok := HomeScreenPeopleNotificationTypeRevMap[e]; ok {
 		return v
 	}
-	return ""
+	return fmt.Sprintf("%v", int(e))
 }
 
 type HomeScreenPeopleNotificationFollowed struct {
@@ -1003,28 +1005,28 @@ type HomeClient struct {
 // the default number will be returned (10).  Otherwise, the caller should
 // specify.
 func (c HomeClient) HomeGetScreen(ctx context.Context, __arg HomeGetScreenArg) (res HomeScreen, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.home.homeGetScreen", []interface{}{__arg}, &res)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeGetScreen", []interface{}{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c HomeClient) HomeSkipTodoType(ctx context.Context, t HomeScreenTodoType) (err error) {
 	__arg := HomeSkipTodoTypeArg{T: t}
-	err = c.Cli.Call(ctx, "keybase.1.home.homeSkipTodoType", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeSkipTodoType", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c HomeClient) HomeDismissAnnouncement(ctx context.Context, i HomeScreenAnnouncementID) (err error) {
 	__arg := HomeDismissAnnouncementArg{I: i}
-	err = c.Cli.Call(ctx, "keybase.1.home.homeDismissAnnouncement", []interface{}{__arg}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeDismissAnnouncement", []interface{}{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c HomeClient) HomeActionTaken(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.home.homeActionTaken", []interface{}{HomeActionTakenArg{}}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeActionTaken", []interface{}{HomeActionTakenArg{}}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c HomeClient) HomeMarkViewed(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.home.homeMarkViewed", []interface{}{HomeMarkViewedArg{}}, nil)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeMarkViewed", []interface{}{HomeMarkViewedArg{}}, nil, 0*time.Millisecond)
 	return
 }

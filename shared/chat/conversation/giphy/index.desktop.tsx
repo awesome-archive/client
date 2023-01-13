@@ -1,10 +1,9 @@
-/* eslint-disable react/no-did-mount-set-state */
 import * as React from 'react'
 import * as Kb from '../../../common-adapters'
 import * as Styles from '../../../styles'
-import UnfurlImage from '../messages/wrapper/unfurl/image'
+import UnfurlImage from '../messages/text/unfurl/image'
 import {getMargins, scaledWidth} from './width'
-import {Props} from '.'
+import type {Props} from '.'
 
 const gridHeight = 100
 
@@ -14,7 +13,7 @@ type State = {
 
 class GiphySearch extends React.Component<Props, State> {
   container: HTMLDivElement | null = null
-  state = {width: null}
+  state: State = {width: null}
 
   componentDidMount() {
     const c = this.container
@@ -37,31 +36,31 @@ class GiphySearch extends React.Component<Props, State> {
     return (
       <Kb.Box style={styles.outerContainer}>
         <Kb.Box
-          forwardedRef={el => (this.container = el)}
+          forwardedRef={(el: HTMLDivElement | null) => (this.container = el)}
           style={Styles.collapseStyles([
             styles.scrollContainer,
-            {overflowY: this.state.width ? 'auto' : 'scroll'},
+            {overflowY: this.state.width ? 'auto' : 'scroll'} as any,
           ])}
         >
-          <Kb.Box2 direction="horizontal" style={styles.instructionsContainer} fullWidth={true} gap="tiny">
+          <Kb.Box2 direction="horizontal" style={styles.instructionsContainer} fullWidth={true} gap="xtiny">
             <Kb.Text style={styles.instructions} type="BodySmall">
-              Hit enter for a random GIF, or click a preview to send
+              Tip: hit 'Enter' now to send a random GIF.
             </Kb.Text>
             <Kb.Text
               style={styles.instructions}
               type="BodySmallSecondaryLink"
               onClickURL="https://keybase.io/docs/chat/linkpreviews"
             >
-              (More Info)
+              Learn more about GIFs & encryption
             </Kb.Text>
           </Kb.Box2>
           {this.state.width &&
             (this.props.previews ? (
               <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.container}>
-                {(this.props.previews || []).map((p, index) => {
+                {this.props.previews?.map((p, index) => {
                   const margin = -margins[index] / 2 - 1
-                  return (
-                    <Kb.Box2 key={p.targetUrl} direction="horizontal" style={styles.imageContainer}>
+                  return p.targetUrl ? (
+                    <Kb.Box2 key={String(index)} direction="horizontal" style={styles.imageContainer}>
                       <Kb.Box style={Styles.collapseStyles([{marginLeft: margin, marginRight: margin}])}>
                         <UnfurlImage
                           autoplayVideo={true}
@@ -74,7 +73,7 @@ class GiphySearch extends React.Component<Props, State> {
                         />
                       </Kb.Box>
                     </Kb.Box2>
-                  )
+                  ) : null
                 })}
               </Kb.Box2>
             ) : (

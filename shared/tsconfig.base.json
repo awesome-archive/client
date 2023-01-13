@@ -2,27 +2,26 @@
   "compilerOptions": {
     "allowJs": false,
     "allowSyntheticDefaultImports": true,
+    "assumeChangesOnlyAffectDirectDependencies": false,
     "baseUrl": ".",
     "checkJs": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
     "incremental": true,
-    "isolatedModules": false,
+    "isolatedModules": true,
     "jsx": "preserve",
-    "lib": ["es2017", "dom"],
+    "lib": ["ESNext"],
     "module": "commonjs",
     "paths": {
-      "@react-navigation/core": ["override-d.ts/@react-navigation/core/index.d.ts"],
-      "@react-navigation/native": ["override-d.ts/@react-navigation/native/index.d.ts"],
-      "immutable": ["override-d.ts/immutable/index.d.ts"],
-      "popper": ["override-d.ts/popper/index.d.ts"],
-      "react-native-fast-image": ["override-d.ts/react-native-fast-image/index.d.ts"],
-      "react-native-gesture-handler": ["override-d.ts/react-native-gesture-handler/index.d.ts"],
-      "react-native-image-picker": ["override-d.ts/react-native-image-picker/index.d.ts"],
-      "react-navigation": ["override-d.ts/react-navigation/index.d.ts"],
-      "react-navigation-stack": ["override-d.ts/react-navigation-stack/index.d.ts"],
-      "react-navigation-tabs": ["override-d.ts/react-navigation-tabs/index.d.ts"],
-      "react-redux": ["override-d.ts/react-redux/index.d.ts"],
-      "redux": ["override-d.ts/redux/index.d.ts"],
-      "rn-fetch-blob": ["override-d.ts/rn-fetch-blob/index.d.ts"]
+      "react-native-reanimated": [
+        "override-d.ts/react-native-reanimated/react-native-reanimated.d.ts"
+      ],
+      "@react-native-picker/picker": ["override-d.ts/@react-native-picker/index.d.ts"],
+      "@emotion/native": ["override-d.ts/@emotion/index.d.ts"],
+      "@emotion/react": ["override-d.ts/@emotion/index.d.ts"],
+      "@emotion/styled": ["override-d.ts/@emotion/index.d.ts"],
+      "react-native-kb": ["override-d.ts/react-native-kb/index.d.ts"],
+      "react-native-drop-view": ["override-d.ts/react-native-drop-view/index.d.ts"]
     },
     "noErrorTruncation": true,
     "noFallthroughCasesInSwitch": true,
@@ -33,17 +32,25 @@
     "noUnusedParameters": true,
     "outDir": "./.tsOuts/.tsOut/emit",
     "resolveJsonModule": true,
-    "sourceMap": true,
+    "sourceMap": false,
     "strict": true,
-    "target": "es2017",
+    "target": "ESNext",
     "tsBuildInfoFile": "./.tsOuts/.tsOut/cache",
     "typeRoots": ["./node_modules/@types/", "./custom-d.ts/"]
   },
   "include": ["globals.d.ts"],
   "exclude": [
     "./node_modules",
+    "./node_modules/typescript",
+    "node_modules/@types/node",
+    "node_modules/react-native-reanimated/react-native-reanimated.d.ts",
     "./react-native",
+    "./ios",
+    "./android",
     "./desktop/dist",
-    "./desktop/build"
+    "./desktop/build",
+    "./common-adapters/swipeable.native.tsx",
+    "./common-adapters/index-impl.tsx",
+    "./common-adapters/mobile.native.native.tsx"
   ]
 }

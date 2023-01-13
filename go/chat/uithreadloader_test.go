@@ -1,15 +1,19 @@
 package chat
 
 import (
+	"context"
+	"encoding/base64"
 	"testing"
 	"time"
 
 	"github.com/keybase/client/go/chat/storage"
+	"github.com/keybase/client/go/chat/types"
 	"github.com/keybase/client/go/kbtest"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/clockwork"
+	"github.com/keybase/go-codec/codec"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,6 +46,7 @@ func TestUIThreadLoaderGrouper(t *testing.T) {
 		})
 	require.NoError(t, err)
 	consumeNewMsgRemote(t, listener0, chat1.MessageType_JOIN)
+	consumeNewMsgRemote(t, listener0, chat1.MessageType_SYSTEM)
 	consumeNewMsgRemote(t, listener0, chat1.MessageType_SYSTEM)
 	conv := convFull.Conv.Info
 
@@ -97,13 +102,17 @@ func TestUIThreadLoaderGrouper(t *testing.T) {
 	require.NoError(t, err)
 	consumeNewMsgRemote(t, listener0, chat1.MessageType_LEAVE)
 
-	require.NoError(t, tc.Context().ConvSource.Clear(ctx, conv.Id, uid))
-	_, err = tc.Context().ConvSource.GetMessages(ctx, convFull.Conv, uid,
-		[]chat1.MessageID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, nil)
+	require.NoError(t, tc.Context().ConvSource.Clear(ctx, conv.Id, uid, nil))
+	_, err = tc.Context().ConvSource.GetMessages(ctx, convFull.Conv.GetConvID(), uid,
+		[]chat1.MessageID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, nil, nil, false)
+	require.NoError(t, err)
+
+	_, err = tc.Context().ParticipantsSource.Get(ctx, uid, conv.Id, types.InboxSourceDataSourceAll)
 	require.NoError(t, err)
 
 	clock := clockwork.NewFakeClock()
-	uil := NewUIThreadLoader(tc.Context())
+	ri := ctc.as(t, users[0]).ri
+	uil := NewUIThreadLoader(tc.Context(), func() chat1.RemoteInterface { return ri })
 	uil.cachedThreadDelay = nil
 	uil.remoteThreadDelay = &timeout
 	uil.resolveThreadDelay = &timeout
@@ -112,7 +121,7 @@ func TestUIThreadLoaderGrouper(t *testing.T) {
 	cb := make(chan error, 1)
 	go func() {
 		cb <- uil.LoadNonblock(ctx, chatUI, uid, conv.Id, chat1.GetThreadReason_GENERAL,
-			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil)
+			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil, nil)
 	}()
 	select {
 	case res := <-chatUI.ThreadCb:
@@ -151,7 +160,7 @@ func TestUIThreadLoaderGrouper(t *testing.T) {
 	case <-time.After(timeout):
 		require.Fail(t, "no full cb")
 	}
-	require.NoError(t, tc.Context().ConvSource.Clear(ctx, conv.Id, uid))
+	require.NoError(t, tc.Context().ConvSource.Clear(ctx, conv.Id, uid, nil))
 	clock.Advance(5 * time.Second)
 	select {
 	case res := <-chatUI.ThreadCb:
@@ -193,13 +202,14 @@ func TestUIThreadLoaderCache(t *testing.T) {
 		Body: "HI",
 	}))
 	consumeNewMsgRemote(t, listener0, chat1.MessageType_TEXT)
-	require.NoError(t, tc.Context().ConvSource.Clear(ctx, conv.Id, uid))
-	_, err := tc.Context().ConvSource.PullLocalOnly(ctx, conv.Id, uid, nil, nil, 0)
+	require.NoError(t, tc.Context().ConvSource.Clear(ctx, conv.Id, uid, nil))
+	_, err := tc.Context().ConvSource.PullLocalOnly(ctx, conv.Id, uid, chat1.GetThreadReason_GENERAL, nil, nil, 0)
 	require.Error(t, err)
 	require.IsType(t, storage.MissError{}, err)
 
 	clock := clockwork.NewFakeClock()
-	uil := NewUIThreadLoader(tc.Context())
+	ri := ctc.as(t, users[0]).ri
+	uil := NewUIThreadLoader(tc.Context(), func() chat1.RemoteInterface { return ri })
 	uil.cachedThreadDelay = &timeout
 	uil.resolveThreadDelay = &timeout
 	uil.validatedDelay = 0
@@ -207,7 +217,7 @@ func TestUIThreadLoaderCache(t *testing.T) {
 	cb := make(chan error, 1)
 	go func() {
 		cb <- uil.LoadNonblock(ctx, chatUI, uid, conv.Id, chat1.GetThreadReason_GENERAL,
-			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil)
+			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil, nil)
 	}()
 	select {
 	case res := <-chatUI.ThreadCb:
@@ -216,24 +226,24 @@ func TestUIThreadLoaderCache(t *testing.T) {
 	case <-time.After(timeout):
 		require.Fail(t, "no full cb")
 	}
-	_, err = tc.Context().ConvSource.PullLocalOnly(ctx, conv.Id, uid, nil, nil, 0)
+	_, err = tc.Context().ConvSource.PullLocalOnly(ctx, conv.Id, uid, chat1.GetThreadReason_GENERAL, nil, nil, 0)
 	require.Error(t, err)
 	require.IsType(t, storage.MissError{}, err)
 	clock.Advance(10 * time.Second)
 	worked := false
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 5 && !worked; i++ {
 		select {
 		case err := <-cb:
 			require.NoError(t, err)
+			t.Logf("cb received: %d", i)
 			worked = true
-			break
 		case <-time.After(timeout):
 			t.Logf("end failed: %d", i)
 			clock.Advance(10 * time.Second)
 		}
 	}
 	require.True(t, worked)
-	tv, err := tc.Context().ConvSource.PullLocalOnly(ctx, conv.Id, uid, nil, nil, 0)
+	tv, err := tc.Context().ConvSource.PullLocalOnly(ctx, conv.Id, uid, chat1.GetThreadReason_GENERAL, nil, nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(tv.Messages))
 }
@@ -257,7 +267,8 @@ func TestUIThreadLoaderDisplayStatus(t *testing.T) {
 	}))
 
 	clock := clockwork.NewFakeClock()
-	uil := NewUIThreadLoader(tc.Context())
+	ri := ctc.as(t, users[0]).ri
+	uil := NewUIThreadLoader(tc.Context(), func() chat1.RemoteInterface { return ri })
 	rtd := 10 * time.Second
 	uil.cachedThreadDelay = nil
 	uil.remoteThreadDelay = &rtd
@@ -267,7 +278,7 @@ func TestUIThreadLoaderDisplayStatus(t *testing.T) {
 	cb := make(chan error, 1)
 	go func() {
 		cb <- uil.LoadNonblock(ctx, chatUI, uid, conv.Id, chat1.GetThreadReason_GENERAL,
-			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil)
+			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil, nil)
 	}()
 	select {
 	case res := <-chatUI.ThreadCb:
@@ -325,7 +336,7 @@ func TestUIThreadLoaderDisplayStatus(t *testing.T) {
 	uil.resolveThreadDelay = nil
 	go func() {
 		cb <- uil.LoadNonblock(ctx, chatUI, uid, conv.Id, chat1.GetThreadReason_GENERAL,
-			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil)
+			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil, nil)
 	}()
 	select {
 	case res := <-chatUI.ThreadCb:
@@ -352,5 +363,184 @@ func TestUIThreadLoaderDisplayStatus(t *testing.T) {
 	case <-chatUI.ThreadStatusCb:
 		require.Fail(t, "no status cbs")
 	default:
+	}
+}
+
+func TestUIThreadLoaderSingleFlight(t *testing.T) {
+	useRemoteMock = false
+	defer func() { useRemoteMock = true }()
+	ctc := makeChatTestContext(t, "TestUIThreadLoaderSingleFlight", 1)
+	defer ctc.cleanup()
+
+	timeout := 20 * time.Second
+	users := ctc.users()
+	chatUI := kbtest.NewChatUI()
+	tc := ctc.world.Tcs[users[0].Username]
+	ctx := ctc.as(t, users[0]).startCtx
+	uid := gregor1.UID(users[0].GetUID().ToBytes())
+	conv := mustCreateConversationForTest(t, ctc, users[0], chat1.TopicType_CHAT,
+		chat1.ConversationMembersType_IMPTEAMNATIVE)
+	mustPostLocalForTest(t, ctc, users[0], conv, chat1.NewMessageBodyWithText(chat1.MessageText{
+		Body: "HI",
+	}))
+
+	clock := clockwork.NewFakeClock()
+	ri := ctc.as(t, users[0]).ri
+	uil := NewUIThreadLoader(tc.Context(), func() chat1.RemoteInterface { return ri })
+	rtd := 1 * time.Second
+	uil.cachedThreadDelay = nil
+	uil.remoteThreadDelay = &rtd
+	uil.resolveThreadDelay = nil
+	uil.validatedDelay = 0
+	uil.clock = clock
+	cb := make(chan error, 1)
+	cb2 := make(chan error, 1)
+	go func() {
+		cb <- uil.LoadNonblock(ctx, chatUI, uid, conv.Id, chat1.GetThreadReason_GENERAL,
+			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil, nil)
+	}()
+	go func() {
+		cb2 <- uil.LoadNonblock(ctx, chatUI, uid, conv.Id, chat1.GetThreadReason_GENERAL,
+			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_INCREMENTAL, nil, nil, nil)
+	}()
+	time.Sleep(time.Second)
+	errors := 0
+	select {
+	case res := <-chatUI.ThreadCb:
+		require.False(t, res.Full)
+		require.Equal(t, 2, len(res.Thread.Messages))
+	case <-time.After(timeout):
+		require.Fail(t, "no cache cb")
+	}
+	clock.Advance(2 * time.Second)
+	select {
+	case res := <-chatUI.ThreadCb:
+		require.True(t, res.Full)
+		require.Zero(t, len(res.Thread.Messages))
+	case <-time.After(timeout):
+		require.Fail(t, "no full cb")
+	}
+	select {
+	case err := <-cb:
+		if err != nil {
+			errors++
+		}
+	case <-time.After(timeout):
+		require.Fail(t, "no end")
+	}
+	select {
+	case err := <-cb2:
+		if err != nil {
+			errors++
+		}
+	case <-time.After(timeout):
+		require.Fail(t, "no end")
+	}
+	select {
+	case <-chatUI.ThreadStatusCb:
+		require.Fail(t, "no status cbs")
+	default:
+	}
+	require.Equal(t, 1, errors)
+}
+
+type testingKnownRemote struct {
+	chat1.RemoteInterface
+	t *testing.T
+}
+
+func (r *testingKnownRemote) GetMessagesRemote(ctx context.Context, arg chat1.GetMessagesRemoteArg) (res chat1.GetMessagesRemoteRes, err error) {
+	require.Fail(r.t, "no remote reqs!")
+	return res, err
+}
+
+func TestUIThreadLoaderKnownRemotes(t *testing.T) {
+	useRemoteMock = false
+	defer func() { useRemoteMock = true }()
+	ctc := makeChatTestContext(t, "TestUIThreadLoaderKnownRemotes", 1)
+	defer ctc.cleanup()
+
+	timeout := 2 * time.Second
+	users := ctc.users()
+	chatUI := kbtest.NewChatUI()
+	tc := ctc.world.Tcs[users[0].Username]
+	ctx := ctc.as(t, users[0]).startCtx
+	uid := gregor1.UID(users[0].GetUID().ToBytes())
+	<-ctc.as(t, users[0]).h.G().ConvLoader.Stop(ctx)
+	listener := newServerChatListener()
+	ctc.as(t, users[0]).h.G().NotifyRouter.AddListener(listener)
+	conv := mustCreateConversationForTest(t, ctc, users[0], chat1.TopicType_CHAT,
+		chat1.ConversationMembersType_IMPTEAMNATIVE)
+	msgID1 := mustPostLocalForTest(t, ctc, users[0], conv, chat1.NewMessageBodyWithText(chat1.MessageText{
+		Body: "HI",
+	}))
+	msgID2 := mustPostLocalForTest(t, ctc, users[0], conv, chat1.NewMessageBodyWithText(chat1.MessageText{
+		Body: "HI2",
+	}))
+	consumeNewMsgRemote(t, listener, chat1.MessageType_TEXT)
+	consumeNewMsgRemote(t, listener, chat1.MessageType_TEXT)
+
+	require.NoError(t, tc.Context().ConvSource.Clear(ctx, conv.Id, uid, nil))
+	_, err := ctc.as(t, users[0]).chatLocalHandler().GetMessagesLocal(ctx, chat1.GetMessagesLocalArg{
+		ConversationID: conv.Id,
+		MessageIDs:     []chat1.MessageID{1, msgID1},
+	})
+	require.NoError(t, err)
+
+	msgBoxed := chat1.MessageBoxed{
+		ServerHeader: &chat1.MessageServerHeader{
+			MessageID: msgID2,
+		},
+	}
+	var dat []byte
+	mh := codec.MsgpackHandle{WriteExt: true}
+	require.NoError(t, codec.NewEncoderBytes(&dat, &mh).Encode(msgBoxed))
+	knownRemote := base64.StdEncoding.EncodeToString(dat)
+	cb := make(chan error, 1)
+	ri := ctc.as(t, users[0]).ri
+	testingRemote := &testingKnownRemote{
+		RemoteInterface: ri,
+		t:               t,
+	}
+	clock := clockwork.NewFakeClock()
+
+	uil := NewUIThreadLoader(tc.Context(), func() chat1.RemoteInterface { return testingRemote })
+	uil.remoteThreadDelay = &timeout
+	uil.cachedThreadDelay = nil
+	uil.validatedDelay = 0
+	uil.clock = clock
+	go func() {
+		cb <- uil.LoadNonblock(ctx, chatUI, uid, conv.Id, chat1.GetThreadReason_GENERAL,
+			chat1.GetThreadNonblockPgMode_DEFAULT, chat1.GetThreadNonblockCbMode_FULL,
+			[]string{knownRemote}, nil, nil)
+	}()
+	numNonPlace := func(msgs []chat1.UIMessage) (res int) {
+		for _, msg := range msgs {
+			if !msg.IsPlaceholder() {
+				res++
+			}
+		}
+		return res
+	}
+	select {
+	case res := <-chatUI.ThreadCb:
+		require.False(t, res.Full)
+		require.Equal(t, 2, numNonPlace(res.Thread.Messages))
+	case <-time.After(timeout):
+		require.Fail(t, "no cache cb")
+	}
+	clock.Advance(10 * time.Second)
+	select {
+	case res := <-chatUI.ThreadCb:
+		require.True(t, res.Full)
+		require.Equal(t, 3, numNonPlace(res.Thread.Messages))
+	case <-time.After(timeout):
+		require.Fail(t, "no cache cb")
+	}
+	select {
+	case err = <-cb:
+		require.NoError(t, err)
+	case <-time.After(timeout):
+		require.Fail(t, "no end cb")
 	}
 }

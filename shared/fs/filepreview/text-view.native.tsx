@@ -1,15 +1,16 @@
-import * as React from 'react'
 import * as Styles from '../../styles'
 import * as Kb from '../../common-adapters'
-import {Props} from './text-view'
+import type {Props} from './text-view'
 
 const TextView = (props: Props) => (
   <Kb.Box2 fullHeight={true} fullWidth={true} direction="vertical">
     <Kb.WebView
       url={props.url}
+      pinnedURLMode={true}
       style={styles.webview}
       injections={injections}
-      onLoadingStateChange={props.onLoadingStateChange}
+      onError={props.onUrlError}
+      showLoadingStateUntilLoaded={true}
     />
   </Kb.Box2>
 )
@@ -17,6 +18,10 @@ const TextView = (props: Props) => (
 const styles = Styles.styleSheetCreate(
   () =>
     ({
+      progressContainer: {
+        justifyContent: 'center',
+        position: 'absolute',
+      },
       webview: {
         height: '100%',
         width: '100%',

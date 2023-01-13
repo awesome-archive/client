@@ -170,7 +170,7 @@ func (h *KBFSHandler) UpgradeTLF(ctx context.Context, arg keybase1.UpgradeTLFArg
 // favorites.
 func (h *KBFSHandler) getKeyFn() func(context.Context) ([32]byte, error) {
 	keyFn := func(ctx context.Context) ([32]byte, error) {
-		return encrypteddb.GetSecretBoxKey(ctx, h.G(), encrypteddb.DefaultSecretUI,
+		return encrypteddb.GetSecretBoxKey(ctx, h.G(),
 			libkb.EncryptionReasonKBFSFavorites, "encrypting kbfs favorites")
 	}
 	return keyFn
@@ -185,6 +185,6 @@ func (h *KBFSHandler) EncryptFavorites(ctx context.Context,
 // DecryptFavorites decrypts cached favorites stored on disk.
 func (h *KBFSHandler) DecryptFavorites(ctx context.Context,
 	dataToEncrypt []byte) (res []byte, err error) {
-	err = encrypteddb.DecodeBox(ctx, dataToEncrypt, h.getKeyFn(), res)
+	err = encrypteddb.DecodeBox(ctx, dataToEncrypt, h.getKeyFn(), &res)
 	return res, err
 }

@@ -1,44 +1,31 @@
 import * as React from 'react'
-import Banner, {height} from './index'
+import Banner from './index'
 import * as FsGen from '../../../actions/fs-gen'
-import * as Types from '../../../constants/types/fs'
-import * as RowTypes from '../../browser/rows/types'
-import {namedConnect} from '../../../util/container'
-import {isMobile} from '../../../constants/platform'
+import * as Container from '../../../util/container'
 
 type OwnProps = {
   alwaysShow?: boolean | null
 }
 
-const mapStateToProps = state => ({
-  driverStatus: state.fs.sfmi.driverStatus,
-})
-
-const mapDispatchToProps = dispatch => ({
-  onDisable: () => dispatch(FsGen.createDriverDisable()),
-  onDismiss: () => dispatch(FsGen.createHideSystemFileManagerIntegrationBanner()),
-  onEnable: () => dispatch(FsGen.createDriverEnable({})),
-})
-
-const ConnectedBanner = namedConnect(
-  mapStateToProps,
-  mapDispatchToProps,
-  (s, d, o: OwnProps) => ({...o, ...s, ...d}),
-  'SystemFileManagerIntegrationBanner'
-)(Banner)
-
-export default ConnectedBanner
-
-export const asRows = isMobile
-  ? () => []
-  : (_: Types.Path, showBanner: boolean): Array<RowTypes.HeaderRowItem> =>
-      showBanner
-        ? [
-            {
-              height,
-              key: 'file-ui-banner',
-              node: <ConnectedBanner />,
-              rowType: RowTypes.RowType.Header,
-            },
-          ]
-        : []
+const SFMIContainer = (op: OwnProps) => {
+  const driverStatus = Container.useSelector(state => state.fs.sfmi.driverStatus)
+  const settings = Container.useSelector(state => state.fs.settings)
+  const dispatch = Container.useDispatch()
+  const onDisable = React.useCallback(() => dispatch(FsGen.createDriverDisable()), [dispatch])
+  const onDismiss = React.useCallback(
+    () => dispatch(FsGen.createSetSfmiBannerDismissed({dismissed: true})),
+    [dispatch]
+  )
+  const onEnable = React.useCallback(() => dispatch(FsGen.createDriverEnable({})), [dispatch])
+  return (
+    <Banner
+      alwaysShow={op.alwaysShow}
+      driverStatus={driverStatus}
+      settings={settings}
+      onDisable={onDisable}
+      onDismiss={onDismiss}
+      onEnable={onEnable}
+    />
+  )
+}
+export default SFMIContainer

@@ -1,12 +1,7 @@
-import * as React from 'react'
 import * as Kb from '../../common-adapters'
 import * as Styles from '../../styles'
 
-type Props = {
-  // path: Types.Path
-}
-
-export default (_: Props) => (
+const LoadingScreen = () => (
   <Kb.Box2
     direction="vertical"
     centerChildren={true}
@@ -19,6 +14,7 @@ export default (_: Props) => (
     <Kb.Text type="BodySmall">Loading ...</Kb.Text>
   </Kb.Box2>
 )
+export default LoadingScreen
 
 const styles = Styles.styleSheetCreate(
   () =>

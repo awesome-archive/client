@@ -1,14 +1,14 @@
-import {Logger, LogLineWithLevel} from './types'
+import type {Logger, LogLineWithLevel} from './types'
 
 class NullLogger implements Logger {
   log = () => {}
 
-  dump() {
+  async dump() {
     const p: Promise<Array<LogLineWithLevel>> = Promise.resolve([])
     return p
   }
 
-  flush() {
+  async flush() {
     const p: Promise<void> = Promise.resolve()
     return p
   }

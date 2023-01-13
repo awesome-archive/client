@@ -1,24 +1,21 @@
-import * as I from 'immutable'
 import * as React from 'react'
-import * as Flow from '../../../util/flow'
 import * as Styles from '../../../styles'
 import * as Kb from '../../../common-adapters'
-import * as Types from '../../../constants/types/fs'
 import * as RowTypes from './types'
+import type * as Types from '../../../constants/types/fs'
 import Placeholder from './placeholder'
 import TlfType from './tlf-type-container'
 import Tlf from './tlf-container'
 import Still from './still-container'
-import Editing from './editing-container'
-import Uploading from './uploading-container'
+import Editing from './editing'
 import {normalRowHeight} from './common'
 import {memoize} from '../../../util/memoize'
-import {useFsChildren} from '../../common'
+import {useFsChildren, UploadButton} from '../../common'
 
 export type Props = {
   emptyMode: 'empty' | 'not-empty-but-no-match' | 'not-empty'
   destinationPickerIndex?: number
-  items: I.List<RowTypes.RowItem>
+  items: Array<RowTypes.RowItem>
   path: Types.Path
 }
 
@@ -50,6 +47,7 @@ class Rows extends React.PureComponent<Props> {
         return (
           <WrapRow>
             <Tlf
+              disabled={item.disabled}
               name={item.name}
               tlfType={item.tlfType}
               destinationPickerIndex={this.props.destinationPickerIndex}
@@ -59,20 +57,14 @@ class Rows extends React.PureComponent<Props> {
       case RowTypes.RowType.Still:
         return (
           <WrapRow>
-            <Still
-              name={item.name}
-              path={item.path}
-              destinationPickerIndex={this.props.destinationPickerIndex}
-            />
+            {item.editID ? (
+              <Editing editID={item.editID} />
+            ) : (
+              <Still path={item.path} destinationPickerIndex={this.props.destinationPickerIndex} />
+            )}
           </WrapRow>
         )
-      case RowTypes.RowType.Uploading:
-        return (
-          <WrapRow>
-            <Uploading path={item.path} />
-          </WrapRow>
-        )
-      case RowTypes.RowType.Editing:
+      case RowTypes.RowType.NewFolder:
         return (
           <WrapRow>
             <Editing editID={item.editID} />
@@ -83,7 +75,6 @@ class Rows extends React.PureComponent<Props> {
       case RowTypes.RowType.Header:
         return item.node
       default:
-        Flow.ifFlowComplainsAboutThisFunctionYouHaventHandledAllCasesInASwitch(item)
         return (
           <WrapRow>
             <Kb.Text type="BodySmallError">This should not happen.</Kb.Text>
@@ -91,25 +82,25 @@ class Rows extends React.PureComponent<Props> {
         )
     }
   }
-  _getVariableRowLayout = (items, index) => ({
+  _getVariableRowLayout = (items: Array<RowTypes.RowItem>, index: number) => ({
     index,
-    length: getRowHeight(items.get(index, _unknownEmptyRowItem)),
+    length: getRowHeight(items[index] || _unknownEmptyRowItem),
     offset: items.slice(0, index).reduce((offset, row) => offset + getRowHeight(row), 0),
   })
-  _getTopVariableRowCountAndTotalHeight = memoize(items => {
+  _getTopVariableRowCountAndTotalHeight = memoize((items: Array<RowTypes.RowItem>) => {
     const index = items.findIndex(row => row.rowType !== RowTypes.RowType.Header)
     return index === -1
-      ? {count: items.size, totalHeight: -1}
+      ? {count: items.length, totalHeight: -1}
       : {count: index, totalHeight: this._getVariableRowLayout(items, index).offset}
   })
-  _getItemLayout = index => {
+  _getItemLayout = (index: number) => {
     const top = this._getTopVariableRowCountAndTotalHeight(this.props.items)
     if (index < top.count) {
       return this._getVariableRowLayout(this.props.items, index)
     }
     return {
       index,
-      length: getRowHeight(this.props.items.get(index, _unknownEmptyRowItem)),
+      length: getRowHeight(this.props.items[index] || _unknownEmptyRowItem),
       offset: (index - top.count) * normalRowHeight + top.totalHeight,
     }
   }
@@ -117,34 +108,37 @@ class Rows extends React.PureComponent<Props> {
   // trigger a re-render when layout changes. Also encode items length into
   // this, otherwise we'd get taller-than content rows when going into a
   // smaller folder from a larger one.
-  _getListKey = memoize(items => {
+  _getListKey = memoize((items: Array<RowTypes.RowItem>) => {
     const index = items.findIndex(row => row.rowType !== RowTypes.RowType.Header)
     return (
       items
-        .slice(0, index === -1 ? items.size : index)
+        .slice(0, index === -1 ? items.length : index)
         .map(row => getRowHeight(row).toString())
-        .join('-') + `:${items.size}`
+        .join('-') + `:${items.length}`
     )
   })
 
   render() {
     return this.props.emptyMode !== 'not-empty' ? (
       <Kb.Box2 direction="vertical" fullHeight={true} fullWidth={true}>
-        {// The folder is empty so these should all be header rows.
-        this.props.items.map(item => item.rowType === RowTypes.RowType.Header && item.node)}
-        <Kb.Box2 direction="vertical" style={styles.emptyContainer} centerChildren={true}>
+        {
+          // The folder is empty so these should all be header rows.
+          this.props.items.map(item => item.rowType === RowTypes.RowType.Header && item.node)
+        }
+        <Kb.Box2 direction="vertical" style={styles.emptyContainer} centerChildren={true} gap="small">
           <Kb.Text type="BodySmall">
             {this.props.emptyMode === 'empty'
               ? 'This folder is empty.'
               : 'Sorry, no folder or file was found.'}
           </Kb.Text>
+          {this.props.emptyMode === 'empty' && <UploadButton path={this.props.path} />}
         </Kb.Box2>
       </Kb.Box2>
     ) : (
       <Kb.BoxGrow>
         <Kb.List2
           key={this._getListKey(this.props.items)}
-          items={this.props.items.toArray()}
+          items={this.props.items}
           bounces={true}
           itemHeight={{
             getItemLayout: this._getItemLayout,
@@ -158,17 +152,24 @@ class Rows extends React.PureComponent<Props> {
 }
 
 const RowsWithAutoLoad = (props: Props) => {
-  useFsChildren(props.path)
+  useFsChildren(props.path, /* recursive */ true) // need recursive for the EMPTY tag
   return <Rows {...props} />
 }
 
 const styles = Styles.styleSheetCreate(
   () =>
     ({
-      divider: {
-        backgroundColor: Styles.globalColors.black_05,
-        marginLeft: 64,
-      },
+      divider: Styles.platformStyles({
+        common: {
+          backgroundColor: Styles.globalColors.black_05_on_white,
+        },
+        isElectron: {
+          marginLeft: 94,
+        },
+        isMobile: {
+          marginLeft: 102,
+        },
+      }),
       emptyContainer: {
         ...Styles.globalStyles.flexGrow,
       },

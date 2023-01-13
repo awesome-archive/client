@@ -7,12 +7,12 @@ import * as SignupConstants from '../../constants/signup'
 import * as RouteTreeGen from '../../actions/route-tree-gen'
 import * as Platform from '../../constants/platform'
 import {anyWaiting} from '../../constants/waiting'
-import EnterEmail, {Props} from '.'
+import EnterEmail, {type Props} from '.'
 
 type OwnProps = {}
 
 type WatcherProps = Props & {
-  addedEmail: string | null
+  addedEmail?: string
   onSuccess: (email: string) => void
 }
 const WatchForSuccess = (props: WatcherProps) => {

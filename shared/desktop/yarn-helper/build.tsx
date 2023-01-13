@@ -1,19 +1,19 @@
 import os from 'os'
 
-const webpackCmd = 'webpack --config ./desktop/webpack.config.babel.js'
+const webpackCmd =
+  'node --trace-deprecation node_modules/webpack/bin/webpack.js --config ./desktop/webpack.config.babel.js'
 const spaceArg = os.platform() === 'win32' ? ' --max_old_space_size=4096' : ''
 // set to true if you want to analyze the webpack output
 const outputStats = false
 
 const commands = {
   'build-dev': {
-    env: {BABEL_ENV: 'yarn', NO_SERVER: 'true'},
+    env: {NO_SERVER: 'true'},
     help: 'Make a development build of the js code',
-    shell: `${webpackCmd} --mode development --progress --profile --colors`,
+    shell: `${webpackCmd} --mode development --progress --profile`,
   },
   'build-prod': {
     env: {
-      BABEL_ENV: 'yarn',
       NO_SERVER: 'true',
       STATS: outputStats ? 'true' : 'false',
     },
@@ -22,22 +22,25 @@ const commands = {
       outputStats ? '--profile --json > webpack-stats.json' : ''
     }`,
   },
+  'build-profile': {
+    env: {NO_SERVER: 'true', PROFILE: 'true'},
+    help: 'Make a profile build of the js code',
+    shell: `${webpackCmd} --mode production --progress --profile`,
+  },
   'hot-server': {
     code: hotServer,
-    env: {BABEL_ENV: 'yarn'},
     help: 'Start the webpack hot reloading code server (needed by yarn run start-hot)',
   },
   package: {
-    env: {BABEL_ENV: 'yarn'},
     help: 'Package up the production js code',
+    nodeEnv: 'production',
     shell: `yarn _node ${spaceArg} desktop/package.desktop.tsx`,
   },
 }
 
 function hotServer(info: any, exec: Function) {
   exec('yarn run _helper build-dev', {...info.env, BEFORE_HOT: 'true', HOT: 'true'})
-  const dash = process.env['NO_DASHBOARD'] ? '' : 'webpack-dashboard --'
-  exec(`${dash} webpack-dev-server --mode development --config=./desktop/webpack.config.babel.js`, {
+  exec(`webpack-dev-server --mode development --config=./desktop/webpack.config.babel.js`, {
     ...info.env,
     HOT: 'true',
   })

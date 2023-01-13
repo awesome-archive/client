@@ -20,9 +20,13 @@ type ProofBrokenBannerNonEmptyProps = {
 const ProofBrokenBannerNonEmpty = (props: ProofBrokenBannerNonEmptyProps) => {
   const dispatch = Container.useDispatch()
   const onClickUsername = React.useCallback(
-    isMobile
-      ? (username: string) => dispatch(ProfileGen.createShowUserProfile({username}))
-      : (username: string) => dispatch(Tracker2Gen.createShowUser({asTracker: true, username})),
+    (username: string) => {
+      if (isMobile) {
+        dispatch(ProfileGen.createShowUserProfile({username}))
+      } else {
+        dispatch(Tracker2Gen.createShowUser({asTracker: true, username}))
+      }
+    },
     [dispatch]
   )
   const content: Array<string | {text: string; onClick: () => void}> =
@@ -39,7 +43,7 @@ const ProofBrokenBannerNonEmpty = (props: ProofBrokenBannerNonEmptyProps) => {
                 ' and ',
                 {onClick: () => onClickUsername(props.users[1]), text: props.users[1]},
               ]
-            : props.users.reduce(
+            : props.users.reduce<Array<string | {text: string; onClick: () => void}>>(
                 (content, user, index, {length}) => [
                   ...content,
                   ...(index === length - 1
@@ -48,7 +52,7 @@ const ProofBrokenBannerNonEmpty = (props: ProofBrokenBannerNonEmptyProps) => {
                     ? [{onClick: () => onClickUsername(user), text: user}, ', and ']
                     : [{onClick: () => onClickUsername(user), text: user}, ', ']),
                 ],
-                [] as Array<string | {text: string; onClick: () => void}>
+                []
               )),
           ' have changed their proofs since you last followed them.',
         ]

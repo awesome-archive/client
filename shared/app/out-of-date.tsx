@@ -1,9 +1,8 @@
-import * as React from 'react'
 import * as Kb from '../common-adapters'
 import * as Styles from '../styles'
 import * as ConfigGen from '../actions/config-gen'
 import * as Container from '../util/container'
-import * as Types from '../constants/types/config'
+import type * as Types from '../constants/types/config'
 
 type OwnProps = {}
 

@@ -1,9 +1,11 @@
+/*
 import * as React from 'react'
 import * as Kb from '../common-adapters'
 import * as Styles from '../styles'
+import * as Container from '../util/container'
 import {Provider} from 'react-redux'
 import {createStore, applyMiddleware} from 'redux'
-import {GatewayProvider, GatewayDest} from 'react-gateway'
+import {GatewayProvider, GatewayDest} from '@chardskarth/react-gateway'
 import {action} from '@storybook/addon-actions'
 import Box from '../common-adapters/box'
 import Text from '../common-adapters/text'
@@ -36,14 +38,14 @@ class DestBox extends React.Component {
   }
 }
 
-/**
+/
  * Creates a provider using a faux store of closures that compute derived viewProps
  * @param {SelectorMap} map an object of the form {DisplayName: Function(ownProps)} with
  *                          each closure returning the derived viewProps for the connected component
  * @returns {React.Node} a <Provider /> that creates a store from the supplied map of closures.
  *                       The Provider will ignore all dispatched actions. It also wraps the component
  *                       tree in an <ErrorBoundary /> that adds auxiliary info in case of an error.
- */
+ /
 // Redux doesn't allow swapping the store given a single provider so we use a new key to force a new provider to
 // work around this issue
 // TODO remove this and move to use MockStore instead
@@ -51,21 +53,21 @@ let uniqueProviderKey = 1
 const createPropProvider = (...maps: SelectorMap[]) => {
   const merged: SelectorMap = maps.reduce((obj, merged) => ({...obj, ...merged}), {})
 
-  /*
+  *
    * GatewayDest and GatewayProvider need to be wrapped by the Provider here in
    * order for storybook to correctly mock connected components inside of
    * popups.
    * React.Fragment is used to render StorybookErrorBoundary and GatewayDest as
    * children to GatewayProvider which only takes one child
-   */
+   /
   return (story: () => React.ReactNode) => (
-    // @ts-ignore complains about merged
     <Provider
       key={`provider:${uniqueProviderKey++}`}
       store={
         // @ts-ignore
         createStore(state => state, merged)
       }
+      // @ts-ignore
       merged={merged}
     >
       <GatewayProvider>
@@ -79,17 +81,17 @@ const createPropProvider = (...maps: SelectorMap[]) => {
 }
 
 // Plumb dispatches through storybook actions panel
-const actionLog = () => next => a => {
+const actionLog = () => (next: any) => (a: any) => {
   action('ReduxDispatch')(a)
   return next(a)
 }
 
 // Includes common old-style propProvider temporarily
-export const MockStore = ({store, children}): any => (
-  // @ts-ignore
+export const MockStore = ({store, children}: any): any => (
   <Provider
     key={`storyprovider:${uniqueProviderKey++}`}
     store={createStore(state => state, {...store, ...PP.Common()}, applyMiddleware(actionLog))}
+    // @ts-ignore
     merged={store}
   >
     <GatewayProvider>
@@ -100,9 +102,15 @@ export const MockStore = ({store, children}): any => (
     </GatewayProvider>
   </Provider>
 )
-export const createNavigator = params => ({
+
+type updateFn = (draftState: Container.TypedState) => void
+export const updateStoreDecorator = (store: Container.TypedState, update: updateFn) => (story: any) => (
+  <MockStore store={Container.produce(store, update)}>{story()}</MockStore>
+)
+
+export const createNavigator = (params: any) => ({
   navigation: {
-    getParam: key => params[key],
+    getParam: (key: any) => params[key],
   },
 })
 
@@ -171,9 +179,9 @@ class StorybookErrorBoundary extends React.Component<
   }
 }
 
-/**
+ *
  * Utilities for writing stories
- */
+ 
 
 class Rnd {
   _seed = 0
@@ -229,7 +237,6 @@ class PerfBox extends React.Component<
   }
 
   _getTime = () => {
-    // @ts-ignore
     const perf: any = window ? window.performance : undefined
     if (typeof perf !== 'undefined') {
       return perf.now()
@@ -273,3 +280,6 @@ export {
   action,
   perfDecorator,
 }
+*/
+
+export default {}

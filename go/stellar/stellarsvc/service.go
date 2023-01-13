@@ -65,18 +65,13 @@ type preambleArg struct {
 
 // Preamble
 // Example usage:
-//   ctx, err, fin := c.Preamble(...)
-//   defer fin()
-//   if err != nil { return err }
+//
+//	ctx, err, fin := c.Preamble(...)
+//	defer fin()
+//	if err != nil { return err }
 func (s *Server) Preamble(inCtx context.Context, opts preambleArg) (mctx libkb.MetaContext, fin func(), err error) {
 	mctx = libkb.NewMetaContext(s.logTag(inCtx), s.G())
-	getFinalErr := func() error {
-		if opts.Err == nil {
-			return nil
-		}
-		return *opts.Err
-	}
-	fin = mctx.TraceTimed("LRPC "+opts.RPCName, getFinalErr)
+	fin = mctx.Trace("LRPC "+opts.RPCName, opts.Err)
 	if !opts.AllowLoggedOut {
 		if err = s.assertLoggedIn(mctx); err != nil {
 			return mctx, fin, err
@@ -201,6 +196,11 @@ func (s *Server) SendCLILocal(ctx context.Context, arg stellar1.SendCLILocalArg)
 	}
 	mctx = mctx.WithUIs(uis)
 
+	memo, err := stellarnet.NewMemoFromStrings(arg.PublicNote, arg.PublicNoteType.String())
+	if err != nil {
+		return res, err
+	}
+
 	sendRes, err := stellar.SendPaymentCLI(mctx, s.walletState, stellar.SendPaymentArg{
 		From:           arg.FromAccountID,
 		To:             stellarcommon.RecipientInput(arg.Recipient),
@@ -209,7 +209,7 @@ func (s *Server) SendCLILocal(ctx context.Context, arg stellar1.SendCLILocalArg)
 		SecretNote:     arg.Note,
 		ForceRelay:     arg.ForceRelay,
 		QuickReturn:    false,
-		PublicMemo:     stellarnet.NewMemoText(arg.PublicNote),
+		PublicMemo:     memo,
 	})
 	if err != nil {
 		return res, err
@@ -281,12 +281,17 @@ func (s *Server) SendPathCLILocal(ctx context.Context, arg stellar1.SendPathCLIL
 	}
 	mctx = mctx.WithUIs(uis)
 
+	memo, err := stellarnet.NewMemoFromStrings(arg.PublicNote, arg.PublicNoteType.String())
+	if err != nil {
+		return res, err
+	}
+
 	sendRes, err := stellar.SendPathPaymentCLI(mctx, s.walletState, stellar.SendPathPaymentArg{
 		From:        arg.Source,
 		To:          stellarcommon.RecipientInput(arg.Recipient),
 		Path:        arg.Path,
 		SecretNote:  arg.Note,
-		PublicMemo:  stellarnet.NewMemoText(arg.PublicNote),
+		PublicMemo:  memo,
 		QuickReturn: false,
 	})
 	if err != nil {
@@ -638,7 +643,17 @@ func (s *Server) BatchLocal(ctx context.Context, arg stellar1.BatchLocalArg) (re
 	}
 
 	if arg.UseMulti {
-		return stellar.BatchMulti(mctx, s.walletState, arg)
+		res, err = stellar.BatchMulti(mctx, s.walletState, arg)
+		if err == nil {
+			return res, nil
+		}
+
+		if err == stellar.ErrRelayinMultiBatch {
+			mctx.Debug("found relay recipient in BatchMulti, using standard Batch instead")
+			return stellar.Batch(mctx, s.walletState, arg)
+		}
+
+		return res, err
 	}
 
 	return stellar.Batch(mctx, s.walletState, arg)
@@ -675,6 +690,10 @@ func (s *Server) validateStellarURI(mctx libkb.MetaContext, uri string, getter s
 			}
 		}
 		return nil, nil, err
+	}
+
+	if validated.UnknownReplaceFields {
+		return nil, nil, errors.New("This Stellar link is requesting replacements on fields in the transaction that Keybase does not handle. Sorry, there's nothing you can do with this Stellar link.")
 	}
 
 	local := stellar1.ValidateStellarURIResultLocal{
@@ -746,7 +765,7 @@ func (s *Server) validateStellarURI(mctx libkb.MetaContext, uri string, getter s
 
 	if validated.TxEnv != nil {
 		tx := validated.TxEnv.Tx
-		if tx.SourceAccount.Address() != "" && tx.SourceAccount.Address() != zeroSourceAccount {
+		if !validated.ReplaceSourceAccount && tx.SourceAccount.Address() != "" && tx.SourceAccount.Address() != zeroSourceAccount {
 			local.Summary.Source = stellar1.AccountID(tx.SourceAccount.Address())
 		}
 		local.Summary.Fee = int(tx.Fee)
@@ -785,7 +804,7 @@ func (s *Server) ApproveTxURILocal(ctx context.Context, arg stellar1.ApproveTxUR
 		return "", errors.New("no tx envelope in URI")
 	}
 
-	if vp.Summary.Source == "" {
+	if validated.ReplaceSourceAccount || vp.Summary.Source == "" {
 		// need to fill in SourceAccount
 		accountID, err := stellar.GetOwnPrimaryAccountID(mctx)
 		if err != nil {
@@ -801,7 +820,7 @@ func (s *Server) ApproveTxURILocal(ctx context.Context, arg stellar1.ApproveTxUR
 		}
 	}
 
-	if txEnv.Tx.SeqNum == 0 {
+	if txEnv.Tx.SeqNum == 0 || validated.ReplaceSeqnum {
 		// need to fill in SeqNum
 		sp, unlock := stellar.NewSeqnoProvider(mctx, s.walletState)
 		defer unlock()
@@ -810,6 +829,9 @@ func (s *Server) ApproveTxURILocal(ctx context.Context, arg stellar1.ApproveTxUR
 		if err != nil {
 			return "", err
 		}
+
+		// need to bump the seqno:
+		txEnv.Tx.SeqNum++
 	}
 
 	// sign it

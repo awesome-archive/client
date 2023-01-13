@@ -58,8 +58,8 @@ func TestLoadUserPlusKeysRevoked(t *testing.T) {
 	devices, _ := getActiveDevicesAndKeys(tc, fu)
 	var paper *libkb.Device
 	for _, device := range devices {
-		if device.Type == libkb.DeviceTypePaper {
-			paper = device
+		if device.Type == keybase1.DeviceTypeV2_PAPER {
+			paper = device.Device
 			break
 		}
 	}
@@ -83,9 +83,10 @@ func TestLoadUserPlusKeysRevoked(t *testing.T) {
 }
 
 // TestMerkleHashMetaAndFirstAppearedInKeyFamily tests new user & key family features:
-//   * FirstAppearedMerkleSeqnoUnverified in sig chain links
-//   * EldestSeqno in sig chain links
-//   * HashMeta in sig chain links
+//   - FirstAppearedMerkleSeqnoUnverified in sig chain links
+//   - EldestSeqno in sig chain links
+//   - HashMeta in sig chain links
+//
 // We should be able to see these fields in sigchains and also propagated through
 // to the KeyFamilies
 func TestMerkleHashMetaAndFirstAppearedInKeyFamily(t *testing.T) {

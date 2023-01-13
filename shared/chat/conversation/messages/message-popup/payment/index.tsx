@@ -1,16 +1,16 @@
 import * as React from 'react'
-import {toUpper, upperFirst} from 'lodash-es'
+import toUpper from 'lodash/toUpper'
+import upperFirst from 'lodash/upperFirst'
 import * as Styles from '../../../../../styles'
-
-import {Position} from '../../../../../common-adapters/relative-popup-hoc.types'
 import {Box2} from '../../../../../common-adapters/box'
-import Text, {AllowedColors} from '../../../../../common-adapters/text'
-import Icon, {castPlatformStyles as iconCastPlatformStyles} from '../../../../../common-adapters/icon'
+import Text, {type AllowedColors} from '../../../../../common-adapters/text'
+import Icon from '../../../../../common-adapters/icon'
 import Avatar from '../../../../../common-adapters/avatar'
-import ConnectedUsernames from '../../../../../common-adapters/usernames/container'
+import ConnectedUsernames from '../../../../../common-adapters/usernames'
 import ProgressIndicator from '../../../../../common-adapters/progress-indicator'
 import Divider from '../../../../../common-adapters/divider'
 import FloatingMenu from '../../../../../common-adapters/floating-menu'
+import type {MenuItem, MenuItems} from '../../../../../common-adapters/floating-menu/menu-layout'
 
 // This is actually a dependency of common-adapters/markdown so we have to treat it like a common-adapter, no * import allowed
 // TODO could make this more dynamic to avoid this (aka register with markdown what custom stuff you want)
@@ -23,7 +23,6 @@ const Kb = {
   Icon,
   ProgressIndicator,
   Text,
-  iconCastPlatformStyles,
 }
 
 const sendIcon = Styles.isMobile
@@ -60,7 +59,7 @@ export type Props = {
   onClaimLumens: (() => void) | null
   onHidden: () => void
   onSeeDetails: (() => void) | null
-  position: Position
+  position: Styles.Position
   style?: Styles.StylesCrossPlatform
   visible: boolean
 } & HeaderProps
@@ -68,16 +67,13 @@ export type Props = {
 const headerIcon = (props: HeaderProps) =>
   props.status === 'pending' ? (
     <Kb.Icon
-      type="iconfont-time"
+      type="iconfont-clock"
       color={Styles.globalColors.black_50}
       fontSize={pendingIconSize}
-      style={Kb.iconCastPlatformStyles(styles.pendingHeaderIcon)}
+      style={styles.pendingHeaderIcon}
     />
   ) : (
-    <Kb.Icon
-      type={props.icon === 'sending' ? sendIcon : receiveIcon}
-      style={Kb.iconCastPlatformStyles(styles.headerIcon)}
-    />
+    <Kb.Icon type={props.icon === 'sending' ? sendIcon : receiveIcon} style={styles.headerIcon} />
   )
 
 const Header = (props: HeaderProps) =>
@@ -122,8 +118,8 @@ const Header = (props: HeaderProps) =>
             colorFollowing={true}
             colorYou={true}
             inline={true}
-            usernames={[props.sender]}
-            type="BodySmallSemibold"
+            usernames={props.sender}
+            type="BodySmallBold"
           />
         </Kb.Box2>
         <Kb.Text type="BodySmall" center={true}>
@@ -152,12 +148,13 @@ const Header = (props: HeaderProps) =>
   )
 
 const PaymentPopup = (props: Props) => {
-  const items = !props.loading
+  const items: MenuItems = !props.loading
     ? [
         ...(props.onCancel
           ? [
               {
                 danger: true,
+                icon: 'iconfont-remove',
                 onClick: props.onCancel,
                 title: props.cancelButtonLabel,
               },
@@ -166,13 +163,19 @@ const PaymentPopup = (props: Props) => {
         ...(props.onSeeDetails
           ? [
               {
+                icon: 'iconfont-dollar-sign',
                 onClick: props.onSeeDetails,
                 title: 'See transaction details',
               },
             ]
           : []),
-        ...(props.onClaimLumens ? [{onClick: props.onClaimLumens, title: 'Claim lumens'}] : []),
-      ]
+        ...(props.onClaimLumens
+          ? [{icon: 'iconfont-stellar-request', onClick: props.onClaimLumens, title: 'Claim lumens'}]
+          : []),
+      ].reduce<MenuItems>((arr, i) => {
+        i && arr.push(i as MenuItem)
+        return arr
+      }, [])
     : []
 
   // separate out header props
@@ -188,15 +191,12 @@ const PaymentPopup = (props: Props) => {
     visible,
     ...headerProps
   } = props
-  const header = {
-    title: 'header',
-    view: (
-      <>
-        <Header {...headerProps} />
-        {!!items.length && <Kb.Divider />}
-      </>
-    ),
-  }
+  const header = (
+    <>
+      <Header {...headerProps} />
+      {!!items.length && <Kb.Divider />}
+    </>
+  )
   return (
     <Kb.FloatingMenu
       closeOnSelect={true}
@@ -292,8 +292,8 @@ const styles = Styles.styleSheetCreate(
     } as const)
 )
 
-const headerTop = (props: HeaderProps) => {
-  return props.status === 'pending' ? styles.pendingHeaderTop : styles.headerTop
+const headerTop = (props: HeaderProps): Styles.StylesCrossPlatform => {
+  return props.status === 'pending' ? styles.pendingHeaderTop : (styles.headerTop as any)
 }
 
 const headerTextStyle = (props: HeaderProps) => {

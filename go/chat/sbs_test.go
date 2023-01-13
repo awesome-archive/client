@@ -181,7 +181,6 @@ func runChatSBSScenario(t *testing.T, testCase sbsTestCase) {
 				chat1.NewMessageBodyWithText(chat1.MessageText{
 					Body: "Hi from user 0 (before resolution)",
 				}), ephemeralLifetime)
-			require.NoError(t, err)
 			consumeNewMsgRemote(t, listener0, chat1.MessageType_TEXT)
 
 			// This message should never go in - user is not in the conv yet.
@@ -212,7 +211,7 @@ func runChatSBSScenario(t *testing.T, testCase sbsTestCase) {
 			select {
 			case rres := <-listener1.joinedConv:
 				require.NotNil(t, rres)
-				require.Equal(t, ncres.Conv.GetConvID().String(), rres.ConvID)
+				require.Equal(t, ncres.Conv.GetConvID().ConvIDStr(), rres.ConvID)
 				require.Equal(t, 2, len(rres.Participants))
 			case <-time.After(20 * time.Second):
 				require.Fail(t, "no resolve")
@@ -257,7 +256,7 @@ func runChatSBSScenario(t *testing.T, testCase sbsTestCase) {
 						ctx,
 						ncres.Conv.GetConvID(),
 						user.GetUID().ToBytes(),
-						chat1.GetThreadReason_GENERAL, &chat1.GetThreadQuery{
+						chat1.GetThreadReason_GENERAL, nil, &chat1.GetThreadQuery{
 							MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT},
 						},
 						nil,

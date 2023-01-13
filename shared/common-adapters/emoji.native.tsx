@@ -1,8 +1,7 @@
-import * as React from 'react'
 import {emojiIndexByName} from './markdown/emoji-gen'
 import Text from './text'
 
-import {Props} from './emoji'
+import type {Props} from './emoji'
 
 const EmojiWrapper = (props: Props) => {
   const {emojiName, size} = props
@@ -10,7 +9,7 @@ const EmojiWrapper = (props: Props) => {
   return (
     <Text
       type="Body"
-      style={{fontSize: size ? size - 2 : undefined, lineHeight: undefined}} // Mobile emoji need to be smaller with Proxima Nova
+      style={[{fontSize: size ? size - 2 : undefined, lineHeight: undefined}, props.style as any]} // Mobile emoji need to be smaller with Proxima Nova
       allowFontScaling={props.allowFontScaling}
     >
       {!!emojiIndexByName[emojiName] && emojiIndexByName[emojiName] + emojiVariantSuffix}
